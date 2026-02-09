@@ -1,3 +1,4 @@
+import { Client } from "pg";
 import crypto from "crypto";
 
 /**
@@ -127,4 +128,21 @@ export function generateToken(length = 32, urlUnsafeEnabled = false) {
   }
 
   return result;
+}
+
+export async function generateDb(connectionString, dbTarget) {
+  const client = new Client({ connectionString: connectionString });
+  try {
+    await client.connect();
+
+    const res = await client.query(`SELECT 1 FROM pg_database WHERE datname = $1`, [dbTarget]);
+
+    if (res.rowCount === 0) {
+      await client.query(`CREATE DATABASE "${dbTarget}"`);
+    }
+  } catch (e) {
+    throw e;
+  } finally {
+    await client.end();
+  }
 }

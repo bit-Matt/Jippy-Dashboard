@@ -1,26 +1,10 @@
-/*
- * Jippy, A Public Utility Vehicle navigation platform
- * Copyright (c) 2026 Jippy Developers
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation, either version 3 of the License, or
- * (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program.  If not, see <https://www.gnu.org/licenses/>.
- */
-
+import { Client } from "pg";
 import fs from "node:fs";
 import path from "node:path";
+import readlineSync from "readline-sync";
 import { spawnSync } from "node:child_process";
 
-import { generateToken } from "./common.mjs";
+import { generateDb, generateToken } from "./common.mjs";
 
 // Constants
 const __dirname = import.meta.dirname;
@@ -43,6 +27,11 @@ template = template.replace("BETTER_AUTH_TOKEN=YOUR_TOKEN_GOES_HERE", `BETTER_AU
 const dbPassword = generateToken(16);
 template = template.replace("POSTGRES_PASSWORD=mypassword", `POSTGRES_PASSWORD="${dbPassword}"`);
 
+// Replace in URL
+template = template.replace("${POSTGRES_USER}", "postgres");
+template = template.replace("${POSTGRES_PASSWORD}", dbPassword);
+template = template.replace("${POSTGRES_DB}", "jippy");
+
 if (ENABLE_REDIS) {
   template = template.replace("# REDIS_URL=REDIS_URL_GOES_HERE", 'REDIS_URL="redis://localhost:6379"');
   template = template.replace("# REDIS_CACHE_LIFETIME=30", "REDIS_CACHE_LIFETIME=30");
@@ -50,7 +39,19 @@ if (ENABLE_REDIS) {
   COMPOSE_SERVICES_ENABLED.push("cache");
 }
 
+console.log("[env]     Asking for Google OAuth Credential Keys...");
+const githubClientId = readlineSync.question("Google Client ID: ");
+template = template.replace("GOOGLE_CLIENT_ID=YOUR_GITHUB_CLIENT_ID", `GOOGLE_CLIENT_ID="${githubClientId}"`);
+
+const githubClientSecret = readlineSync.question("Google Client Secret: ");
+template = template.replace(
+  "GOOGLE_CLIENT_SECRET=YOUR_GITHUB_CLIENT_SECRET",
+  `GOOGLE_CLIENT_SECRET="${githubClientSecret}"`,
+);
+
 // Write
+console.log("[env]     Writing config...");
+
 const dotEnvPath = path.join(__dirname, "../.env");
 fs.writeFileSync(dotEnvPath, template, "utf-8");
 
@@ -63,3 +64,26 @@ spawnSync("docker", ["compose", "up", "-d", ...COMPOSE_SERVICES_ENABLED], {
 });
 
 console.log("[compose] Containers successfully created.");
+
+console.log("[db]      Wait 5s...");
+setTimeout(function () {
+  console.log("[db]      Creating database entry...");
+
+  const dbUrl = new URL(`postgres://postgres:${dbPassword}@localhost:5432/postgres`).toString();
+  console.log("[db]      Connecting to: %s...", dbUrl);
+
+  generateDb(dbUrl, "jippy")
+    .then(() => {
+      console.log("[db]      Pushing db changes to database...");
+
+      spawnSync("npm", ["run", "db:push"], {
+        cwd: path.join(__dirname, "../"),
+        stdio: "inherit",
+      });
+
+      console.log("[db]      Push succeeded.");
+    })
+    .catch((e) => {
+      console.log("[db]      Push failed.", e);
+    });
+}, 5000);

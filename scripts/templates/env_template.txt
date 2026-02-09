@@ -5,6 +5,7 @@
 
 # Better Auth Token
 BETTER_AUTH_TOKEN=YOUR_TOKEN_GOES_HERE
+BETTER_AUTH_URL=http://localhost:3000
 
 # PostgreSQL Database User (Default: postgres)
 POSTGRES_USER=postgres
@@ -17,7 +18,7 @@ POSTGRES_DB=jippy
 
 # PostgreSQL Full Database URL
 # Note: Do not edit
-POSTGRES_URL=postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}?schema=public
+POSTGRES_URL="postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@localhost:5432/${POSTGRES_DB}?schema=public"
 
 # Redis URL
 #
@@ -30,3 +31,7 @@ POSTGRES_URL=postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${PO
 # Requires REDIS_URL to be set. This sets the lifetime of the route cache.
 # Value is time in minutes. (Default: 30)
 # REDIS_CACHE_LIFETIME=30
+
+# Google Authentication Key
+GOOGLE_CLIENT_ID=YOUR_GITHUB_CLIENT_ID
+GOOGLE_CLIENT_SECRET=YOUR_GITHUB_CLIENT_SECRET
