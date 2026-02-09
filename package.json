@@ -6,7 +6,12 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "env:generate": "node ./scripts/generate_env.mjs",
+    "serv:up": "docker compose up",
+    "serv:start": "docker compose start",
+    "serv:stop": "docker compose stop",
+    "serv:down": "docker compose down"
   },
   "dependencies": {
     "next": "16.1.6",
@@ -15,7 +20,7 @@
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
-    "@types/node": "^20",
+    "@types/node": "^20.19.33",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "eslint": "^9",

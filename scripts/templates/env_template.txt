@@ -1,0 +1,32 @@
+# .env Template
+#
+# To generate a safe configuration, you can run npm run env:generate
+# to safely populate the values below.
+
+# Better Auth Token
+BETTER_AUTH_TOKEN=YOUR_TOKEN_GOES_HERE
+
+# PostgreSQL Database User (Default: postgres)
+POSTGRES_USER=postgres
+
+# PostgreSQL Password (Default: mypassword)
+POSTGRES_PASSWORD=mypassword
+
+# PostgreSQL Database Name (Default: jippy)
+POSTGRES_DB=jippy
+
+# PostgreSQL Full Database URL
+# Note: Do not edit
+POSTGRES_URL=postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}?schema=public
+
+# Redis URL
+#
+# To enable redis, set the Redis URL value here. This is used for caching
+# route for faster response times. (Default: "redis://localhost:6379")
+# REDIS_URL=REDIS_URL_GOES_HERE
+
+# Cache Lifetime
+#
+# Requires REDIS_URL to be set. This sets the lifetime of the route cache.
+# Value is time in minutes. (Default: 30)
+# REDIS_CACHE_LIFETIME=30
