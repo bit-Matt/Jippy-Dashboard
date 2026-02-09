@@ -1,4 +1,3 @@
-import { Client } from "pg";
 import fs from "node:fs";
 import path from "node:path";
 import readlineSync from "readline-sync";
