@@ -4,11 +4,36 @@ This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-
 
 ## Getting Started
 
-First, run the development server:
+### Requirements
 
-```bash
-npm run dev
-```
+1. [Docker Engine/Desktop](https://www.docker.com/) with [`docker-compose`](https://docs.docker.com/compose/)
+2. [Node.js 24 (LTS) or >= 25](https://nodejs.org/en) (Recommended to use LTS versions of Node.js)
+3. [npm >= 11] (Bundled with Node.js)
+
+### Environment Setup
+
+> [!IMPORTANT]  
+> Always check if you have other instances of PostgreSQL or Redis in your machine. If so, you can disable
+> container creation by using `--skip-container-build`. Ensure that your local PostgreSQL has [PostGIS](https://postgis.net/documentation/getting_started/)
+> extension enabled.
+
+1. Install required dependencies first:
+
+   ```sh
+   npm i
+   ```
+
+2. Run the automated environment setup script:
+
+   ```sh
+   npm run env:generate
+   ```
+
+3. Then run the development server:
+
+   ```sh
+   npm run dev
+   ```
 
 Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
 

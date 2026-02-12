@@ -1,0 +1,23 @@
+services:
+  db:
+    restart: unless-stopped
+    build:
+      context: services/postgis-18.3.6
+      network: host
+    ports:
+      - "5432:5432"
+    networks:
+      - defaultNetwork
+    environment:
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+  cache:
+    image: redis:latest
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    networks:
+      - defaultNetwork
+
+networks:
+  defaultNetwork:
+    driver: bridge
