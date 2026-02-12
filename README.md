@@ -43,18 +43,19 @@ You can start editing the page by modifying `app/page.tsx`. The page auto-update
 
 To learn more about how this project is developed, take a look at the following resources:
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-- [OpenStreetMaps API Documentation](https://www.openstreetmap.org/help)
-- [ShadCn Documentation](https://ui.shadcn.com/)
+- [Next.js Documentation](https://nextjs.org/docs) – learn about Next.js features and API.
+- [Learn Next.js](https://nextjs.org/learn) – an interactive Next.js tutorial.
+- [Shadcn Documentation](https://ui.shadcn.com/)
 - [Drizzle ORM](https://orm.drizzle.team/docs/overview) especially [PostGIS geometry point](https://orm.drizzle.team/docs/guides/postgis-geometry-point) queries.
+- [react-leaflet](https://react-leaflet.js.org/) & [Leaflet](https://leafletjs.com/)
+- [OSRM (Open Source Routing Machine)](https://project-osrm.org/docs/v5.24.0/api)
 - The official Software Architecture Document
 
 ## Interacting with the API
 
 To interact with the API, You can access `/api/v1/routes` to fetch route data. No APIs are exposed for write operations.
 
-Fetching route data requires an token. Developers can create a API token that should be declared in the header at
+Fetching route data requires a token. Developers can create an API token that should be declared in the header at
 each request:
 
 ```
