@@ -9,8 +9,8 @@ import { generateDb, generateToken } from "./common.mjs";
 const __dirname = import.meta.dirname;
 
 // Flags
-const ENABLE_REDIS = process.argv.includes("--enable-redis");
-const COMPOSE_SERVICES_ENABLED = ["db"];
+const SKIP_CONTAINER_BUILD = process.argv.includes("--skip-container-build");
+const COMPOSE_SERVICES_ENABLED = ["db", "cache"];
 
 console.log("[env]     Generating config...");
 
@@ -26,23 +26,20 @@ template = template.replace("BETTER_AUTH_TOKEN=YOUR_TOKEN_GOES_HERE", `BETTER_AU
 const dbPassword = generateToken(16);
 template = template.replace("POSTGRES_PASSWORD=mypassword", `POSTGRES_PASSWORD="${dbPassword}"`);
 
-// Replace in URL
+// Replace it in URL
 template = template.replace("${POSTGRES_USER}", "postgres");
 template = template.replace("${POSTGRES_PASSWORD}", dbPassword);
 template = template.replace("${POSTGRES_DB}", "jippy");
 
-if (ENABLE_REDIS) {
-  template = template.replace("# REDIS_URL=REDIS_URL_GOES_HERE", 'REDIS_URL="redis://localhost:6379"');
-  template = template.replace("# REDIS_CACHE_LIFETIME=30", "REDIS_CACHE_LIFETIME=30");
-
-  COMPOSE_SERVICES_ENABLED.push("cache");
-}
+// Redis
+template = template.replace("# REDIS_URL=REDIS_URL_GOES_HERE", 'REDIS_URL="redis://localhost:6379"');
+template = template.replace("# REDIS_CACHE_LIFETIME=30", "REDIS_CACHE_LIFETIME=30");
 
 console.log("[env]     Asking for Google OAuth Credential Keys...");
-const githubClientId = readlineSync.question("Google Client ID: ");
+const githubClientId = readlineSync.question("[env]     Google Client ID: ");
 template = template.replace("GOOGLE_CLIENT_ID=YOUR_GITHUB_CLIENT_ID", `GOOGLE_CLIENT_ID="${githubClientId}"`);
 
-const githubClientSecret = readlineSync.question("Google Client Secret: ");
+const githubClientSecret = readlineSync.question("[env]     Google Client Secret: ");
 template = template.replace(
   "GOOGLE_CLIENT_SECRET=YOUR_GITHUB_CLIENT_SECRET",
   `GOOGLE_CLIENT_SECRET="${githubClientSecret}"`,
@@ -55,6 +52,17 @@ const dotEnvPath = path.join(__dirname, "../.env");
 fs.writeFileSync(dotEnvPath, template, "utf-8");
 
 console.log("[env]     Config generated.");
+
+if (SKIP_CONTAINER_BUILD) {
+  console.log("[compose] No containers will be created. To create these containers, you can run:");
+  console.log("[compose] npm run serv:up");
+  console.log("[compose]");
+  console.log("[compose] After you ran these services, you need to manually create the database inside");
+  console.log("[compose] the db container and then you can run npm run db:push to push the schema to the database.");
+
+  process.exit(0);
+}
+
 console.log("[compose] Creating containers via docker-compose.yml file...");
 
 spawnSync("docker", ["compose", "up", "-d", ...COMPOSE_SERVICES_ENABLED], {

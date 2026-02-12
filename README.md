@@ -29,9 +29,6 @@ This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-
    npm run env:generate
    ```
 
-   If you want redis to be enabled, you can add `--enable-redis` flag. (Note you need `--` before `--enable-redis` to pass it on the script
-   otherwise npm will think that you are passing arguments to npm cli).
-
 3. Then run the development server:
 
    ```sh
