@@ -23,6 +23,7 @@
     "clsx": "^2.1.1",
     "dotenv": "^17.2.4",
     "drizzle-orm": "^0.45.1",
+    "leaflet": "^1.9.4",
     "lucide-react": "^0.563.0",
     "luxon": "^3.7.2",
     "next": "16.1.6",
@@ -30,10 +31,12 @@
     "radix-ui": "^1.4.3",
     "react": "19.2.3",
     "react-dom": "19.2.3",
+    "react-leaflet": "^5.0.0",
     "tailwind-merge": "^3.4.0"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
+    "@types/leaflet": "^1.9.21",
     "@types/luxon": "^3.7.1",
     "@types/node": "^20.19.33",
     "@types/pg": "^8.16.0",
@@ -43,7 +46,6 @@
     "drizzle-kit": "^0.31.9",
     "eslint": "^9",
     "eslint-config-next": "16.1.6",
-    "readline-sync": "^1.4.10",
     "shadcn": "^3.8.4",
     "tailwindcss": "^4",
     "tsx": "^4.21.0",

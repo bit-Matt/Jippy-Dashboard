@@ -1,6 +1,5 @@
 import fs from "node:fs";
 import path from "node:path";
-import readlineSync from "readline-sync";
 import { spawnSync } from "node:child_process";
 
 import { generateDb, generateToken } from "./common.mjs";
@@ -34,16 +33,6 @@ template = template.replace("${POSTGRES_DB}", "jippy");
 // Redis
 template = template.replace("# REDIS_URL=REDIS_URL_GOES_HERE", 'REDIS_URL="redis://localhost:6379"');
 template = template.replace("# REDIS_CACHE_LIFETIME=30", "REDIS_CACHE_LIFETIME=30");
-
-console.log("[env]     Asking for Google OAuth Credential Keys...");
-const githubClientId = readlineSync.question("[env]     Google Client ID: ");
-template = template.replace("GOOGLE_CLIENT_ID=YOUR_GITHUB_CLIENT_ID", `GOOGLE_CLIENT_ID="${githubClientId}"`);
-
-const githubClientSecret = readlineSync.question("[env]     Google Client Secret: ");
-template = template.replace(
-  "GOOGLE_CLIENT_SECRET=YOUR_GITHUB_CLIENT_SECRET",
-  `GOOGLE_CLIENT_SECRET="${githubClientSecret}"`,
-);
 
 // Write
 console.log("[env]     Writing config...");
