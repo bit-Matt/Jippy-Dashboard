@@ -1,6 +1,6 @@
 "use client";
 
-import { type ComponentProps, useState } from "react"
+import { type ComponentProps } from "react"
 import { Command, Map, Pin } from "lucide-react"
 
 import { NavMain } from "@/components/nav-main"
@@ -15,39 +15,40 @@ import {
   SidebarMenuItem,
 } from "@/components/ui/sidebar"
 
-const data = {
-  navMain: [
-    {
-      title: "Route Management",
-      url: "#",
-      icon: Map,
-      isActive: true,
-      items: [
-        {
-          title: "Editor",
-          url: "#",
-        },
-        {
-          title: "Simulator",
-          url: "#",
-        },
-      ],
-    },
-    {
-      title: "Routes",
-      url: "#",
-      icon: Pin,
-      items: [
-        {
-          title: "Add a new Route",
-          url: "#",
-        },
-      ],
-    },
-  ],
-}
+export function AppSidebar({
+  user,
+  onAddRouteClick,
+  onSimulationClick,
+  ...props
+}: SidebarProps) {
+  const data = {
+    navMain: [
+      {
+        title: "Route Management",
+        url: "#",
+        icon: Map,
+        isActive: true,
+        items: [
+          {
+            title: "Routes List",
+            url: "#",
+          },
+          {
+            title: "Add a new Route",
+            url: "#",
+            onClick: onAddRouteClick,
+          },
+        ],
+      },
+      {
+        title: "Simulation",
+        url: "#",
+        icon: Pin,
+        onClick: onSimulationClick,
+      },
+    ],
+  }
 
-export function AppSidebar({ user, ...props }: SidebarProps) {
   return (
     <Sidebar variant="inset" {...props}>
       <SidebarHeader>
@@ -83,4 +84,6 @@ interface SidebarProps extends ComponentProps<typeof Sidebar> {
     fullName: string;
     email: string;
   }
+  onAddRouteClick?: () => void
+  onSimulationClick?: () => void
 }

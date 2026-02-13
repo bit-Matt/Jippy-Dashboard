@@ -7,7 +7,9 @@ import L from "leaflet";
 import "@maplibre/maplibre-gl-leaflet";
 import "leaflet-routing-machine";
 
+// @ts-expect-error - no type declarations available
 import "leaflet/dist/leaflet.css";
+// @ts-expect-error - no type declarations available
 import "leaflet-routing-machine/dist/leaflet-routing-machine.css";
 
 const fixLeafletIcons = () => {

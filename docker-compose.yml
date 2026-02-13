@@ -1,9 +1,7 @@
 services:
   db:
     restart: unless-stopped
-    build:
-      context: services/postgis-18.3.6
-      network: host
+    image: postgis/postgis:18-3.6
     ports:
       - "5432:5432"
     networks:

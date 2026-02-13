@@ -27,9 +27,11 @@ export function NavMain({
     url: string
     icon: LucideIcon
     isActive?: boolean
+    onClick?: () => void
     items?: {
       title: string
       url: string
+      onClick?: () => void
     }[]
   }[]
 }) {
@@ -41,10 +43,17 @@ export function NavMain({
           <Collapsible key={item.title} asChild defaultOpen={item.isActive}>
             <SidebarMenuItem>
               <SidebarMenuButton asChild tooltip={item.title}>
-                <a href={item.url}>
-                  <item.icon />
-                  <span>{item.title}</span>
-                </a>
+                {item.onClick ? (
+                  <button type="button" onClick={item.onClick} className="w-full">
+                    <item.icon />
+                    <span>{item.title}</span>
+                  </button>
+                ) : (
+                  <a href={item.url}>
+                    <item.icon />
+                    <span>{item.title}</span>
+                  </a>
+                )}
               </SidebarMenuButton>
               {item.items?.length ? (
                 <>
@@ -59,9 +68,15 @@ export function NavMain({
                       {item.items?.map((subItem) => (
                         <SidebarMenuSubItem key={subItem.title}>
                           <SidebarMenuSubButton asChild>
-                            <a href={subItem.url}>
-                              <span>{subItem.title}</span>
-                            </a>
+                            {subItem.onClick ? (
+                              <button type="button" onClick={subItem.onClick}>
+                                <span>{subItem.title}</span>
+                              </button>
+                            ) : (
+                              <a href={subItem.url}>
+                                <span>{subItem.title}</span>
+                              </a>
+                            )}
                           </SidebarMenuSubButton>
                         </SidebarMenuSubItem>
                       ))}
