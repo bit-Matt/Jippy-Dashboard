@@ -11,7 +11,7 @@ import "leaflet/dist/leaflet.css";
 import "leaflet-routing-machine/dist/leaflet-routing-machine.css";
 
 const fixLeafletIcons = () => {
-  delete (L.Icon.Default.prototype as any)._getIconUrl;
+  // delete (L.Icon.Default.prototype)._getIconUrl;
 
   L.Icon.Default.mergeOptions({
     iconRetinaUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon-2x.png',
@@ -40,7 +40,7 @@ const VectorTileLayer = () => {
   return null;
 }
 
-const RoutingMachine = ({ waypoints }: RoutingMachineProps) => {
+const RoutingMachine = ({ waypoints, color }: RoutingMachineProps) => {
   const map = useMap();
 
   useEffect(() => {
@@ -50,7 +50,7 @@ const RoutingMachine = ({ waypoints }: RoutingMachineProps) => {
       waypoints: waypoints.map(([lat, lng]) => L.latLng(lat, lng)),
       routeWhileDragging: true,
       lineOptions: {
-        styles: [{ color: "#6FA1EC", weight: 4 }],
+        styles: [{ color, weight: 4 }],
         extendToWaypoints: true,
         missingRouteTolerance: 0
       },
@@ -63,7 +63,7 @@ const RoutingMachine = ({ waypoints }: RoutingMachineProps) => {
     return () => {
       map.removeControl(routingControl);
     };
-  }, [map, waypoints]);
+  }, [map, waypoints, color]);
 
   return null;
 };
@@ -78,18 +78,19 @@ export default function MapComponent({ routing }: MapProps) {
       <VectorTileLayer />
 
       {
-        routing && (
-          <RoutingMachine waypoints={routing.waypoints} />
-        )
+        routing ? routing.map((r, i) => (
+          <RoutingMachine key={i} waypoints={r.waypoints} color={r.color} />
+        )) : (<></>)
       }
     </MapContainer>
   )
 }
 
 export interface RoutingMachineProps {
-  waypoints: Array<[number, number]>
+  waypoints: Array<[number, number]>,
+  color: string;
 }
 
 export interface MapProps {
-  routing?: ComponentProps<typeof RoutingMachine>
+  routing?: Array<ComponentProps<typeof RoutingMachine>>
 }
