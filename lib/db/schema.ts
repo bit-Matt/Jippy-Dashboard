@@ -1,5 +1,5 @@
 import { relations } from "drizzle-orm";
-import { pgEnum, pgTable, text, timestamp, boolean, index } from "drizzle-orm/pg-core";
+import { pgEnum, pgTable, text, timestamp, boolean, index, integer, geometry } from "drizzle-orm/pg-core";
 
 export const roles = pgEnum("role", ["administrator_user", "regular_user"]);
 
@@ -76,6 +76,41 @@ export const verification = pgTable(
   (table) => [index("verification_identifier_idx").on(table.identifier)],
 );
 
+export const routes = pgTable(
+  "routes",
+  {
+    id: text("id").primaryKey(),
+    routeNumber: text("route_number").notNull(),
+    routeName: text("route_name").notNull(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at")
+      .defaultNow()
+      .$onUpdate(() => new Date())
+      .notNull(),
+  },
+);
+
+export const routeSequences = pgTable(
+  "routeSequences",
+  {
+    id: text("id").primaryKey(),
+    routeId: text("route_id")
+      .notNull()
+      .references(() => routes.id),
+    sequenceNumber: integer("sequence_number").notNull(),
+    point: geometry("point", { type: "point", mode: "tuple", srid: 4326 }).notNull(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at")
+      .defaultNow()
+      .$onUpdate(() => new Date())
+      .notNull(),
+  },
+  (t) => [
+    index("spatial_index").using("gist", t.point),
+    index("route_seq_idx").on(t.routeId, t.sequenceNumber),
+  ],
+);
+
 export const userRelations = relations(user, ({ many }) => ({
   sessions: many(session),
   accounts: many(account),
@@ -92,5 +127,12 @@ export const accountRelations = relations(account, ({ one }) => ({
   user: one(user, {
     fields: [account.userId],
     references: [user.id],
+  }),
+}));
+
+export const routeRelations = relations(routeSequences, ({ one }) => ({
+  route: one(routes, {
+    fields: [routeSequences.routeId],
+    references: [routes.id],
   }),
 }));
