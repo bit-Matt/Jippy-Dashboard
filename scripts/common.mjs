@@ -139,6 +139,26 @@ export async function generateDb(connectionString, dbTarget) {
 
     if (res.rowCount === 0) {
       await client.query(`CREATE DATABASE "${dbTarget}"`);
+
+      const targetDbUrl = new URL(connectionString);
+      targetDbUrl.pathname = `/${dbTarget}`;
+
+      const targetDbClient = new Client({
+        connectionString: targetDbUrl.toString()
+      });
+
+      try {
+        await targetDbClient.connect();
+
+        // Install the extension
+        await targetDbClient.query('CREATE EXTENSION IF NOT EXISTS postgis');
+
+      } catch (err) {
+        console.error("Failed to install extensions:", err);
+      } finally {
+        // Close the specific DB connection
+        await targetDbClient.end();
+      }
     }
   } catch (e) {
     throw e;
