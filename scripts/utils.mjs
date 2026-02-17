@@ -6,6 +6,8 @@ import path from "node:path";
 import * as pg from "pg";
 import {stdin, stdout} from "node:process";
 
+const __dirname = import.meta.dirname;
+
 /**
  * Uppercase characters
  * @type {string}
@@ -122,32 +124,137 @@ export const process = {
 
 export const db = {
   /**
-   * Configure the database.
+   * Builds a PostgreSQL connection string (URI) from discrete connection fields.
    *
-   * @param dbUsername {string} - The username to use for the database.
-   * @param dbPassword {string} - The password to use for the database.
-   * @param dbName {string} - The name of the database to create.
-   * @param dbHost {string} - The hostname of the database. (Default: localhost)
-   * @param dbPort {string} - The port of the database. (Default: 5173)
-   * @returns {Promise<void>}
+   * Creates a `postgres://` URL using the provided credentials and database name,
+   * applying defaults for host and port when omitted.
+   *
+   * @param {Object} params - Connection parameters.
+   * @param {string} params.username - Database username.
+   * @param {string} params.password - Database password.
+   * @param {string} params.name - Database name (used as the URL pathname).
+   * @param {string} [params.host] - Database host (defaults to `"localhost"`).
+   * @param {string|number} [params.port] - Database port (defaults to `"5173"`).
+   * @param {Record<string, string>} [params.query] - Additional query parameters to append to the URL.
+   *
+   * @returns {string} A PostgreSQL connection string like:
+   * `postgres://username:password@host:port/databaseName`
+   *
+   * @example
+   * const connectionString = db.createConnectionString({
+   *   username: "my_user",
+   *   password: "my_password",
+   *   host: "127.0.0.1",
+   *   port: 5432,
+   *   name: "my_db",
+   *   query: {
+   *     schema: "public", // Optional query parameter
+   *   }
+   * });
+   * // => "postgres://my_user:my_password@127.0.0.1:5432/my_db?schema=public"
+   *
+   * @notes
+   * - The database name is assigned to `url.pathname`; if it contains special characters,
+   *   they will be URL-encoded by `URL#toString()`.
+   * - If `username`/`password` are empty strings or `undefined`, the resulting URI may omit
+   *   or partially omit credentials depending on `URL` behavior.
    */
-  setupDatabase: async (dbUsername, dbPassword, dbName, dbHost = "localhost", dbPort = "5173") => {
-    const client = new pg.Client({
-      connectionString: `postgres://${dbUsername}:${dbPassword}@${dbHost}:${dbPort}/postgres`,
-    });
-    await client.connect();
+  createConnectionString({ username, password, name, host, port, query }) {
+    const url = new URL(`postgres://${host ?? "localhost"}:${port ?? "5173"}`);
+    url.pathname = name;
+    url.username = username;
+    url.password = password;
 
-    const query = await client.query("SELECT 1 FROM pg_database WHERE datname = $1", [dbName]);
-    if (query.rowCount === 0) {
-      await client.query(`CREATE DATABASE "${dbName.replace(/"/g, "\"\"")}"`);
+    if (query) {
+      for (const key of Object.keys(query)) {
+        url.searchParams.append(key, query[key]);
+      }
     }
 
-    await client.end();
+    return url.toString();
   },
 
-  enablePostgisExtension: async (dbUsername, dbPassword, dbName, dbHost = "localhost", dbPort = "5173") => {
+  /**
+   * Ensures that a PostgreSQL database exists, creating it if necessary.
+   *
+   * This function connects to the specified PostgreSQL instance
+   * (via the `postgres` maintenance database), checks whether the target
+   * database exists, and creates it if it does not.
+   *
+   * The database name is safely quoted as a PostgreSQL identifier
+   * to prevent SQL injection, and an error is thrown if the name
+   * is invalid or empty.
+   *
+   * @async
+   * @param {Object} params - Database connection parameters.
+   * @param {string} params.username - Database username.
+   * @param {string} params.password - Database password.
+   * @param {string} params.name - Name of the database to ensure exists.
+   * @param {string} params.host - Host of the PostgreSQL server.
+   * @param {number|string} params.port - Port of the PostgreSQL server.
+   *
+   * @returns {Promise<void>} Resolves when the database existence is ensured.
+   *
+   * @throws {Error} Throws an error if connecting to PostgreSQL fails,
+   *                 or if creating the database encounters errors.
+   */
+  async setupDatabase({ username, password, name, host, port }) {
     const client = new pg.Client({
-      connectionString: `postgres://${dbUsername}:${dbPassword}@${dbHost}:${dbPort}/${dbName}`,
+      connectionString: this.createConnectionString({
+        username,
+        password,
+        host,
+        port,
+        name: "postgres", // connect to maintenance DB
+      }),
+    });
+
+    await client.connect();
+    try {
+      const { rowCount } = await client.query(
+        "SELECT 1 FROM pg_database WHERE datname = $1",
+        [name],
+      );
+
+      if (rowCount === 0) {
+        const dbIdent = quoteIdent(name);
+        await client.query(`CREATE DATABASE ${dbIdent}`);
+      }
+    } finally {
+      await client.end();
+    }
+  },
+
+  /**
+   * Enables the PostGIS extension in a PostgreSQL database if it's not already enabled.
+   *
+   * This function connects to the specified PostgreSQL database and checks if the PostGIS extension
+   * is installed. If not, it creates and enables the extension in the target database.
+   *
+   * @async
+   * @param {Object} params - Database connection parameters.
+   * @param {string} params.username - Database username.
+   * @param {string} params.password - Database password.
+   * @param {string} params.name - Name of the target database.
+   * @param {string} params.host - Host of the PostgreSQL server.
+   * @param {number|string} params.port - Port of the PostgreSQL server.
+   *
+   * @returns {Promise<void>} Resolves once the extension is enabled or if it's already present.
+   *
+   * @throws {Error} Throws an error if the connection or the extension creation process fails.
+   */
+  async enablePostgisExtension ({ username, password, name, host, port }) {
+    const client = new pg.Client({
+      connectionString: this.createConnectionString({
+        username,
+        password,
+        host,
+        port,
+        name,
+        query: {
+          schema: "public",
+        },
+      }),
     });
     await client.connect();
 
@@ -159,6 +266,18 @@ export const db = {
     await client.end();
   },
 
+  /**
+   * Prepares the environment for running Nominatim by ensuring the presence of PBF data.
+   *
+   * This function checks for the existence of a PBF (Protocolbuffer Binary Format) file
+   * in the `.osm-data` directory. If the file does not exist, it creates the directory (if necessary)
+   * and downloads the required PBF data from the specified Geofabrik URL.
+   *
+   * @async
+   * @returns {Promise<void>} Resolves when the PBF data is present or downloaded successfully.
+   *
+   * @throws {Error} Throws an error if the download or directory creation fails.
+   */
   preNominatimConfigure: async () => {
     const pbfPath = path.join(__dirname, "../.osm-data/philippines-latest.osm.pbf");
     if (fs.existsSync(pbfPath)) return;
@@ -185,6 +304,89 @@ export const timers = {
    */
   wait: (secs) => {
     return new Promise((resolve) => setTimeout(resolve, secs * 1000));
+  },
+};
+
+/**
+ * Docker configuration
+ *
+ * @type {Map<string, string>}
+ */
+const DOCKER_CONFIG = new Map();
+
+/**
+ * Runtime configuration
+ *
+ * @type {Map<any, any>}
+ */
+const RUNTIME_CONFIG = new Map();
+
+export const env = {
+  /**
+   * Ask a question and write the config for you.
+   *
+   * @param {string} question - The question to ask.
+   * @param {string} key - The key to write the value to.
+   * @param {string} [defaultValue] - Default value if nothing is entered.
+   * @returns {Promise<string>} - The answer to the question.
+   */
+  async ask(question, key, defaultValue){
+    const q = await prompt.questionAsync(`${question}${defaultValue ? ` (default: ${defaultValue})` : ""}: `);
+
+    // Default value
+    if (!q && defaultValue) {
+      this.write(key, defaultValue);
+
+      return defaultValue;
+    }
+
+    this.write(key, q);
+    return q;
+  },
+
+  /**
+   * Writes a configuration value to the appropriate configuration context (e.g., docker or runtime).
+   *
+   * The provided key is expected to be in the format "context.key", where the "context" determines
+   * the configuration scope (e.g., "docker") and "key" specifies the configuration key within that scope.
+   *
+   * @param {string} key - A dot-delimited string specifying the configuration context and the key.
+   * @param {string} value - The value to be stored for the specified configuration key.
+   */
+  write: (key, value) => {
+    const [context, ...rest] = key.split(".");
+
+    if (context === "docker") {
+      const configKey = rest.join("_").toUpperCase();
+      DOCKER_CONFIG.set(configKey, value);
+
+      return;
+    }
+
+    const runtimeKey = rest.join("_").toUpperCase();
+    RUNTIME_CONFIG.set(runtimeKey, value);
+  },
+
+  /**
+   * Exports the configuration to the specified path.
+   *
+   * @param path {string} - The path to which the configuration should be exported.
+   * @returns {Promise<void>}
+   */
+  export: async (path) => {
+    let config = "# DO NOT commit this file to your repository!\n";
+
+    RUNTIME_CONFIG.forEach((value, key) => {
+      config += `${key}="${value}"\n`;
+    });
+
+    config += "\n";
+
+    DOCKER_CONFIG.forEach((value, key) => {
+      config += `${key}="${value}"\n`;
+    });
+
+    await fs.promises.writeFile(path, config, "utf-8");
   },
 };
 
@@ -246,4 +448,13 @@ function shuffle(str) {
   }
 
   return arr.join("");
+}
+
+function quoteIdent(ident) {
+  // PostgreSQL identifier quoting: double-quote and escape internal double-quotes by doubling them.
+  // Also, reject empty names early.
+  if (typeof ident !== "string" || ident.length === 0) {
+    throw new Error("Database name must be a non-empty string");
+  }
+  return `"${ident.replace(/"/g, "\"\"")}"`;
 }

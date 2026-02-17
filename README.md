@@ -58,7 +58,7 @@ To learn more about how this project is developed, take a look at the following 
 - [Shadcn Documentation](https://ui.shadcn.com/)
 - [Drizzle ORM](https://orm.drizzle.team/docs/overview) especially [PostGIS geometry point](https://orm.drizzle.team/docs/guides/postgis-geometry-point) queries.
 - [react-leaflet](https://react-leaflet.js.org/) & [Leaflet](https://leafletjs.com/)
-- [OSRM (Open Source Routing Machine)](https://project-osrm.org/docs/v5.24.0/api)
+- [Valhalla](https://valhalla.github.io/valhalla/)
 - [Nominatim](https://nominatim.org/)
 - The official Software Architecture Document
 
@@ -73,8 +73,11 @@ It has geocoding endpoints such as:
 
 - `/api/public/osm/nominatim/search`
 - `/api/public/osm/nominatim/reverse`
+- `/api/public/valhalla/*`
 
-They support all parameters that Nominatim supports.
+They support all parameters that Nominatim and Valhalla supports.
+
+It also supports all parameters that Valhalla Routing API supports.
 
 These have IP-based rate limitation, so please keep the requests on this public API to a minimum of 1 per
 second.
@@ -85,10 +88,9 @@ Restricted APIs are available at `/api/restricted/`. Where they require authenti
 API keys are generated only for the application itself. It has no rate-limits but is, however, more restrictive
 than what the public API provides. This only covers the Iloilo area.
 
-It has geocoding endpoints such as:
-
 - `/api/restricted/osm/nominatim/search` (Only supports `q` parameter)
 - `/api/restricted/osm/nominatim/reverse` (Only supports `lat` and `lon` parameters)
+- `/api/restricted/valhalla/*`
 
 ## Deploy on Vercel
 

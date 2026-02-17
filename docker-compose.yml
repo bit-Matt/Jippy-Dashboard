@@ -9,33 +9,68 @@ services:
     environment:
       POSTGRES_USERNAME: ${POSTGRES_USERNAME}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-  cache:
-    image: redis:latest
-    restart: unless-stopped
-    ports:
-      - "6379:6379"
-    networks:
-      - defaultNetwork
+      POSTGRES_SHARED_BUFFERS: 2GB
+      POSTGRES_MAINTENANCE_WORK_MEM: 2GB
+      POSTGRES_AUTOVACUUM_WORK_MEM: 2GB
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U $$POSTGRES_USERNAME -d postgres" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    shm_size: 1gb
 
   # Open Street Maps
   geocoder:
     image: mediagis/nominatim:5.2
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
     ports:
-      - "6901:8080"
-    environment:
-      - PBF_PATH=/nominatim/data/philippines-latest.osm.pbf
-      - POSTGRES_SHARED_BUFFERS=2GB
-      - POSTGRES_MAINTENANCE_WORK_MEM=2GB
-      - POSTGRES_AUTOVACUUM_WORK_MEM=2GB
-      - THREADS=8
+      - "6701:8080"
     volumes:
-      - ./.osm-data:/nominatim/data
+      - ./.osm-data/nominatim:/nominatim/data
+      - ./.osm-data/philippines-latest.osm.pbf:/nominatim/data/philippines-latest.osm.pbf
+    environment:
+      PBF_PATH: /nominatim/data/philippines-latest.osm.pbf
+      THREADS: 8
+
+      NOMINATIM_TOKENIZER: icu
+      NOMINATIM_DATABASE_DSN: ${NOMINATIM_DATABASE_DSN}
+      PGHOST: db
+      PGDATABASE: nominatim
+      PGUSER: ${POSTGRES_USERNAME}
+      PGPASSWORD: ${POSTGRES_PASSWORD}
     healthcheck:
       test: [ "CMD", "curl", "-f", "http://localhost:8080/search?q=jaro"]
       interval: 30s
       retries: 9999
-      start_period: 5m
-    shm_size: 1gb
+      start_period: 20m
+    networks:
+      - defaultNetwork
+  valhalla:
+    image: ghcr.io/valhalla/valhalla-scripted:latest
+    depends_on:
+      geocoder:
+        condition: service_healthy
+    restart: unless-stopped
+    ports:
+      - "6702:8002"
+    volumes:
+      - ./.osm-data/valhalla:/custom_files
+      - ./.osm-data/philippines-latest.osm.pbf:/custom_files/philippines-latest.osm.pbf
+    environment:
+      - build_threads=2
+      - build_memory=4G
+      - serve_tiles=True
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://localhost:8002/status" ]
+      interval: 30s
+      retries: 9999
+      start_period: 30m
+    networks:
+      - defaultNetwork
 
 networks:
   defaultNetwork:

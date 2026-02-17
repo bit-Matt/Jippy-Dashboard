@@ -11,7 +11,7 @@ const { NOMINATIM_URL } = process.env;
  * @param {string} query - The query string to search for.
  * @returns {Promise<Success | Failure>} Retusn the result of search operation.
  */
-export async function searchRestricted(query: string) {
+export async function searchRestricted(query: string): Promise<Success<object> | Failure<string>> {
   const url = new URL(NOMINATIM_URL ?? "http://localhost:6901");
   url.pathname = "/search";
   url.searchParams.set("q", query);
@@ -29,45 +29,18 @@ export async function searchRestricted(query: string) {
  * @param {number} lon - The longitude of the location to reverse.
  * @return {Promise<object>} A promise that resolves to the reverse geocoding data in JSON format.
  */
-export async function reverseRestricted(lat: number, lon: number) {
+export async function reverseRestricted(lat: number, lon: number): Promise<Success<object> | Failure<string>> {
   // Check if it's within the viewbox:
   if (lon >= 122.019 && lon <= 123.336 && lat <= 11.628 && lat >= 10.407) {
-    return await reverse(lat, lon);
+    const url = new URL(NOMINATIM_URL ?? "http://localhost:6901");
+    url.pathname = "/reverse";
+    url.searchParams.set("lat", lat.toString());
+    url.searchParams.set("lon", lon.toString());
+
+    return await goFetch(url);
   }
 
   return new Failure(FailureCodes.ValidationFailure, "Coordinates is outside the area supported.");
-}
-
-/**
- * Searches using Nominatim for the given query string.
- *
- * @param {string} query - The query string to search for.
- * @return {Promise<Success | Failure>} Returns the result of search operation.
- */
-export async function search(query: string): Promise<Success<object> | Failure<string>> {
-  const url = new URL(NOMINATIM_URL ?? "http://localhost:6901");
-  url.pathname = "/search";
-  url.searchParams.set("q", query);
-  url.searchParams.set("format", "jsonv2");
-
-  return await goFetch(url);
-}
-
-/**
- * Fetches reverse geocoding information for the given latitude and longitude.
- *
- * @param {number} lat - The latitude of the location to reverse geocode.
- * @param {number} lon - The longitude of the location to reverse geocode.
- * @return {Promise<object>} A promise that resolves to the reverse geocoding data in JSON format.
- */
-export async function reverse(lat: number, lon: number): Promise<Success<object> | Failure<string>> {
-  const url = new URL(NOMINATIM_URL ?? "http://localhost:6901");
-  url.pathname = "/reverse";
-  url.searchParams.set("lat", String(lat));
-  url.searchParams.set("lon", String(lon));
-  url.searchParams.set("format", "jsonv2");
-
-  return await goFetch(url);
 }
 
 /**
@@ -77,7 +50,7 @@ export async function reverse(lat: number, lon: number): Promise<Success<object>
  * @return {Promise<Success|Failure>} A promise that resolves to a `Success` object containing the response data,
  * or a `Failure` object in case of an error.
  */
-async function goFetch(url: URL) {
+async function goFetch(url: URL): Promise<Success<object> | Failure<string>> {
   try {
     const request = await fetch(url.toString(), {
       method: "GET",

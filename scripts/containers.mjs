@@ -1,4 +1,3 @@
-import fs from "node:fs/promises";
 import fss from "node:fs";
 import path from "node:path";
 
@@ -10,12 +9,12 @@ const root = path.join(__dirname, "../");
 const flags = new Set(process.argv.slice(2));
 
 async function main() {
-  if (!fss.existsSync(path.join(root, ".env.docker-compose"))) {
-    throw new Error("You don't have .env.docker-compose file. You can generate it using this command: npm run setup");
+  if (!fss.existsSync(path.join(root, ".env"))) {
+    throw new Error("You don't have .env file. You can generate it using this command: npm run setup");
   }
 
   if (flags.has("--container-up")) {
-    await utils.process.spawnAsync("docker", ["compose", "--env-file", ".env.docker-compose", "up", "-d"], {
+    await utils.process.spawnAsync("docker", ["compose", "up", "-d"], {
       cwd: root,
     });
 
@@ -23,7 +22,7 @@ async function main() {
   }
 
   if (flags.has("--container-start")) {
-    await utils.process.spawnAsync("docker", ["compose", "--env-file", ".env.docker-compose", "start"], {
+    await utils.process.spawnAsync("docker", ["compose", "start"], {
       cwd: root,
     });
 
@@ -31,7 +30,7 @@ async function main() {
   }
 
   if (flags.has("--container-stop")) {
-    await utils.process.spawnAsync("docker", ["compose", "--env-file", ".env.docker-compose", "stop"], {
+    await utils.process.spawnAsync("docker", ["compose", "stop"], {
       cwd: root,
     });
 
@@ -39,7 +38,7 @@ async function main() {
   }
 
   if (flags.has("--container-down")) {
-    await utils.process.spawnAsync("docker", ["compose", "--env-file", ".env.docker-compose", "down"], {
+    await utils.process.spawnAsync("docker", ["compose", "down"], {
       cwd: root,
     });
 
