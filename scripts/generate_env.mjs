@@ -41,6 +41,16 @@ async function main() {
     .questionAsync("Your PostgreSQL port (Default: 5432): ") || "5432";
   composeTemplate = composeTemplate.replace("POSTGRES_PORT=YOUR_POSTGRES_PORT", "POSTGRES_PORT=\"" + databasePort + "\"");
 
+  // Configure nominatim
+  let nominatimInstanceUrl = "";
+  if (flags.has("--use-own-deployments")) {
+    nominatimInstanceUrl = await utils.prompt
+      .questionAsync("Nominatim instance URL (Default: https://nominatim.openstreetmap.org): ") || "https://nominatim.openstreetmap.org";
+    composeTemplate = composeTemplate.replace("NOMINATIM_URL=YOUR_NOMINATIM_URL", "NOMINATIM_URL=\"" + nominatimInstanceUrl + "\"");
+  } else {
+    composeTemplate = composeTemplate.replace("NOMINATIM_URL=YOUR_NOMINATIM_URL", "NOMINATIM_URL=\"http://localhost:6701\"");
+  }
+
   // Generate a connection string
   const connectionString = `postgresql://${databaseUsername}:${databasePassword}@${databaseHost}:${databasePort}/${databaseName}?schema=public`;
   template = template.replace("POSTGRES_URL=YOUR_DATABASE_URL", "POSTGRES_URL=\"" + connectionString + "\"");
@@ -55,14 +65,25 @@ async function main() {
     console.log("  1. Create a database called: %s", databaseName);
     console.log("  2. Add a extension on that database called: postgis");
     console.log("  3. Push database schema to your database: npm run db:push");
+    console.log("  4. If you want to self-host nominatim, see this: https://nominatim.org/release-docs/latest/admin/Installation/");
     console.log("");
   } else {
     await fs.writeFile(path.join(__dirname, "../.env.docker-compose"), composeTemplate, "utf-8");
 
+    // Download required files for any osm related applications
+    await utils.db.preNominatimConfigure();
+
     // Run the docker-compose
-    await utils.process.spawnAsync("docker", ["compose", "--env-file", ".env.docker-compose", "up", "-d"], {
-      cwd: path.join(__dirname, "../"),
-    });
+    console.log("Sit back and relax while we configure everything for you. This will take a while...");
+    await utils.process.spawnAsync(
+      "docker",
+      [
+        "compose",
+        "--env-file", ".env.docker-compose",
+        "up", "-d", "--wait",
+      ], {
+        cwd: path.join(__dirname, "../"),
+      });
 
     // Wait 5s...
     await utils.timers.wait(5);

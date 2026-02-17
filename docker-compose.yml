@@ -17,6 +17,26 @@ services:
     networks:
       - defaultNetwork
 
+  # Open Street Maps
+  geocoder:
+    image: mediagis/nominatim:5.2
+    ports:
+      - "6901:8080"
+    environment:
+      - PBF_PATH=/nominatim/data/philippines-latest.osm.pbf
+      - POSTGRES_SHARED_BUFFERS=2GB
+      - POSTGRES_MAINTENANCE_WORK_MEM=2GB
+      - POSTGRES_AUTOVACUUM_WORK_MEM=2GB
+      - THREADS=8
+    volumes:
+      - ./.osm-data:/nominatim/data
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://localhost:8080/search?q=jaro"]
+      interval: 30s
+      retries: 9999
+      start_period: 5m
+    shm_size: 1gb
+
 networks:
   defaultNetwork:
     driver: bridge

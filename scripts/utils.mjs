@@ -1,6 +1,8 @@
+import fs from "node:fs";
 import child_process from "node:child_process";
 import crypto from "node:crypto";
 import * as readline from "node:readline/promises";
+import path from "node:path";
 import * as pg from "pg";
 import {stdin, stdout} from "node:process";
 
@@ -155,6 +157,22 @@ export const db = {
     }
 
     await client.end();
+  },
+
+  preNominatimConfigure: async () => {
+    const pbfPath = path.join(__dirname, "../.osm-data/philippines-latest.osm.pbf");
+    if (fs.existsSync(pbfPath)) return;
+
+    const pbfFolder = path.join(__dirname, "../.osm-data");
+    if (!fs.existsSync(pbfFolder)) fs.mkdirSync(pbfFolder);
+
+    console.log("Downloading PBF Data from: https://download.geofabrik.de/asia/philippines-latest.osm.pbf");
+    await process.spawnAsync("curl", [
+      "-L",
+      "-o",
+      pbfPath,
+      "https://download.geofabrik.de/asia/philippines-latest.osm.pbf",
+    ]);
   },
 };
 
