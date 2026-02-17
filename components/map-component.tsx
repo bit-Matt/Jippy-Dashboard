@@ -16,9 +16,9 @@ const fixLeafletIcons = () => {
   // delete (L.Icon.Default.prototype)._getIconUrl;
 
   L.Icon.Default.mergeOptions({
-    iconRetinaUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon-2x.png',
-    iconUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon.png',
-    shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png',
+    iconRetinaUrl: "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon-2x.png",
+    iconUrl: "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon.png",
+    shadowUrl: "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png",
   });
 };
 
@@ -29,18 +29,18 @@ const VectorTileLayer = () => {
     if (!map) return;
 
     const glLayer = L.maplibreGL({
-      style: "https://api.maptiler.com/maps/openstreetmap/style.json?key=mNI9bvVhZy4T5HcVvqIr"
+      style: "https://api.maptiler.com/maps/openstreetmap/style.json?key=mNI9bvVhZy4T5HcVvqIr",
     });
 
     glLayer.addTo(map);
 
     return () => {
       map.removeLayer(glLayer);
-    }
+    };
   }, [map]);
 
   return null;
-}
+};
 
 const RoutingMachine = ({ waypoints, color }: RoutingMachineProps) => {
   const map = useMap();
@@ -54,12 +54,12 @@ const RoutingMachine = ({ waypoints, color }: RoutingMachineProps) => {
       lineOptions: {
         styles: [{ color, weight: 4 }],
         extendToWaypoints: true,
-        missingRouteTolerance: 0
+        missingRouteTolerance: 0,
       },
       show: false,
       addWaypoints: false,
       fitSelectedRoutes: true,
-      showAlternatives: false
+      showAlternatives: false,
     }).addTo(map);
 
     return () => {
@@ -85,7 +85,7 @@ export default function MapComponent({ routing }: MapProps) {
         )) : (<></>)
       }
     </MapContainer>
-  )
+  );
 }
 
 export interface RoutingMachineProps {

@@ -1,10 +1,10 @@
 "use client";
 
-import { type ComponentProps } from "react"
-import { Command, Map, Pin } from "lucide-react"
+import { type ComponentProps } from "react";
+import { Command, Map, Pin } from "lucide-react";
 
-import { NavMain } from "@/components/nav-main"
-import { NavUser } from "@/components/nav-user"
+import { NavMain } from "@/components/nav-main";
+import { NavUser } from "@/components/nav-user";
 import {
   Sidebar,
   SidebarContent,
@@ -13,7 +13,7 @@ import {
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
-} from "@/components/ui/sidebar"
+} from "@/components/ui/sidebar";
 
 export function AppSidebar({
   user,
@@ -47,7 +47,7 @@ export function AppSidebar({
         onClick: onSimulationClick,
       },
     ],
-  }
+  };
 
   return (
     <Sidebar variant="inset" {...props}>
@@ -75,7 +75,7 @@ export function AppSidebar({
         <NavUser user={user} />
       </SidebarFooter>
     </Sidebar>
-  )
+  );
 }
 
 interface SidebarProps extends ComponentProps<typeof Sidebar> {

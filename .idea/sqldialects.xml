@@ -3,7 +3,6 @@
   <component name="SqlDialectMappings">
     <file url="file://$PROJECT_DIR$/drizzle/0000_calm_zodiak.sql" dialect="PostgreSQL" />
     <file url="file://$PROJECT_DIR$/drizzle/0001_modern_cargill.sql" dialect="PostgreSQL" />
-    <file url="file://$PROJECT_DIR$/scripts/common.mjs" dialect="GenericSQL" />
     <file url="PROJECT" dialect="PostgreSQL" />
   </component>
 </project>

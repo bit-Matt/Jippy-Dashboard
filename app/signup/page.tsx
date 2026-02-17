@@ -1,10 +1,10 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { isAlreadyConfigured } from "@/lib/accounts"
+import { isAlreadyConfigured } from "@/lib/accounts";
 
-import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { SignupForm } from "@/components/signup-form"
+import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { SignupForm } from "@/components/signup-form";
 
 export default function Page() {
   const [ready, setReady] = useState({ ready: false, configured: false });
@@ -22,7 +22,7 @@ export default function Page() {
           <p>Waiting...</p>
         </div>
       </div>
-    )
+    );
   }
 
   return (
@@ -44,5 +44,5 @@ export default function Page() {
         }
       </div>
     </div>
-  )
+  );
 }

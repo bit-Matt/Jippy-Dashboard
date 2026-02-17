@@ -3,11 +3,11 @@ import { redirect } from "next/navigation";
 
 import { auth } from "@/lib/auth";
 
-import DashboardClient from "@/app/dashboard/dashboard-client"
+import DashboardClient from "@/app/dashboard/dashboard-client";
 
 export default async function Page() {
   const session = await auth.api.getSession({
-    headers: await headers()
+    headers: await headers(),
   });
 
   // Invalid session.
@@ -21,5 +21,5 @@ export default async function Page() {
         email: session.user.email,
       }}
     />
-  )
+  );
 }

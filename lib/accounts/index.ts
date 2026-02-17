@@ -75,7 +75,7 @@ export async function signIn(credentials: Credentials): Promise<ServerActionResu
 
 export async function signOut() {
   await auth.api.signOut({
-    headers: await headers()
+    headers: await headers(),
   });
 }
 

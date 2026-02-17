@@ -3,8 +3,8 @@
 import { useEffect } from "react";
 import { redirect, RedirectType } from "next/navigation";
 
-import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { signOut } from "@/lib/accounts"
+import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { signOut } from "@/lib/accounts";
 
 export default function Page() {
   useEffect(() => {
@@ -24,5 +24,5 @@ export default function Page() {
         </Card>
       </div>
     </div>
-  )
+  );
 }

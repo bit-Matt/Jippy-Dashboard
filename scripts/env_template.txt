@@ -1,0 +1,20 @@
+# DO NOT commit this file to your repository!
+
+# Token Secret for JWT authentication
+BETTER_AUTH_TOKEN=YOUR_SECRET_KEY
+BETTER_AUTH_URL="http://localhost:3000"
+
+# Database URL
+POSTGRES_URL=YOUR_DATABASE_URL
+
+# Redis URL
+#
+# To enable redis, set the Redis URL value here. This is used for caching
+# route for faster response times. (Default: "redis://localhost:6379")
+REDIS_URL="redis://localhost:6379"
+
+# Cache Lifetime
+#
+# Requires REDIS_URL to be set. This sets the lifetime of the route cache.
+# Value is time in minutes. (Default: 30)
+REDIS_CACHE_LIFETIME=30

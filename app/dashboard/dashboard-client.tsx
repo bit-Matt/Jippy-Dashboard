@@ -1,11 +1,11 @@
-"use client"
+"use client";
 
-import { useState } from "react"
+import { useState } from "react";
 
-import { AppSidebar } from "@/components/app-sidebar"
-import MapComponent from "@/components/map-component"
-import RouteEditor from "@/components/route-editor"
-import Simulator from "@/components/simulator"
+import { AppSidebar } from "@/components/app-sidebar";
+import MapComponent from "@/components/map-component";
+import RouteEditor from "@/components/route-editor";
+import Simulator from "@/components/simulator";
 import {
   Breadcrumb,
   BreadcrumbItem,
@@ -13,13 +13,13 @@ import {
   BreadcrumbList,
   BreadcrumbPage,
   BreadcrumbSeparator,
-} from "@/components/ui/breadcrumb"
-import { Separator } from "@/components/ui/separator"
+} from "@/components/ui/breadcrumb";
+import { Separator } from "@/components/ui/separator";
 import {
   SidebarInset,
   SidebarProvider,
   SidebarTrigger,
-} from "@/components/ui/sidebar"
+} from "@/components/ui/sidebar";
 
 type DashboardClientProps = {
   user: {
@@ -30,18 +30,18 @@ type DashboardClientProps = {
 }
 
 export default function DashboardClient({ user }: DashboardClientProps) {
-  const [showRouteEditor, setShowRouteEditor] = useState(false)
-  const [showSimulator, setShowSimulator] = useState(false)
+  const [showRouteEditor, setShowRouteEditor] = useState(false);
+  const [showSimulator, setShowSimulator] = useState(false);
 
   const handleShowRoutes = () => {
-    setShowRouteEditor(!showRouteEditor)
-    setShowSimulator(false)
-  }
+    setShowRouteEditor(!showRouteEditor);
+    setShowSimulator(false);
+  };
 
   const handleShowSimulator = () => {
-    setShowSimulator(!showSimulator)
-    setShowRouteEditor(false)
-  }
+    setShowSimulator(!showSimulator);
+    setShowRouteEditor(false);
+  };
 
   return (
     <SidebarProvider>
@@ -114,5 +114,5 @@ export default function DashboardClient({ user }: DashboardClientProps) {
         </div>
       </SidebarInset>
     </SidebarProvider>
-  )
+  );
 }

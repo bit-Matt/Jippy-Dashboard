@@ -6,7 +6,7 @@ This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-
 
 ### Requirements
 
-1. [Docker Engine/Desktop](https://www.docker.com/) with [`docker-compose`](https://docs.docker.com/compose/)
+1. [Docker Engine/Desktop](https://www.docker.com/) with [`docker-compose`](https://docs.docker.com/compose/) (Optional, but recommended)
 2. [Node.js 24 (LTS) or >= 25](https://nodejs.org/en) (Recommended to use LTS versions of Node.js)
 3. [npm >= 11] (Bundled with Node.js)
 
@@ -14,7 +14,7 @@ This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-
 
 > [!IMPORTANT]  
 > Always check if you have other instances of PostgreSQL or Redis in your machine. If so, you can disable
-> container creation by using `--skip-container-build`. Ensure that your local PostgreSQL has [PostGIS](https://postgis.net/documentation/getting_started/)
+> container creation by using `--use-own-deployments`. Ensure that your local PostgreSQL has [PostGIS](https://postgis.net/documentation/getting_started/)
 > extension enabled.
 
 1. Install required dependencies first:
@@ -26,8 +26,18 @@ This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-
 2. Run the automated environment setup script:
 
    ```sh
-   npm run env:generate
+   npm run setup
    ```
+   
+   Note: You can configure only `.env` file without the automatic environment setup. To do so,
+   add: `--use-own-deployments` flag on the setup script:
+
+   ```sh
+   npm run setup -- --use-own-deployments
+   ```
+   
+   However, there will be a manual configuration to be done on your end. Follow the instructions
+   in the output of the script.
 
 3. Then run the development server:
 

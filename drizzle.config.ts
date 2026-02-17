@@ -10,6 +10,7 @@ export default defineConfig({
     url: process.env.POSTGRES_URL!,
   },
   migrations: {
-    schema: 'public',
+    schema: "public",
   },
+  extensionsFilters: ["postgis"],
 });
