@@ -1,19 +1,16 @@
 import type { DateTime } from "luxon";
 
-export type ValidationErrors<T> = Record<
-  keyof T,
-  {
-    /**
-     * A string variable that represents the error message from the Validator function
-     */
-    message: string;
+export type ValidationErrors<T> = Record<keyof T, {
+  /**
+   * A string variable that represents the error message from the Validator function
+   */
+  message: string;
 
-    /**
-     * Specifies the origin of the error where the check fails.
-     */
-    from: "type-check" | "formatter" | "is-required" | "unvalidated";
-  }
->;
+  /**
+   * Specifies the origin of the error where the check fails.
+   */
+  from: "type-check" | "formatter" | "is-required" | "unvalidated";
+}>;
 
 export interface ValidationResult<T> {
   /**
@@ -24,7 +21,7 @@ export interface ValidationResult<T> {
   /**
    * Validation Errors
    */
-  errors: ValidationErrors<T>;
+  errors: ValidationErrors<T>
 }
 
 /**
@@ -38,7 +35,7 @@ export interface ValidationResult<T> {
  * @param {T} value The value to validate.
  * @returns {Promise<{ ok: boolean, error?: string }>}
  */
-export type ValidationFunction<T> = (value: T) => Promise<{ ok: boolean; error?: string }>;
+export type ValidationFunction<T> = (value: T) => Promise<{ ok: boolean, error?: string }>
 
 /**
  * Represents the possible validation types that can be used for input or data validation.
@@ -55,6 +52,26 @@ export type ValidationFunction<T> = (value: T) => Promise<{ ok: boolean; error?:
  */
 export type ValidationTypes = "string" | "number" | "boolean" | "date" | "array" | "object";
 
+/**
+ * A utility type that determines the validation type of a given input type `V`.
+ * It maps types to corresponding string literals representing their validation category.
+ *
+ * - If `V` is `string`, it resolves to `"string"`.
+ * - If `V` is `number`, it resolves to `"number"`.
+ * - If `V` is `boolean`, it resolves to `"boolean"`.
+ * - If `V` is `Date`, it resolves to `"date"`.
+ * - If `V` is an empty array (`never[]`), it resolves to `"array"`.
+ * - For all other types, it resolves to `"object"`.
+ *
+ * @template V - The input type to evaluate.
+ */
+type ExtractValidationType<V> =
+  V extends string ? "string" :
+    V extends number ? "number" :
+      V extends boolean ? "boolean" :
+        V extends Date ? "date" :
+          V extends never[] ? "array" : "object";
+
 export interface Schema<T> {
   /**
    * List of all properties to be validated
@@ -64,7 +81,7 @@ export interface Schema<T> {
       /**
        * The Instance Type of the Property
        */
-      type: ValidationTypes;
+      type: ExtractValidationType<T[K]>;
 
       /**
        * The Formatter to use for validation if the current property represents a format
@@ -103,8 +120,8 @@ export interface Schema<T> {
        * @remarks If type is date, this will check the maximum DateTime allowed.
        */
       max?: number | DateTime;
-    };
-  };
+    }
+  }
 
   /**
    * List of all property names that should be required.

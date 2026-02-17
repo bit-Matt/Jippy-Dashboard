@@ -1,5 +1,5 @@
 import {type SyntheticEvent, useState} from "react";
-import {configureUser, type User} from "@/lib/accounts";
+import {configureUser, type UserCredentials} from "@/lib/accounts";
 import {redirect, RedirectType} from "next/navigation";
 
 import {Button} from "@/components/ui/button";
@@ -119,4 +119,4 @@ export function SignupForm({ ...props }: React.ComponentProps<typeof Card>) {
   );
 }
 
-type StateType = User & { confirmPassword: string };
+type StateType = UserCredentials & { confirmPassword: string };

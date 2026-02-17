@@ -1,15 +1,13 @@
 "use client";
 
-import { type ComponentProps, useEffect } from "react";
-import { MapContainer, useMap } from "react-leaflet";
+import { type ComponentProps, useEffect, useMemo, useRef, useState } from "react";
+import { MapContainer, Marker, useMap, useMapEvents } from "react-leaflet";
 import L from "leaflet";
 
 import "@maplibre/maplibre-gl-leaflet";
 import "leaflet-routing-machine";
 
-// @ts-expect-error - no type declarations available
 import "leaflet/dist/leaflet.css";
-// @ts-expect-error - no type declarations available
 import "leaflet-routing-machine/dist/leaflet-routing-machine.css";
 
 const fixLeafletIcons = () => {
@@ -20,6 +18,24 @@ const fixLeafletIcons = () => {
     iconUrl: "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon.png",
     shadowUrl: "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png",
   });
+};
+
+const MapCenterLogger = ({ fn }: MapCenterLoggerProps) => {
+  const map = useMapEvents({
+    // 'moveend' fires after the user stops dragging/zooming
+    moveend: () => {
+      const newCenter = map.getCenter();
+      console.log("New Center:", newCenter);
+
+      fn([newCenter.lat, newCenter.lng]);
+    },
+    // 'move' fires continuously while dragging (use with caution for performance)
+    move: () => {
+      // Optional: Update simplified state here
+    },
+  });
+
+  return null;
 };
 
 const VectorTileLayer = () => {
@@ -70,17 +86,91 @@ const RoutingMachine = ({ waypoints, color }: RoutingMachineProps) => {
   return null;
 };
 
-export default function MapComponent({ routing }: MapProps) {
+const DraggableMarker = ({ position, onUpdate }: DraggableMarkerProps) => {
+  const [newPosition, setPosition] = useState<[number, number]>(position);
+
+  // Ref to access the Leaflet marker instance directly
+  const markerRef = useRef<L.Marker>(null);
+
+  useEffect(() => {
+    if (onUpdate) onUpdate(newPosition);
+  }, [newPosition, onUpdate]);
+
+  // Event handler for when dragging ends
+  const eventHandlers = useMemo(
+    () => ({
+      dragend() {
+        const marker = markerRef.current;
+        if (marker != null) {
+          const newPos = marker.getLatLng();
+          setPosition([newPos.lat, newPos.lng]);
+        }
+      },
+    }),
+    [],
+  );
+
+  return (
+    <Marker
+      draggable={true}
+      eventHandlers={eventHandlers}
+      position={position}
+      ref={markerRef}
+    />
+  );
+};
+
+export default function MapComponent({ editor, routing }: MapProps) {
+  const [center, setCenter] = useState<[number, number]>([10.7302, 122.5591]);
+  const [activePoint, setActivePoint] = useState<[number, number] | null>(null);
+
   useEffect(() => {
     fixLeafletIcons();
   }, []);
+
+  useEffect(() => {
+    if (editor) {
+      // Set the point to the center of the map when the editor is created.
+      if (editor.handleCreatePoint) {
+        editor.handleCreatePoint(() => setActivePoint(center));
+      }
+
+      // When the handle add point is called, set the active point to the center of the map.
+      if (editor.handleAddPoint) {
+        editor.handleAddPoint(() => {
+          if (activePoint) return activePoint;
+          return center;
+        });
+      }
+    }
+
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editor]);
+
+  const onMarkerUpdate = (latLng: [number, number]) => {
+    setActivePoint(latLng);
+  };
 
   return (
     <MapContainer center={[10.7302, 122.5591]} zoom={13} className="h-full w-full">
       <VectorTileLayer />
 
+      <MapCenterLogger fn={(latLng) => setCenter(latLng)} />
+
       {
-        routing ? routing.map((r, i) => (
+        editor && (
+          <>
+            {
+              activePoint && (
+                <DraggableMarker position={activePoint} onUpdate={onMarkerUpdate} />
+              )
+            }
+          </>
+        )
+      }
+
+      {
+        !editor && routing ? routing.map((r, i) => (
           <RoutingMachine key={i} waypoints={r.waypoints} color={r.color} />
         )) : (<></>)
       }
@@ -89,10 +179,29 @@ export default function MapComponent({ routing }: MapProps) {
 }
 
 export interface RoutingMachineProps {
-  waypoints: Array<[number, number]>,
+  waypoints: Array<[number, number]>;
   color: string;
 }
 
+export interface MapCenterLoggerProps {
+  fn: (latLng: [number, number]) => void;
+}
+
+export interface DraggableMarkerProps {
+  position: [number, number];
+  onUpdate: (latLng: [number, number]) => void;
+}
+
+export interface EditorProps {
+  color: string;
+  waypoints: Array<{ sequence: number, points: [number, number] }>;
+
+  handleCreatePoint: (fn: () => void) => void;
+  handleAddPoint: (fn: () => [number, number]) => void;
+}
+
 export interface MapProps {
-  routing?: Array<ComponentProps<typeof RoutingMachine>>
+  editor?: EditorProps | null;
+
+  routing?: Array<ComponentProps<typeof RoutingMachine>>;
 }

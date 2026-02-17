@@ -4,11 +4,20 @@ import { useEffect } from "react";
 import { redirect, RedirectType } from "next/navigation";
 
 import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { signOut } from "@/lib/accounts";
+import { $fetch } from "@/lib/http/client";
 
 export default function Page() {
   useEffect(() => {
-    signOut().finally(() => redirect("/", RedirectType.push));
+    async function signOut() {
+      const { error } = await $fetch("/api/auth/sign-out", {
+        method: "POST",
+      });
+      if (error) throw error;
+
+      return true;
+    }
+    signOut()
+      .finally(() => redirect("/", RedirectType.push));
   }, []);
 
   return (

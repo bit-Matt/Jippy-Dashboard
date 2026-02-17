@@ -1,5 +1,3 @@
-"use client";
-
 import { type ComponentProps } from "react";
 import { Command, Map, Pin } from "lucide-react";
 
@@ -15,12 +13,7 @@ import {
   SidebarMenuItem,
 } from "@/components/ui/sidebar";
 
-export function AppSidebar({
-  user,
-  onAddRouteClick,
-  onSimulationClick,
-  ...props
-}: SidebarProps) {
+export function AppSidebar({ onAddRouteClick, onSimulationClick, ...props }: SidebarProps) {
   const data = {
     navMain: [
       {
@@ -29,10 +22,6 @@ export function AppSidebar({
         icon: Map,
         isActive: true,
         items: [
-          {
-            title: "Routes List",
-            url: "#",
-          },
           {
             title: "Add a new Route",
             url: "#",
@@ -72,18 +61,13 @@ export function AppSidebar({
         <NavMain items={data.navMain} />
       </SidebarContent>
       <SidebarFooter>
-        <NavUser user={user} />
+        <NavUser />
       </SidebarFooter>
     </Sidebar>
   );
 }
 
 interface SidebarProps extends ComponentProps<typeof Sidebar> {
-  user: {
-    initials: string;
-    fullName: string;
-    email: string;
-  }
   onAddRouteClick?: () => void
   onSimulationClick?: () => void
 }

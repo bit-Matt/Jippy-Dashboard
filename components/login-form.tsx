@@ -2,16 +2,15 @@
 
 import { type ComponentProps, type SyntheticEvent, useState } from "react";
 
+import { $fetch } from "@/lib/http/client";
 import { cn } from "@/lib/utils";
 import { redirect, RedirectType } from "next/navigation";
-import { signIn } from "@/lib/accounts";
 
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Field, FieldDescription, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
-
 
 export function LoginForm({ className, ...props }: ComponentProps<"div">) {
   const [credentials, setCredentials] = useState<Credentials>({
@@ -27,13 +26,17 @@ export function LoginForm({ className, ...props }: ComponentProps<"div">) {
   const submitForm = async (e: SyntheticEvent) => {
     e.preventDefault();
 
-    const result = await signIn({
-      email: credentials.email,
-      password: credentials.password,
-      rememberMe: credentials.rememberMe,
+    const { error } = await $fetch("/api/auth/sign-in", {
+      method: "POST",
+      body: {
+        email: credentials.email,
+        password: credentials.password,
+        rememberMe: credentials.rememberMe,
+      },
     });
-    if (!result.ok) {
-      alert(result.message!);
+    if (error) {
+      alert("Unable to sign in. Please check your credentials and try again.");
+      return;
     }
 
     redirect("/dashboard", RedirectType.push);

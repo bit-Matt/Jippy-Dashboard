@@ -1,9 +1,10 @@
 "use server";
 
-import { auth } from "@/lib/auth";
 import { eq } from "drizzle-orm";
+
+import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { headers } from "next/headers";
+import { Failure, FailureCodes, Success } from "@/lib/oneOf/response-types";
 import type { ServerActionResult } from "@/lib/types";
 import { user } from "@/lib/db/schema";
 import { validator } from "@/lib/validator";
@@ -26,68 +27,41 @@ export async function isAlreadyConfigured(): Promise<boolean> {
 }
 
 /**
- * Handles user sign-in by validating the provided credentials and then attempting authentication.
+ * Retrieves a user by their unique identifier.
  *
- * @param {Credentials} credentials - An object containing the user's email, password, and rememberMe flag.
- * @param {string} credentials.email - The user's email address.
- * @param {string} credentials.password - The user's password.
- * @param {boolean} credentials.rememberMe - Whether the user wants to be remembered on the device.
- * @return {Promise<ServerActionResult<undefined>>} A promise that resolves to a result object indicating
- * whether the sign-in was successful or not. If unsuccessful, an error message will be provided.
+ * @param {string} id - The unique identifier of the user to retrieve.
+ * @return {Promise<Success|Failure>} A promise that resolves to a Success object containing the user details
+ *                                    if found, or a Failure object indicating the error.
  */
-export async function signIn(credentials: Credentials): Promise<ServerActionResult<undefined>> {
-  const validation = await validator.validate<Credentials>(credentials, {
-    properties: {
-      email: {
-        type: "string",
-        formatter: "email",
-      },
-      password: {
-        type: "string",
-        formatter: "non-empty-string",
-      },
-      rememberMe: {
-        type: "boolean",
-      },
-    },
-    requiredProperties: ["email", "password", "rememberMe"],
-    allowUnvalidatedProperties: false,
-  });
-  if (!validation.ok) {
-    return { ok: false, message: validator.toPlainErrors(validation.errors) };
-  }
-
-  // Authenticate
+export async function getUser(id: string) {
   try {
-    await auth.api.signInEmail({
-      body: {
-        email: credentials.email,
-        password: credentials.password,
-        rememberMe: credentials.rememberMe,
-      },
-    });
+    const [result] = await db
+      .select({
+        fullName: user.name,
+        email: user.email,
+      })
+      .from(user)
+      .where(eq(user.id, id))
+      .limit(1);
+    if (!result) {
+      return new Failure(FailureCodes.UserNotFound, "User not found!");
+    }
 
-    return { ok: true };
+    return new Success(result);
   } catch {
-    return { ok: false, message: "Invalid email or password." };
+    return new Failure(FailureCodes.Fatal, "Internal exception.");
   }
-}
-
-export async function signOut() {
-  await auth.api.signOut({
-    headers: await headers(),
-  });
 }
 
 /**
  * Configures a new user on the server by creating an account using the provided user details.
  * If the server has already been configured, the operation is aborted.
  *
- * @param {User} user The user object containing the full name, email, and password for registration.
+ * @param {UserCredentials} user The user object containing the full name, email, and password for registration.
  * @return {Promise<ServerActionResult<undefined>>} A promise resolving to the result of the configuration attempt.
  * The result includes a success flag (`ok`) and an optional message in case of failure.
  */
-export async function configureUser(user: User): Promise<ServerActionResult<undefined>> {
+export async function configureUser(user: UserCredentials): Promise<ServerActionResult<undefined>> {
   const isConfigured = await isAlreadyConfigured();
 
   // Throw an exception when the server has already been configured.
@@ -96,7 +70,7 @@ export async function configureUser(user: User): Promise<ServerActionResult<unde
   }
 
   // Validation
-  const validation = await validator.validate<User>(user, {
+  const validation = await validator.validate<UserCredentials>(user, {
     properties: {
       fullName: {
         type: "string",
@@ -133,13 +107,7 @@ export async function configureUser(user: User): Promise<ServerActionResult<unde
   }
 }
 
-export type Credentials = {
-  email: string;
-  password: string;
-  rememberMe: boolean;
-}
-
-export type User = {
+export type UserCredentials = {
   fullName: string;
   email: string;
   password: string;
