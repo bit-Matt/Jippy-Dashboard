@@ -28,6 +28,7 @@
     "drizzle-orm": "^0.45.1",
     "leaflet": "^1.9.4",
     "leaflet-routing-machine": "^3.2.12",
+    "lru-cache": "^11.2.6",
     "lucide-react": "^0.574.0",
     "luxon": "^3.7.2",
     "maplibre-gl": "^5.18.0",
