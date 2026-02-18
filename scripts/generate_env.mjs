@@ -9,6 +9,7 @@ async function main() {
   // Token generation for authentication
   const token = utils.token.generatePassword(32, "!#%&()*+,/:;<=>?@[]^`{|}");
   utils.env.write("runtime.better.auth.token", token);
+  utils.env.write("runtime.better.auth.url", "http://localhost:3000");
 
   // Database configuration
   const databaseUsername = await utils.env.ask(
@@ -95,10 +96,10 @@ async function main() {
     console.log("  3. Push database schema to your database: npm run db:push");
     console.log("");
     console.log("Optional and recommended (If you want to avoid rate limits):");
-    console.log("  - If you want to self-host nominatim, see this: https://nominatim.org/release-docs/latest/admin/Installation/");
+    console.log("  - If you want to self-host Nominatim, see this: https://nominatim.org/release-docs/latest/admin/Installation/");
     console.log("    Once you're done, update NOMINATIM_URL in .env file to your instance url.");
-    console.log("  - If you want to self-host osrm, see this: https://github.com/Project-OSRM/osrm-backend");
-    console.log("    Once you're done, update OSRM_URL in .env file to your instance url.");
+    console.log("  - If you want to self-host Valhalla, see this: https://valhalla.github.io/valhalla/");
+    console.log("    Once you're done, update VALHALLA_URL in .env file to your instance url.");
     console.log("");
     console.log("Here's a brief explainer of what those scripts do:");
     console.log("  db:migrate  - Migrates the database schema to the latest version");
@@ -106,14 +107,23 @@ async function main() {
     console.log("  db:push     - Pushes the database schema to the database");
     console.log("  db:studio   - Launches drizzle studio");
     console.log("");
-    console.log("  Note: service:* scripts WILL NOT WORK because you skipped the part where you let docker");
-    console.log("        create the services for you. So you'll have to configure the dependencies manually.");
+    console.log("  Note: service:* scripts will work if you want to switch to self hosted option later.");
+    console.log("        However, valhalla and nominatim will not work unless you configure the following:");
+    console.log("");
+    console.log("        Ensure that in your .env file, these are configured to:");
+    console.log("          NOMINATIM_URL=http://localhost:6701");
+    console.log("          VALHALLA_URL=http://localhost:6702");
+    console.log("        Then, download the Philippine PBF file here: https://download.geofabrik.de/asia/philippines-latest.osm.pbf");
+    console.log("        and save it to .osm-data folder in your project root. If that folder doesn't exist, create it.");
+    console.log("");
+    console.log("        Once you're done, you can npm run service:up to have your database, nominatim and valhalla");
+    console.log("        configured and running. You may have to wait 30 minutes to 1 hour depending on your internet connection and hardware.");
     console.log("");
     console.log("Happy coding!");
     console.log("");
   } else {
     // Download required files for any osm related applications
-    console.log("Downloading required files for nominatim and osrm...");
+    console.log("Downloading required files for nominatim and valhalla...");
     await utils.db.preNominatimConfigure();
 
     // Run the docker-compose
