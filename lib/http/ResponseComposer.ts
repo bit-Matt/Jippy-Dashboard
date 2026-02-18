@@ -232,6 +232,7 @@ export class ExceptionResponseComposer implements IResponseComposer<ErrorCollect
       break;
     }
 
+    this._body.status = code;
     this._code = code;
   }
 
