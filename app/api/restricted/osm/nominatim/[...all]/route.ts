@@ -13,7 +13,7 @@ export async function GET(req: NextRequest) {
 
   switch (pathname) {
   case "/api/public/osm/nominatim/reverse":
-    const reverse = await nominatim.reverse(payload);
+    const reverse = await nominatim.reverse(payload, { localOnly: true });
     return oneOf(reverse).match(
       s => {
         return ResponseComposer.compose(StatusCodes.Status200Ok)
@@ -26,7 +26,7 @@ export async function GET(req: NextRequest) {
       },
     );
   case "/api/public/osm/nominatim/search":
-    const search = await nominatim.search(payload);
+    const search = await nominatim.search(payload, { localOnly: true });
     return oneOf(search).match(
       s => {
         return ResponseComposer.compose(StatusCodes.Status200Ok)

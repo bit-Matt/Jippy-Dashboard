@@ -40,4 +40,11 @@ export enum FailureCodes {
    * or termination of the current process.
    */
   Fatal = 69420,
+
+  /**
+   * A constant that serves as an identifier or numeric value representing a fatal error or critical state
+   * within the context of a proxy system. This value is typically used to distinguish severe issues
+   * that require immediate attention or special handling in the application's workflow.
+   */
+  ProxyFatal = 69421,
 }
