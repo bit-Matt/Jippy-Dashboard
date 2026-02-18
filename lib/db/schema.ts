@@ -98,6 +98,9 @@ export const routeSequences = pgTable(
       .notNull()
       .references(() => routes.id),
     sequenceNumber: integer("sequence_number").notNull(),
+    address: text("address")
+      .default("Unknown Address")
+      .notNull(),
     point: geometry("point", { type: "point", mode: "tuple", srid: 4326 }).notNull(),
     createdAt: timestamp("created_at").defaultNow().notNull(),
     updatedAt: timestamp("updated_at")

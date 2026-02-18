@@ -15,6 +15,13 @@
       "when": 1770957333038,
       "tag": "0001_modern_cargill",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1771430989650,
+      "tag": "0002_hesitant_smasher",
+      "breakpoints": true
     }
   ]
 }
