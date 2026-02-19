@@ -1,11 +1,11 @@
 "use client";
 
+import { Check, MapPin, Trash2, X } from "lucide-react";
 import { useState, useEffect, useRef, type DragEvent } from "react";
+
 import { Card, CardContent, CardHeader} from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { useRouteEditor } from "@/contexts/RouteEditorContext";
-import { nominatim } from "@/lib/osm/client/nominatim";
 import {
   InputGroup,
   InputGroupAddon,
@@ -13,7 +13,11 @@ import {
   InputGroupInput,
 } from "@/components/ui/input-group";
 import { Label } from "@/components/ui/label";
-import { Check, MapPin, Trash2, X } from "lucide-react";
+
+import { $fetch } from "@/lib/http/client";
+import { nominatim } from "@/lib/osm/client/nominatim";
+import type { RouteSummary } from "@/components/app-sidebar";
+import { useRouteEditor } from "@/contexts/RouteEditorContext";
 
 const COLORS = [
   "#fff100", "#ff8c00", "#e81123",
@@ -22,7 +26,7 @@ const COLORS = [
   "#bad80a",
 ];
 
-export default function RouteEditor() {
+export default function RouteEditor({ editingRoute, onSaved, onClosed }: RouteEditorProps) {
   const [routeNumber, setRouteNumber] = useState("");
   const [routeName, setRouteName] = useState("");
   const [draggedWaypointId, setDraggedWaypointId] = useState<number | null>(null);
@@ -42,6 +46,26 @@ export default function RouteEditor() {
     saveRoute,
     stopCreating,
   } = useRouteEditor();
+
+  useEffect(() => {
+    if (!editingRoute) return;
+
+    setRouteNumber(editingRoute.routeNumber);
+    setRouteName(editingRoute.routeName);
+
+    const initialAddresses: Record<number, string> = {};
+    const initialAddressCoords: Record<number, string> = {};
+
+    [...editingRoute.points]
+      .sort((a, b) => a.sequence - b.sequence)
+      .forEach((point, index) => {
+        initialAddresses[index] = point.address;
+        initialAddressCoords[index] = `${point.point[0]},${point.point[1]}`;
+      });
+
+    setAddresses(initialAddresses);
+    setAddressCoords(initialAddressCoords);
+  }, [editingRoute]);
 
   // Reverse geocode waypoints to get addresses
   useEffect(() => {
@@ -115,13 +139,41 @@ export default function RouteEditor() {
         name: routeName,
         waypoints: route,
       });
-      // TODO: Persist route to database
-      setRouteNumber("");
-      setRouteName("");
-      setAddresses({});
-      setAddressCoords({});
-      clearWaypoints();
-      stopCreating();
+
+      // Write data
+      $fetch("/api/restricted/management/route", {
+        method: "POST",
+        body: {
+          routeNumber: routeNumber,
+          routeName: routeName,
+          routeColor: selectedColor,
+          points: route.map(x => ({
+            sequence: x.sequence,
+            address: addresses[x.id] ?? "Unknown Address",
+            point: [x.lat, x.lng],
+          })),
+        },
+      })
+        .then(({ data, error }) => {
+          if (error) {
+            console.error("Error saving route:", error);
+            return;
+          }
+
+          console.log(data, error);
+
+          setRouteNumber("");
+          setRouteName("");
+          setAddresses({});
+          setAddressCoords({});
+          clearWaypoints();
+          stopCreating();
+          onSaved?.();
+          onClosed?.();
+        })
+        .catch(e => {
+          console.error("Error saving route:", e);
+        });
     }
   };
 
@@ -140,6 +192,7 @@ export default function RouteEditor() {
     setAddressCoords({});
     clearWaypoints();
     stopCreating();
+    onClosed?.();
   };
 
   const handleWaypointDragStart = (
@@ -175,7 +228,7 @@ export default function RouteEditor() {
     <div className="absolute top-2 left-6 z-9999 w-1/4">
       <Card>
         <CardHeader className="flex flex-row items-center justify-between">
-          <h2 className="text-base font-semibold">Add Route</h2>
+          <h2 className="text-base font-semibold">{editingRoute ? "Edit Route" : "Add Route"}</h2>
           <div className="flex items-center gap-2">
             <Button
               size="sm"
@@ -310,4 +363,10 @@ export default function RouteEditor() {
       </Card>
     </div>
   );
+}
+
+interface RouteEditorProps {
+  editingRoute?: RouteSummary | null
+  onSaved?: () => void
+  onClosed?: () => void
 }

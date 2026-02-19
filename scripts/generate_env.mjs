@@ -154,8 +154,8 @@ async function main() {
     console.log("Wait 5s...");
     await utils.timers.wait(5);
 
-    console.log("Pushing database schema...");
-    await utils.process.spawnAsync("npm", ["run", "db:push"], {
+    console.log("Running migrations...");
+    await utils.process.spawnAsync("npm", ["run", "db:migrate"], {
       cwd: path.join(__dirname, "../"),
     });
 

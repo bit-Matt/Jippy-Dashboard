@@ -13,7 +13,7 @@ import {
   SidebarMenuItem,
 } from "@/components/ui/sidebar";
 
-export function AppSidebar({ onAddRouteClick, onSimulationClick, ...props }: SidebarProps) {
+export function AppSidebar({ onAddRouteClick, onSimulationClick, routes, onRouteClick, ...props }: SidebarProps) {
   const data = {
     navMain: [
       {
@@ -27,6 +27,11 @@ export function AppSidebar({ onAddRouteClick, onSimulationClick, ...props }: Sid
             url: "#",
             onClick: onAddRouteClick,
           },
+          ...routes.map((route) => ({
+            title: `${route.routeNumber} - ${route.routeName}`,
+            url: "#",
+            onClick: () => onRouteClick?.(route),
+          })),
         ],
       },
       {
@@ -70,4 +75,19 @@ export function AppSidebar({ onAddRouteClick, onSimulationClick, ...props }: Sid
 interface SidebarProps extends ComponentProps<typeof Sidebar> {
   onAddRouteClick?: () => void
   onSimulationClick?: () => void
+  routes: RouteSummary[]
+  onRouteClick?: (route: RouteSummary) => void
+}
+
+export interface RouteSummary {
+  id: string | number
+  routeNumber: string
+  routeName: string
+  routeColor: string
+  points: Array<{
+    id: string | number
+    sequence: number
+    address: string
+    point: [number, number]
+  }>
 }

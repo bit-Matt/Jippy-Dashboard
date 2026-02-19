@@ -88,14 +88,48 @@ validator.addFormat("strong-password", {
   },
 });
 
-const singles = {
-  isNonEmptyString: validator.getFormatterFunction("string", "non-empty-string")!,
-  isEmail: validator.getFormatterFunction("string", "email")!,
-  isUuid: validator.getFormatterFunction("string", "uuid")!,
-  isValidNumber: validator.getFormatterFunction("number", "valid-number")!,
+validator.addFormat("hex-color", {
+  forType: "string",
+  formatterFn: async (value) => {
+    const hexRegex = /^#([A-Fa-f0-9]{6}|[A-Fa-f0-9]{3})$/;
+    if (!hexRegex.test(value)) {
+      return {
+        ok: false,
+        error: "Invalid hex color",
+      };
+    }
+
+    return { ok: true };
+  },
+});
+
+const utils = {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  isExisty: (value: any) => value !== null && value !== undefined,
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  isFinite: (value: any) => {
+    const n = Number(value);
+    return !Number.isNaN(n) && Number.isFinite(n);
+  },
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  isNonEmpty: (value: any) => {
+    if (!utils.isExisty(value)) return false;
+    if (typeof value !== "string") return false;
+
+    return value.trim().length > 0;
+  },
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  isTuple: (value: [any, any]) => {
+    if (!Array.isArray(value) || value.length !== 2) return false;
+
+    const e1 = utils.isExisty(value[0]) && utils.isFinite(value[0]);
+    const e2 = utils.isExisty(value[1]) && utils.isFinite(value[1]);
+
+    return e1 && e2;
+  },
 };
 
-export {
-  validator,
-  singles,
-};
+export { utils, validator };

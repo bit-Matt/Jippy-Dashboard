@@ -1,0 +1,1 @@
+ALTER TABLE "routes" ADD COLUMN "route_color" text DEFAULT '#FFF000' NOT NULL;

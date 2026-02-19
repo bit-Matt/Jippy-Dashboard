@@ -1,5 +1,6 @@
 import { relations } from "drizzle-orm";
 import { pgEnum, pgTable, text, timestamp, boolean, index, integer, geometry } from "drizzle-orm/pg-core";
+import { v7 as uuidv7 } from "uuid";
 
 export const roles = pgEnum("role", ["administrator_user", "regular_user"]);
 
@@ -79,9 +80,12 @@ export const verification = pgTable(
 export const routes = pgTable(
   "routes",
   {
-    id: text("id").primaryKey(),
+    id: text("id")
+      .primaryKey()
+      .$default(() => uuidv7()),
     routeNumber: text("route_number").notNull(),
     routeName: text("route_name").notNull(),
+    routeColor: text("route_color").notNull().default("#FFF000"),
     createdAt: timestamp("created_at").defaultNow().notNull(),
     updatedAt: timestamp("updated_at")
       .defaultNow()
@@ -93,7 +97,9 @@ export const routes = pgTable(
 export const routeSequences = pgTable(
   "routeSequences",
   {
-    id: text("id").primaryKey(),
+    id: text("id")
+      .primaryKey()
+      .$default(() => uuidv7()),
     routeId: text("route_id")
       .notNull()
       .references(() => routes.id),

@@ -20,6 +20,7 @@ export interface RouteEditorContextType {
 
   // Actions
   startCreating: () => void;
+  startEditing: (payload: { color: string; points: Array<{ point: [number, number] }> }) => void;
   stopCreating: () => void;
   setSelectedColor: (color: string) => void;
   addWaypoint: (lat: number, lng: number) => void;
@@ -69,6 +70,24 @@ export function RouteEditorProvider({
     setWaypoints([]);
     setWaypointCounter(0);
     setActivePointIndex(null);
+  }, []);
+
+  const startEditing = useCallback((payload: { color: string; points: Array<{ point: [number, number] }> }) => {
+    const sortedPoints = [...payload.points];
+
+    const mappedWaypoints: Waypoint[] = sortedPoints.map((point, index) => ({
+      id: index,
+      lat: point.point[0],
+      lng: point.point[1],
+      color: payload.color,
+      sequence: index,
+    }));
+
+    setIsCreating(true);
+    setSelectedColor(payload.color);
+    setWaypoints(mappedWaypoints);
+    setWaypointCounter(mappedWaypoints.length);
+    setActivePointIndex(mappedWaypoints.length > 0 ? mappedWaypoints[0].id : null);
   }, []);
 
   const stopCreating = useCallback(() => {
@@ -172,6 +191,7 @@ export function RouteEditorProvider({
 
     // Actions
     startCreating,
+    startEditing,
     stopCreating,
     setSelectedColor,
     addWaypoint,

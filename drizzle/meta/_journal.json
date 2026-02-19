@@ -22,6 +22,13 @@
       "when": 1771430989650,
       "tag": "0002_hesitant_smasher",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1771513782184,
+      "tag": "0003_early_matthew_murdock",
+      "breakpoints": true
     }
   ]
 }
