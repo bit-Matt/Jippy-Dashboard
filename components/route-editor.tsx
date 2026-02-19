@@ -26,11 +26,14 @@ export default function RouteEditor() {
   const [routeNumber, setRouteNumber] = useState("");
   const [routeName, setRouteName] = useState("");
   const [addresses, setAddresses] = useState<Record<number, string>>({});
+  const [addressCoords, setAddressCoords] = useState<Record<number, string>>({});
   const [loadingAddresses, setLoadingAddresses] = useState<Set<number>>(new Set());
   const {
     selectedColor,
     setSelectedColor,
     waypoints,
+    activePointIndex,
+    setActivePointIndex,
     removeWaypoint,
     clearWaypoints,
     saveRoute,
@@ -41,11 +44,14 @@ export default function RouteEditor() {
   useEffect(() => {
     const geocodeWaypoints = async () => {
       const newAddresses: Record<number, string> = { ...addresses };
+      const newAddressCoords: Record<number, string> = { ...addressCoords };
       const toGeocode: typeof waypoints = [];
 
       // Find waypoints that don't have addresses yet
       waypoints.forEach((waypoint) => {
-        if (!addresses[waypoint.id] && !loadingAddresses.has(waypoint.id)) {
+        const waypointCoords = `${waypoint.lat},${waypoint.lng}`;
+
+        if (addressCoords[waypoint.id] !== waypointCoords && !loadingAddresses.has(waypoint.id)) {
           toGeocode.push(waypoint);
         }
       });
@@ -71,13 +77,16 @@ export default function RouteEditor() {
 
         if (data && data.data) {
           newAddresses[waypoint.id] = data.data.display_name || "Unknown location";
+          newAddressCoords[waypoint.id] = `${waypoint.lat},${waypoint.lng}`;
         } else if (error) {
           newAddresses[waypoint.id] = "Unable to fetch address";
+          newAddressCoords[waypoint.id] = `${waypoint.lat},${waypoint.lng}`;
           console.error("Geocoding error:", error);
         }
       }
 
       setAddresses(newAddresses);
+      setAddressCoords(newAddressCoords);
       setLoadingAddresses((prev) => {
         const updated = new Set(prev);
         toGeocode.forEach((wp) => updated.delete(wp.id));
@@ -86,7 +95,9 @@ export default function RouteEditor() {
     };
 
     geocodeWaypoints();
-  }, [waypoints, addresses, loadingAddresses]);
+
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [waypoints]);
 
   const handleSaveRoute = () => {
     if (!routeNumber.trim() || !routeName.trim()) {
@@ -105,6 +116,7 @@ export default function RouteEditor() {
       setRouteNumber("");
       setRouteName("");
       setAddresses({});
+      setAddressCoords({});
       clearWaypoints();
       stopCreating();
     }
@@ -170,7 +182,10 @@ export default function RouteEditor() {
             {waypoints.map((waypoint, index) => (
               <div
                 key={waypoint.id}
-                className="space-y-3 rounded-lg border border-border bg-background p-3"
+                className={`space-y-3 rounded-lg border bg-background p-3 ${
+                  activePointIndex === waypoint.id ? "border-primary" : "border-border"
+                }`}
+                onClick={() => setActivePointIndex(waypoint.id)}
               >
                 <div className="flex items-center justify-between">
                   <span className="text-sm font-medium">
@@ -179,7 +194,10 @@ export default function RouteEditor() {
                   <Button
                     size="sm"
                     variant="ghost"
-                    onClick={() => removeWaypoint(waypoint.id)}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      removeWaypoint(waypoint.id);
+                    }}
                   >
                     <Trash2 className="h-4 w-4" />
                   </Button>
@@ -207,6 +225,7 @@ export default function RouteEditor() {
             onClick={() => {
               clearWaypoints();
               setAddresses({});
+              setAddressCoords({});
             }}
             disabled={waypoints.length === 0}
           >
@@ -214,7 +233,7 @@ export default function RouteEditor() {
           </Button>
 
           <p className="text-xs text-muted-foreground">
-            Click on the map to add waypoints. You need at least 2 waypoints to save a route.
+            Click map to add points. Points are locked after placement; click a waypoint card to enable dragging that point. You need at least 2 waypoints to save.
           </p>
         </CardContent>
       </Card>

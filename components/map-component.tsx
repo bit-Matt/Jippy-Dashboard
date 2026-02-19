@@ -1,7 +1,7 @@
 "use client";
 
 import { type ComponentProps, useEffect } from "react";
-import { MapContainer, useMap, useMapEvents } from "react-leaflet";
+import { MapContainer, Marker, useMap, useMapEvents } from "react-leaflet";
 import L from "leaflet";
 
 import "@maplibre/maplibre-gl-leaflet";
@@ -76,6 +76,7 @@ const RoutingMachine = ({ waypoints, color }: RoutingMachineProps) => {
       formatter: new L.Routing.mapzenFormatter(),
       waypoints: waypoints.map(([lat, lng]) => L.latLng(lat, lng)),
       routeWhileDragging: true,
+      createMarker: () => null,
       lineOptions: {
         styles: [{ color, weight: 4 }],
         extendToWaypoints: true,
@@ -83,7 +84,7 @@ const RoutingMachine = ({ waypoints, color }: RoutingMachineProps) => {
       },
       show: false,
       addWaypoints: false,
-      fitSelectedRoutes: true,
+      fitSelectedRoutes: false,
       showAlternatives: false,
     }).addTo(map);
 
@@ -93,6 +94,42 @@ const RoutingMachine = ({ waypoints, color }: RoutingMachineProps) => {
   }, [map, waypoints, color]);
 
   return null;
+};
+
+const WaypointMarkers = () => {
+  const {
+    waypoints,
+    activePointIndex,
+    updateWaypoint,
+  } = useRouteEditor();
+
+  return (
+    <>
+      {waypoints.map((waypoint) => {
+        const isDraggable = waypoint.id === activePointIndex;
+
+        return (
+          <Marker
+            key={waypoint.id}
+            position={[waypoint.lat, waypoint.lng]}
+            draggable={isDraggable}
+            eventHandlers={{
+              drag: (event) => {
+                const marker = event.target as L.Marker;
+                const { lat, lng } = marker.getLatLng();
+                updateWaypoint(waypoint.id, lat, lng);
+              },
+              dragend: (event) => {
+                const marker = event.target as L.Marker;
+                const { lat, lng } = marker.getLatLng();
+                updateWaypoint(waypoint.id, lat, lng);
+              },
+            }}
+          />
+        );
+      })}
+    </>
+  );
 };
 
 export default function MapComponent({ routing }: MapProps) {
@@ -106,6 +143,7 @@ export default function MapComponent({ routing }: MapProps) {
     <MapContainer center={[10.7302, 122.5591]} zoom={13} className="h-full w-full">
       <VectorTileLayer />
       <MapClickHandler />
+      {isCreating && <WaypointMarkers />}
 
       {isCreating && waypoints.length >= 2 && (
         <RoutingMachine

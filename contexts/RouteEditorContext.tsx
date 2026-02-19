@@ -87,7 +87,7 @@ export function RouteEditorProvider({
       };
       setWaypoints((prev) => [...prev, newWaypoint]);
       setWaypointCounter((prev) => prev + 1);
-      setActivePointIndex(waypoints.length);
+      setActivePointIndex(newWaypoint.id);
     },
     [selectedColor, waypoints.length, waypointCounter],
   );
@@ -101,6 +101,8 @@ export function RouteEditorProvider({
         sequence: index,
       }));
     });
+
+    setActivePointIndex((prev) => (prev === id ? null : prev));
   }, []);
 
   const updateWaypoint = useCallback((id: number, lat: number, lng: number) => {
