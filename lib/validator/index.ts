@@ -1,3 +1,5 @@
+import { validate as uuidValidate } from "uuid";
+
 import { Validator } from "@/lib/validator/validator";
 
 const validator = new Validator();
@@ -129,6 +131,11 @@ const utils = {
     const e2 = utils.isExisty(value[1]) && utils.isFinite(value[1]);
 
     return e1 && e2;
+  },
+
+  isUuid: (value: string) => {
+    if (!utils.isExisty(value) || typeof value !== "string") return false;
+    return uuidValidate(value);
   },
 };
 

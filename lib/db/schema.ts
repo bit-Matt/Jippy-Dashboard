@@ -102,7 +102,7 @@ export const routeSequences = pgTable(
       .$default(() => uuidv7()),
     routeId: text("route_id")
       .notNull()
-      .references(() => routes.id),
+      .references(() => routes.id, { onDelete: "cascade" }),
     sequenceNumber: integer("sequence_number").notNull(),
     address: text("address")
       .default("Unknown Address")

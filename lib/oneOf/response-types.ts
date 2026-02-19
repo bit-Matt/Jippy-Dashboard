@@ -34,6 +34,8 @@ export enum FailureCodes {
    */
   UserNotFound = 67002,
 
+  ResourceNotFound = 67003,
+
   /**
    * A constant representing a fatal error code.
    * Typically used to signify a critical error state that requires immediate attention

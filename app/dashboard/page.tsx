@@ -119,6 +119,12 @@ function DashboardContent() {
                 .sort((a, b) => a.sequence - b.sequence)
                 .map((point) => point.point),
             }))}
+            focusedWaypoints={editingRoute
+              ? [...editingRoute.points]
+                .sort((a, b) => a.sequence - b.sequence)
+                .map((point) => point.point)
+              : undefined}
+            focusKey={editingRoute?.id ?? null}
           />
           {showSimulator && <Simulator />}
           {isCreating && (

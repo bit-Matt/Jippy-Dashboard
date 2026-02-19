@@ -195,6 +195,35 @@ export default function RouteEditor({ editingRoute, onSaved, onClosed }: RouteEd
     onClosed?.();
   };
 
+  const handleDeleteRoute = async () => {
+    if (!editingRoute) return;
+
+    const shouldDelete = window.confirm("Are you sure you want to delete this route?");
+    if (!shouldDelete) return;
+
+    try {
+      const { error } = await $fetch(`/api/restricted/management/route/${editingRoute.id}`, {
+        method: "DELETE",
+      });
+
+      if (error) {
+        console.error("Error deleting route:", error);
+        return;
+      }
+
+      setRouteNumber("");
+      setRouteName("");
+      setAddresses({});
+      setAddressCoords({});
+      clearWaypoints();
+      stopCreating();
+      onSaved?.();
+      onClosed?.();
+    } catch (e) {
+      console.error("Error deleting route:", e);
+    }
+  };
+
   const handleWaypointDragStart = (
     event: DragEvent<HTMLDivElement>,
     waypointId: number,
@@ -343,18 +372,30 @@ export default function RouteEditor({ editingRoute, onSaved, onClosed }: RouteEd
             ))}
           </div>
 
-          <Button
-            className="w-full"
-            variant="outline"
-            onClick={() => {
-              clearWaypoints();
-              setAddresses({});
-              setAddressCoords({});
-            }}
-            disabled={waypoints.length === 0}
-          >
-            Clear Waypoints
-          </Button>
+          {editingRoute ? (
+            <Button
+              className="w-full"
+              variant="destructive"
+              onClick={() => {
+                void handleDeleteRoute();
+              }}
+            >
+              Delete Route
+            </Button>
+          ) : (
+            <Button
+              className="w-full"
+              variant="outline"
+              onClick={() => {
+                clearWaypoints();
+                setAddresses({});
+                setAddressCoords({});
+              }}
+              disabled={waypoints.length === 0}
+            >
+              Clear Waypoints
+            </Button>
+          )}
 
           <p className="text-xs text-muted-foreground">
             Click map to add points. Drag waypoint cards up or down to reorder sequence. Points are locked after placement; click a waypoint card to enable dragging that point on the map. You need at least 2 waypoints to save.

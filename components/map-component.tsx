@@ -13,6 +13,24 @@ import "leaflet-routing-machine/dist/leaflet-routing-machine.css";
 
 import { useRouteEditor } from "@/contexts/RouteEditorContext";
 
+const FocusRouteView = ({ focusKey, focusedWaypoints }: FocusRouteViewProps) => {
+  const map = useMap();
+
+  useEffect(() => {
+    if (!map || !focusKey || !focusedWaypoints?.length) return;
+
+    if (focusedWaypoints.length === 1) {
+      map.setView(focusedWaypoints[0], 16, { animate: true });
+      return;
+    }
+
+    const bounds = L.latLngBounds(focusedWaypoints.map(([lat, lng]) => L.latLng(lat, lng)));
+    map.fitBounds(bounds, { padding: [40, 40], animate: true, maxZoom: 16 });
+  }, [map, focusKey, focusedWaypoints]);
+
+  return null;
+};
+
 const fixLeafletIcons = () => {
   // delete (L.Icon.Default.prototype)._getIconUrl;
 
@@ -133,7 +151,7 @@ const WaypointMarkers = () => {
   );
 };
 
-export default function MapComponent({ routing }: MapProps) {
+export default function MapComponent({ routing, focusedWaypoints, focusKey }: MapProps) {
   const { isCreating, waypoints, selectedColor } = useRouteEditor();
 
   useEffect(() => {
@@ -144,6 +162,7 @@ export default function MapComponent({ routing }: MapProps) {
     <MapContainer center={[10.7302, 122.5591]} zoom={13} className="h-full w-full">
       <VectorTileLayer />
       <MapClickHandler />
+      <FocusRouteView focusKey={focusKey} focusedWaypoints={focusedWaypoints} />
       {isCreating && <WaypointMarkers />}
 
       {isCreating && waypoints.length >= 2 && (
@@ -169,4 +188,11 @@ export interface RoutingMachineProps {
 
 export interface MapProps {
   routing?: Array<ComponentProps<typeof RoutingMachine>>;
+  focusedWaypoints?: Array<[number, number]>;
+  focusKey?: string | number | null;
+}
+
+interface FocusRouteViewProps {
+  focusedWaypoints?: Array<[number, number]>;
+  focusKey?: string | number | null;
 }

@@ -5,6 +5,7 @@ import { asc, eq } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { routes, routeSequences } from "@/lib/db/schema";
 import { Failure, FailureCodes, Success } from "@/lib/oneOf/response-types";
+import { route } from "../osm/valhalla";
 
 export async function getAllRoutes(): Promise<Failure<string> | Success<RouteObject[]>> {
   try {
@@ -127,6 +128,24 @@ export async function addRoute(params: AddRouteParameters): Promise<RouteObject>
       })),
     };
   });
+}
+
+export async function removeRoute(routeId: string): Promise<Failure<string> | Success<null>> {
+  try {
+    const [route] = await db
+      .select({ id: routes.id })
+      .from(routes)
+      .where(eq(routes.id, routeId))
+      .limit(1);
+    if (!route) {
+      return new Failure(FailureCodes.ResourceNotFound, "Route not found");
+    }
+
+    await db.delete(routes).where(eq(routes.id, routeId));
+    return new Success(null);
+  } catch {
+    return new Failure(FailureCodes.Fatal, "Failed to delete route");
+  }
 }
 
 export interface AddRouteParameters {
