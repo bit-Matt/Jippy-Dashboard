@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef, type DragEvent } from "react";
 import { Card, CardContent, CardHeader} from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -26,6 +26,7 @@ export default function RouteEditor() {
   const [routeNumber, setRouteNumber] = useState("");
   const [routeName, setRouteName] = useState("");
   const [draggedWaypointId, setDraggedWaypointId] = useState<number | null>(null);
+  const dragPreviewRef = useRef<HTMLElement | null>(null);
   const [addresses, setAddresses] = useState<Record<number, string>>({});
   const [addressCoords, setAddressCoords] = useState<Record<number, string>>({});
   const [loadingAddresses, setLoadingAddresses] = useState<Set<number>>(new Set());
@@ -141,6 +142,35 @@ export default function RouteEditor() {
     stopCreating();
   };
 
+  const handleWaypointDragStart = (
+    event: DragEvent<HTMLDivElement>,
+    waypointId: number,
+  ) => {
+    setDraggedWaypointId(waypointId);
+
+    const sourceElement = event.currentTarget;
+    const previewElement = sourceElement.cloneNode(true) as HTMLElement;
+    previewElement.style.position = "fixed";
+    previewElement.style.top = "-10000px";
+    previewElement.style.left = "-10000px";
+    previewElement.style.width = `${sourceElement.offsetWidth}px`;
+    previewElement.style.pointerEvents = "none";
+    previewElement.style.opacity = "0.95";
+    previewElement.style.zIndex = "99999";
+
+    document.body.appendChild(previewElement);
+    event.dataTransfer.setDragImage(previewElement, 24, 24);
+    dragPreviewRef.current = previewElement;
+  };
+
+  const cleanupDragPreview = () => {
+    if (dragPreviewRef.current) {
+      dragPreviewRef.current.remove();
+      dragPreviewRef.current = null;
+    }
+    setDraggedWaypointId(null);
+  };
+
   return (
     <div className="absolute top-2 left-6 z-9999 w-1/4">
       <Card>
@@ -216,16 +246,16 @@ export default function RouteEditor() {
                 className={`space-y-3 rounded-lg border bg-background p-3 ${
                   activePointIndex === waypoint.id ? "border-primary" : "border-border"
                 }`}
-                onDragStart={() => setDraggedWaypointId(waypoint.id)}
+                onDragStart={(event) => handleWaypointDragStart(event, waypoint.id)}
                 onDragOver={(event) => event.preventDefault()}
                 onDrop={(event) => {
                   event.preventDefault();
 
                   if (draggedWaypointId === null) return;
                   reorderWaypoints(draggedWaypointId, waypoint.id);
-                  setDraggedWaypointId(null);
+                  cleanupDragPreview();
                 }}
-                onDragEnd={() => setDraggedWaypointId(null)}
+                onDragEnd={cleanupDragPreview}
                 onClick={() => setActivePointIndex(waypoint.id)}
               >
                 <div className="flex items-center justify-between">
