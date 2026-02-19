@@ -1,32 +1,62 @@
 import { NextRequest } from "next/server";
 
 import { ExceptionResponseComposer, ResponseComposer, StatusCodes } from "@/lib/http";
-
-const { VALHALLA_URL } = process.env;
+import * as valhalla from "@/lib/osm/valhalla";
+import { oneOf } from "@/lib/oneOf";
 
 export async function GET(req: NextRequest) {
   const pathname = req.nextUrl.pathname;
-  const queries = req.nextUrl.searchParams;
 
-  const toProxyPath = pathname.replace("/api/public/osm/valhalla", "");
-  try {
-    const url = new URL(toProxyPath, VALHALLA_URL);
-    for (const [key, value] of queries) {
-      url.searchParams.set(key, value);
+  switch (pathname) {
+  case "/api/public/osm/valhalla/status":
+    const status = await valhalla.status();
+    return oneOf(status).match(
+      s => {
+        return ResponseComposer.compose(StatusCodes.Status200Ok)
+          .setBody(s)
+          .orchestrate();
+      },
+      e => {
+        return ExceptionResponseComposer.compose(e.value.status_code, [{ error: e.value.error }])
+          .orchestrate();
+      },
+    );
+  case "/api/public/osm/valhalla/route":
+    // Location
+    const queries = req.nextUrl.searchParams.get("json");
+    if (!queries) {
+      return ExceptionResponseComposer.compose(StatusCodes.Status400BadRequest, [{ message: "Invalid Payload." }])
+        .orchestrate();
     }
 
-    const response = await fetch(url.toString(), {
-      headers: {
-        "Accept": "application/json",
+    const payload = tryParseJson<valhalla.ValhallaRouterPayload>(queries);
+    if (!payload) {
+      return ExceptionResponseComposer.compose(StatusCodes.Status400BadRequest, [{ message: "Malformed Payload." }])
+        .orchestrate();
+    }
+
+    const route = await valhalla.route(payload);
+    return oneOf(route).match(
+      s => {
+        return ResponseComposer.compose(StatusCodes.Status200Ok)
+          .setBody(s)
+          .orchestrate();
       },
-    });
-    const data = await response.json();
-    return ResponseComposer.compose(StatusCodes.Status200Ok)
-      .setBody(data)
+      e => {
+        return ExceptionResponseComposer.compose(e.value.status_code, [{ error: e.value.error }])
+          .orchestrate();
+      },
+    );
+  default:
+    return ExceptionResponseComposer.compose(StatusCodes.Status404NotFound, [{ message: "Not found." }])
       .orchestrate();
+  }
+}
+
+function tryParseJson<T>(json: string) {
+  try {
+    return JSON.parse(json) as T;
   } catch {
-    return ExceptionResponseComposer
-      .compose(StatusCodes.Status500InternalServerError, [{ message: "Internal error." }])
-      .orchestrate();
+    return null;
   }
 }

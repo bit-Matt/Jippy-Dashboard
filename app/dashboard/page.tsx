@@ -6,6 +6,7 @@ import { AppSidebar } from "@/components/app-sidebar";
 import MapComponent from "@/components/map-component";
 import RouteEditor from "@/components/route-editor";
 import Simulator from "@/components/simulator";
+import { RouteEditorProvider, useRouteEditor } from "@/contexts/RouteEditorContext";
 import {
   Breadcrumb,
   BreadcrumbItem,
@@ -21,18 +22,22 @@ import {
   SidebarTrigger,
 } from "@/components/ui/sidebar";
 
-export default function DashboardClient() {
-  const [showRouteEditor, setShowRouteEditor] = useState(false);
+function DashboardContent() {
   const [showSimulator, setShowSimulator] = useState(false);
+  const { isCreating, startCreating, stopCreating } = useRouteEditor();
 
   const handleShowRoutes = () => {
-    setShowRouteEditor(!showRouteEditor);
+    if (isCreating) {
+      stopCreating();
+    } else {
+      startCreating();
+    }
     setShowSimulator(false);
   };
 
   const handleShowSimulator = () => {
     setShowSimulator(!showSimulator);
-    setShowRouteEditor(false);
+    stopCreating();
   };
 
   return (
@@ -65,9 +70,17 @@ export default function DashboardClient() {
         <div className="relative z-0 flex flex-1 flex-col gap-4 overflow-hidden p-4 pt-0">
           <MapComponent />
           {showSimulator && <Simulator />}
-          {showRouteEditor && <RouteEditor />}
+          {isCreating && <RouteEditor />}
         </div>
       </SidebarInset>
     </SidebarProvider>
+  );
+}
+
+export default function DashboardClient() {
+  return (
+    <RouteEditorProvider>
+      <DashboardContent />
+    </RouteEditorProvider>
   );
 }

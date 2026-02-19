@@ -33,7 +33,7 @@ export async function isAlreadyConfigured(): Promise<boolean> {
  * @return {Promise<Success|Failure>} A promise that resolves to a Success object containing the user details
  *                                    if found, or a Failure object indicating the error.
  */
-export async function getUser(id: string) {
+export async function getUser(id: string): Promise<Success<{ email: string, fullName: string }> | Failure<string>> {
   try {
     const [result] = await db
       .select({

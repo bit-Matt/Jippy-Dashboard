@@ -12,7 +12,7 @@ export async function GET(req: NextRequest) {
   queries.forEach((value, key) => payload[key] = value);
 
   switch (pathname) {
-  case "/api/public/osm/nominatim/reverse":
+  case "/api/restricted/osm/nominatim/reverse":
     const reverse = await nominatim.reverse(payload, { localOnly: true });
     return oneOf(reverse).match(
       s => {
@@ -25,7 +25,7 @@ export async function GET(req: NextRequest) {
           .orchestrate();
       },
     );
-  case "/api/public/osm/nominatim/search":
+  case "/api/restricted/osm/nominatim/search":
     const search = await nominatim.search(payload, { localOnly: true });
     return oneOf(search).match(
       s => {
