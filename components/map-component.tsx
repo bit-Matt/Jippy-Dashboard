@@ -76,6 +76,7 @@ const RoutingMachine = ({ waypoints, color }: RoutingMachineProps) => {
       formatter: new L.Routing.mapzenFormatter(),
       waypoints: waypoints.map(([lat, lng]) => L.latLng(lat, lng)),
       routeWhileDragging: true,
+      // @ts-expect-error - createMarker is required but we don't need it since we're using custom markers
       createMarker: () => null,
       lineOptions: {
         styles: [{ color, weight: 4 }],

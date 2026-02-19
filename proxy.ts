@@ -2,7 +2,7 @@ import { LRUCache } from "lru-cache";
 import { NextResponse, type NextRequest } from "next/server";
 
 import { ExceptionResponseComposer } from "@/lib/http/ResponseComposer";
-import { StatusCodes } from "@/lib/http";
+import { StatusCodes, utils } from "@/lib/http";
 
 const tokenCache = new LRUCache<string, number>({
   max: 5000,
@@ -24,11 +24,21 @@ export async function proxy(request: NextRequest) {
     tokenCache.set(ip, tokenCount + 1);
   }
 
+  if (request.nextUrl.pathname.startsWith("/api/restricted")) {
+    const isAllowed = await utils.verifyAPIKeyOrSession(request);
+
+    if (!isAllowed) {
+      return ExceptionResponseComposer.compose(StatusCodes.Status401Unauthorized, [{ message: "Unauthorized" }])
+        .orchestrate();
+    }
+  }
+
   return NextResponse.next();
 }
 
 export const config = {
   matcher: [
     "/api/public/:path*",
+    "/api/restricted/:path*",
   ],
 };
