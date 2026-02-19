@@ -24,6 +24,7 @@ export interface RouteEditorContextType {
   setSelectedColor: (color: string) => void;
   addWaypoint: (lat: number, lng: number) => void;
   removeWaypoint: (id: number) => void;
+  reorderWaypoints: (draggedId: number, targetId: number) => void;
   updateWaypoint: (id: number, lat: number, lng: number) => void;
   clearWaypoints: () => void;
   setActivePointIndex: (index: number | null) => void;
@@ -105,6 +106,28 @@ export function RouteEditorProvider({
     setActivePointIndex((prev) => (prev === id ? null : prev));
   }, []);
 
+  const reorderWaypoints = useCallback((draggedId: number, targetId: number) => {
+    if (draggedId === targetId) return;
+
+    setWaypoints((prev) => {
+      const draggedIndex = prev.findIndex((wp) => wp.id === draggedId);
+      const targetIndex = prev.findIndex((wp) => wp.id === targetId);
+
+      if (draggedIndex === -1 || targetIndex === -1) return prev;
+
+      const next = [...prev];
+      const [draggedWaypoint] = next.splice(draggedIndex, 1);
+      next.splice(targetIndex, 0, draggedWaypoint);
+
+      return next.map((wp, index) => ({
+        ...wp,
+        sequence: index,
+      }));
+    });
+
+    setActivePointIndex(draggedId);
+  }, []);
+
   const updateWaypoint = useCallback((id: number, lat: number, lng: number) => {
     setWaypoints((prev) =>
       prev.map((wp) =>
@@ -153,6 +176,7 @@ export function RouteEditorProvider({
     setSelectedColor,
     addWaypoint,
     removeWaypoint,
+    reorderWaypoints,
     updateWaypoint,
     clearWaypoints,
     setActivePointIndex,
