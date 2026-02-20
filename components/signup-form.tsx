@@ -1,4 +1,4 @@
-import {type SyntheticEvent, useState} from "react";
+import {type ComponentProps, type SyntheticEvent, useState} from "react";
 import {configureUser, type UserCredentials} from "@/lib/accounts";
 import {redirect, RedirectType} from "next/navigation";
 
@@ -7,7 +7,7 @@ import {Card, CardContent, CardDescription, CardHeader, CardTitle} from "@/compo
 import {Field, FieldDescription, FieldGroup, FieldLabel} from "@/components/ui/field";
 import {Input} from "@/components/ui/input";
 
-export function SignupForm({ ...props }: React.ComponentProps<typeof Card>) {
+export function SignupForm({ ...props }: ComponentProps<typeof Card>) {
   const [form, setForm] = useState<StateType>({
     fullName: "",
     email: "",

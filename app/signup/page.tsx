@@ -1,21 +1,22 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { isAlreadyConfigured } from "@/lib/accounts";
+import { redirect, RedirectType } from "next/navigation";
 
-import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { isAlreadyConfigured } from "@/lib/accounts";
 import { SignupForm } from "@/components/signup-form";
 
 export default function Page() {
-  const [ready, setReady] = useState({ ready: false, configured: false });
+  const [ready, setReady] = useState(false);
 
   useEffect(() => {
     isAlreadyConfigured().then(r => {
-      setReady({ ready: true, configured: r });
+      if (r) redirect("/error/not-found", RedirectType.replace);
+      setReady(true);
     });
   }, []);
 
-  if (!ready.ready) {
+  if (!ready) {
     return (
       <div className="flex min-h-svh w-full items-center justify-center p-6 md:p-10">
         <div className="w-full max-w-sm">
@@ -28,20 +29,7 @@ export default function Page() {
   return (
     <div className="flex min-h-svh w-full items-center justify-center p-6 md:p-10">
       <div className="w-full max-w-sm">
-        {
-          ready.configured ? (
-            <Card>
-              <CardHeader>
-                <CardTitle>Not available!</CardTitle>
-                <CardDescription>
-                  This server is already been configured.
-                </CardDescription>
-              </CardHeader>
-            </Card>
-          ) : (
-            <SignupForm />
-          )
-        }
+        <SignupForm />
       </div>
     </div>
   );

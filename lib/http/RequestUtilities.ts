@@ -35,7 +35,7 @@ export async function verifyAPIKeyOrSession(req: NextRequest): Promise<boolean> 
 
   // If session found, grant access.
   if (session) {
-    return true;
+    return session.user.role === "administrator_user";
   }
 
   const APPLICATION_ID = req.headers.get("X-Application-Id");
