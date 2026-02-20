@@ -140,9 +140,14 @@ export default function RouteEditor({ editingRoute, onSaved, onClosed }: RouteEd
         waypoints: route,
       });
 
-      // Write data
-      $fetch("/api/restricted/management/route", {
-        method: "POST",
+      const endpoint = editingRoute
+        ? `/api/restricted/management/route/${editingRoute.id}`
+        : "/api/restricted/management/route";
+
+      const method = editingRoute ? "PATCH" : "POST";
+
+      $fetch(endpoint, {
+        method,
         body: {
           routeNumber: routeNumber,
           routeName: routeName,

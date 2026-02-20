@@ -1,6 +1,6 @@
 "use client";
 
-import { type ComponentProps, useEffect } from "react";
+import { type ComponentProps, useEffect, useRef } from "react";
 import { MapContainer, Marker, useMap, useMapEvents } from "react-leaflet";
 import L from "leaflet";
 
@@ -15,17 +15,21 @@ import { useRouteEditor } from "@/contexts/RouteEditorContext";
 
 const FocusRouteView = ({ focusKey, focusedWaypoints }: FocusRouteViewProps) => {
   const map = useMap();
+  const lastFocusedKeyRef = useRef<string | number | null>(null);
 
   useEffect(() => {
-    if (!map || !focusKey || !focusedWaypoints?.length) return;
+    if (!map || focusKey === null || focusKey === undefined || !focusedWaypoints?.length) return;
+    if (lastFocusedKeyRef.current === focusKey) return;
 
     if (focusedWaypoints.length === 1) {
       map.setView(focusedWaypoints[0], 16, { animate: true });
+      lastFocusedKeyRef.current = focusKey;
       return;
     }
 
     const bounds = L.latLngBounds(focusedWaypoints.map(([lat, lng]) => L.latLng(lat, lng)));
     map.fitBounds(bounds, { padding: [40, 40], animate: true, maxZoom: 16 });
+    lastFocusedKeyRef.current = focusKey;
   }, [map, focusKey, focusedWaypoints]);
 
   return null;

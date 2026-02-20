@@ -14,7 +14,7 @@ import { auth } from "@/lib/auth";
 export async function tryParseJson<T>(req: NextRequest): Promise<T | null> {
   try {
     return req.json();
-  } catch (e) {
+  } catch {
     return null;
   }
 }
