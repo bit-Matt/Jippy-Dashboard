@@ -98,6 +98,7 @@ export async function configureUser(user: UserCredentials): Promise<ServerAction
         name: user.fullName,
         email: user.email,
         password: user.password,
+        role: "regular_user",
       },
     });
 
