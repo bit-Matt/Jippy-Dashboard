@@ -13,7 +13,7 @@ import {
   SidebarMenuItem,
 } from "@/components/ui/sidebar";
 
-export function AppSidebar({ onAddRouteClick, onSimulationClick, routes, onRouteClick, ...props }: SidebarProps) {
+export function AppSidebar({ onAddRouteClick, onAddRegionClick, onSimulationClick, routes, onRouteClick, ...props }: SidebarProps) {
   const data = {
     navMain: [
       {
@@ -27,11 +27,11 @@ export function AppSidebar({ onAddRouteClick, onSimulationClick, routes, onRoute
             url: "#",
             onClick: onAddRouteClick,
           },
-          ...routes.map((route) => ({
-            title: `${route.routeNumber} - ${route.routeName}`,
+          {
+            title: "Add a new Region",
             url: "#",
-            onClick: () => onRouteClick?.(route),
-          })),
+            onClick: onAddRegionClick,
+          },
         ],
       },
       {
@@ -39,6 +39,17 @@ export function AppSidebar({ onAddRouteClick, onSimulationClick, routes, onRoute
         url: "#",
         icon: Pin,
         onClick: onSimulationClick,
+      },
+      {
+        title: "Routes",
+        url: "#",
+        icon: Map,
+        isActive: true,
+        items: routes.map((route) => ({
+          title: `${route.routeNumber} - ${route.routeName}`,
+          url: "#",
+          onClick: () => onRouteClick?.(route),
+        })),
       },
     ],
   };
@@ -74,6 +85,7 @@ export function AppSidebar({ onAddRouteClick, onSimulationClick, routes, onRoute
 
 interface SidebarProps extends ComponentProps<typeof Sidebar> {
   onAddRouteClick?: () => void
+  onAddRegionClick?: () => void
   onSimulationClick?: () => void
   routes: RouteSummary[]
   onRouteClick?: (route: RouteSummary) => void
