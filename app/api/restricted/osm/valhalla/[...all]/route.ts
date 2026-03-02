@@ -19,6 +19,11 @@ export async function GET(req: NextRequest) {
       },
     });
     const data = await response.json();
+
+    if (!response.ok) {
+      return NextResponse.json(data, { status: response.status });
+    }
+
     return NextResponse.json(data, { status: 200 });
   } catch {
     return NextResponse.json({ error: "Internal Server Error" }, { status: 500 });
