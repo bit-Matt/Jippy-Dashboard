@@ -13,7 +13,7 @@ import {
   SidebarMenuItem,
 } from "@/components/ui/sidebar";
 
-export function AppSidebar({ onAddRouteClick, onAddRegionClick, onSimulationClick, routes, onRouteClick, ...props }: SidebarProps) {
+export function AppSidebar({ onAddRouteClick, onAddRegionClick, onSimulationClick, routes, regions, onRouteClick, onRegionClick, ...props }: SidebarProps) {
   const data = {
     navMain: [
       {
@@ -44,6 +44,11 @@ export function AppSidebar({ onAddRouteClick, onAddRegionClick, onSimulationClic
             url: "#",
             onClick: onAddRegionClick,
           },
+          ...regions.map((region) => ({
+            title: region.regionName,
+            url: "#",
+            onClick: () => onRegionClick?.(region),
+          })),
         ],
       },
       {
@@ -88,19 +93,39 @@ interface SidebarProps extends ComponentProps<typeof Sidebar> {
   onAddRouteClick?: () => void
   onAddRegionClick?: () => void
   onSimulationClick?: () => void
-  routes: RouteSummary[]
-  onRouteClick?: (route: RouteSummary) => void
+  routes: AllResponse["routes"]
+  regions: AllResponse["regions"]
+  onRouteClick?: (route: AllResponse["routes"][0]) => void
+  onRegionClick?: (region: AllResponse["regions"][0]) => void
 }
 
-export interface RouteSummary {
-  id: string | number
-  routeNumber: string
-  routeName: string
-  routeColor: string
-  points: Array<{
-    id: string | number
-    sequence: number
-    address: string
-    point: [number, number]
+export interface AllResponse {
+  routes: Array<{
+    id: string
+    routeNumber: string
+    routeName: string
+    routeColor: string
+    points: Array<{
+      id: string | number
+      sequence: number
+      address: string
+      point: [number, number]
+    }>
+  }>;
+  regions: Array<{
+    id: string;
+    regionName: string;
+    regionColor: string;
+    regionShape: string;
+    points: Array<{
+      id: string;
+      sequence: number;
+      point: [number, number]
+    }>;
+    stations: Array<{
+      id: string;
+      address: string;
+      point: [number, number];
+    }>;
   }>
 }

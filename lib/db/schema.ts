@@ -120,6 +120,75 @@ export const routeSequences = pgTable(
   ],
 );
 
+export const region = pgTable(
+  "regionMarkers",
+  {
+    id: text("id")
+      .primaryKey()
+      .$default(() => uuidv7()),
+    name: text("region_name")
+      .notNull(),
+    color: text("color")
+      .default("#000000")
+      .notNull(),
+    shapeType: text("shape")
+      .notNull(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at")
+      .defaultNow()
+      .$onUpdate(() => new Date())
+      .notNull(),
+  },
+);
+
+export const regionSequences = pgTable(
+  "regionMarkerSequences",
+  {
+    id: text("id")
+      .primaryKey()
+      .$default(() => uuidv7()),
+    regionId: text("region_id")
+      .notNull()
+      .references(() => region.id, { onDelete: "cascade" }),
+    sequenceNumber: integer("sequence_number").notNull(),
+    point: geometry("point", { type: "point", mode: "tuple", srid: 4326 }).notNull(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at")
+      .defaultNow()
+      .$onUpdate(() => new Date())
+      .notNull(),
+  },
+  (t) => [
+    index("spatial_index_region").using("gist", t.point),
+    index("region_seq_idx").on(t.regionId, t.sequenceNumber),
+  ],
+);
+
+export const regionStations = pgTable(
+  "regionStations",
+  {
+    id: text("id")
+      .primaryKey()
+      .$default(() => uuidv7()),
+    regionId: text("region_id")
+      .notNull()
+      .references(() => region.id, { onDelete: "cascade" }),
+    address: text("address")
+      .notNull()
+      .default("Unknown"),
+    point: geometry("point", { type: "point", mode: "tuple", srid: 4326 }).notNull(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at")
+      .defaultNow()
+      .$onUpdate(() => new Date())
+      .notNull(),
+  },
+  (t) => [
+    index("spatial_index_region_station").using("gist", t.point),
+    index("region_station_ref_idx").on(t.regionId),
+  ],
+);
+
 export const userRelations = relations(user, ({ many }) => ({
   sessions: many(session),
   accounts: many(account),
@@ -143,5 +212,19 @@ export const routeRelations = relations(routeSequences, ({ one }) => ({
   route: one(routes, {
     fields: [routeSequences.routeId],
     references: [routes.id],
+  }),
+}));
+
+export const regionRelations = relations(regionSequences, ({ one }) => ({
+  region: one(region, {
+    fields: [regionSequences.regionId],
+    references: [region.id],
+  }),
+}));
+
+export const regionStationRelations = relations(regionStations, ({ one }) => ({
+  region: one(region, {
+    fields: [regionStations.regionId],
+    references: [region.id],
   }),
 }));

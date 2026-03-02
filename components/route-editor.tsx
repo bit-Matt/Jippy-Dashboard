@@ -16,7 +16,7 @@ import { Label } from "@/components/ui/label";
 
 import { $fetch } from "@/lib/http/client";
 import { nominatim } from "@/lib/osm/client/nominatim";
-import type { RouteSummary } from "@/components/app-sidebar";
+import type { AllResponse } from "@/components/app-sidebar";
 import { useRouteEditor } from "@/contexts/RouteEditorContext";
 
 const COLORS = [
@@ -404,7 +404,7 @@ export default function RouteEditor({ editingRoute, onSaved, onClosed }: RouteEd
 }
 
 interface RouteEditorProps {
-  editingRoute?: RouteSummary | null
+  editingRoute?: AllResponse["routes"][0] | null
   onSaved?: () => void
   onClosed?: () => void
 }

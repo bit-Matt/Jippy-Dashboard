@@ -1,78 +1,57 @@
-"use server";
-
 import { asc, eq } from "drizzle-orm";
 
 import { db } from "@/lib/db";
-import { routes, routeSequences } from "@/lib/db/schema";
+import { region, regionSequences, regionStations, routes, routeSequences } from "@/lib/db/schema";
 import { Failure, FailureCodes, Success } from "@/lib/oneOf/response-types";
 
-/**
- * Fetches all routes and their ordered sequence points.
- *
- * Queries the `routes` table and LEFT-joins `routeSequences` so routes are returned
- * even if they have zero points. The flat join result is then grouped into an
- * array of `RouteObject`, each containing its `points` list sorted by sequence.
- *
- * @remarks
- * - The DB point is assumed to be stored as `[lng, lat]`.
- * - The API response maps it to `[lat, lng]` via `[sequencePoints[1], sequencePoints[0]]`.
- *
- * @returns {Promise<Failure<string> | Success<RouteObject[]>>}
- *   A discriminated result:
- *   - `Success<RouteObject[]>` containing all routes with their points.
- *   - `Failure(FailureCodes.Fatal, "Failed to fetch routes")` on unexpected/database errors.
- */
-export async function getAllRoutes(): Promise<Failure<string> | Success<RouteObject[]>> {
-  try {
-    const rows = await db
-      .select({
-        // Route Fields
-        routeId: routes.id,
-        routeNumber: routes.routeNumber,
-        routeName: routes.routeName,
-        routeColor: routes.routeColor,
+export async function getAllRoutes() {
+  const rows = await db
+    .select({
+      // Route Fields
+      routeId: routes.id,
+      routeNumber: routes.routeNumber,
+      routeName: routes.routeName,
+      routeColor: routes.routeColor,
 
-        // Sequence Fields
-        pointId: routeSequences.id,
-        sequence: routeSequences.sequenceNumber,
-        address: routeSequences.address,
-        sequencePoints: routeSequences.point,
-      })
-      .from(routes)
-      .leftJoin(routeSequences, eq(routes.id, routeSequences.routeId))
-      .orderBy(asc(routes.routeNumber), asc(routeSequences.sequenceNumber));
+      // Sequence Fields
+      pointId: routeSequences.id,
+      sequence: routeSequences.sequenceNumber,
+      address: routeSequences.address,
+      sequencePoints: routeSequences.point,
+    })
+    .from(routes)
+    .leftJoin(routeSequences, eq(routes.id, routeSequences.routeId))
+    .orderBy(asc(routes.routeNumber), asc(routeSequences.sequenceNumber));
 
-    // Transform flat rows
-    const result = rows.reduce((acc, row) => {
-      let route = acc.find((r) => r.id === row.routeId);
+  // Transform flat rows
+  const result = rows.reduce((acc, row) => {
+    let route = acc.find(r => r.id === row.routeId);
 
-      if (!route) {
-        route = {
-          id: row.routeId,
-          routeNumber: row.routeNumber,
-          routeName: row.routeName,
-          routeColor: row.routeColor,
-          points: [],
-        };
-        acc.push(route);
-      }
+    if (!route) {
+      route = {
+        id: row.routeId,
+        routeNumber: row.routeNumber,
+        routeName: row.routeName,
+        routeColor: row.routeColor,
+        points: [],
+      };
 
-      if (row.pointId) {
-        route.points.push({
-          id: row.pointId,
-          sequence: row.sequence!,
-          address: row.address!,
-          point: [row.sequencePoints![1], row.sequencePoints![0]] as [number, number],
-        });
-      }
+      acc.push(route);
+    }
 
-      return acc;
-    }, [] as Array<RouteObject>);
+    if (row.pointId) {
+      route.points.push({
+        id: row.pointId,
+        sequence: row.sequence!,
+        address: row.address!,
+        point: [row.sequencePoints![1], row.sequencePoints![0]] as [number, number],
+      });
+    }
 
-    return new Success(result);
-  } catch {
-    return new Failure(FailureCodes.Fatal, "Failed to fetch routes");
-  }
+    return acc;
+  }, [] as RouteObject[]);
+
+  return result;
 }
 
 /**
@@ -291,6 +270,283 @@ export async function updateRoute(
   }
 }
 
+export async function getAllRegions() {
+  const rows = await db
+    .select({
+      regionName: region.name,
+      regionColor: region.color,
+      regionShape: region.shapeType,
+      regionId: region.id,
+
+      // Sequences
+      pointId: regionSequences.id,
+      sequence: regionSequences.sequenceNumber,
+      sequencePoints: regionSequences.point,
+
+      // Stations
+      stationId: regionStations.id,
+      stationAddress: regionStations.address,
+      stationPoints: regionStations.point,
+    })
+    .from(region)
+    .leftJoin(regionSequences, eq(region.id, regionSequences.regionId))
+    .leftJoin(regionStations, eq(region.id, regionStations.regionId))
+    .orderBy(asc(region.createdAt), asc(regionSequences.sequenceNumber));
+
+  // Transform
+  const result = rows.reduce((acc, row) => {
+    let region = acc.find(r => r.id === row.regionId);
+
+    if (!region) {
+      region = {
+        id: row.regionId,
+        regionName: row.regionName,
+        regionColor: row.regionColor,
+        regionShape: row.regionShape,
+        points: [],
+        stations: [],
+      };
+
+      acc.push(region);
+    }
+
+    if (row.pointId) {
+      const existingPoint = region.points.find((point) => point.id === row.pointId);
+      if (!existingPoint) {
+        region.points.push({
+          id: row.pointId,
+          sequence: row.sequence!,
+          point: [row.sequencePoints![1], row.sequencePoints![0]],
+        });
+      }
+    }
+
+    if (row.stationId) {
+      const existingStation = region.stations.find((station) => station.id === row.stationId);
+      if (!existingStation) {
+        region.stations.push({
+          id: row.stationId,
+          address: row.stationAddress!,
+          point: [row.stationPoints![1], row.stationPoints![0]],
+        });
+      }
+    }
+
+    return acc;
+  }, [] as Array<RegionObject>);
+
+  return result;
+}
+
+export async function createRegion(payload: RegionAddParameters) {
+  return db.transaction(async tx => {
+    const [newRegion] = await tx
+      .insert(region)
+      .values({
+        name: payload.regionName,
+        color: payload.regionColor,
+        shapeType: payload.regionShape,
+      })
+      .returning();
+    if (!newRegion) return tx.rollback();
+
+    // Generate sequences
+    const sequences = await tx
+      .insert(regionSequences)
+      .values(
+        payload.points.map(point => ({
+          regionId: newRegion.id,
+          sequenceNumber: point.sequence,
+          point: [point.point[1], point.point[0]] as [number, number],
+        })),
+      )
+      .returning();
+    if (sequences.length !== payload.points.length) return tx.rollback();
+
+    let stations: Array<{ id: string; address: string; point: [number, number] }> = [];
+    if (payload.stations.length > 0) {
+      const stationCreateResult = await tx
+        .insert(regionStations)
+        .values(
+          payload.stations.map(point => ({
+            regionId: newRegion.id,
+            address: point.address,
+            point: [point.point[1], point.point[0]] as [number, number],
+          })),
+        )
+        .returning();
+      stations = stationCreateResult.map(s => ({
+        id: s.id,
+        address: s.address,
+        point: [s.point[1], s.point[0]],
+      }));
+    }
+
+    return {
+      id: newRegion.id,
+      regionName: newRegion.name,
+      regionColor: newRegion.color,
+      regionShape: newRegion.shapeType,
+      points: sequences.map(x => ({
+        id: x.id,
+        sequence: x.sequenceNumber,
+        point: [x.point[1], x.point[0]],
+      })),
+      stations,
+    } satisfies RegionObject;
+  });
+}
+
+export async function removeRegion(regionId: string) {
+  try {
+    const [selectedRegion] = await db
+      .select({ id: region.id })
+      .from(region)
+      .where(eq(region.id, regionId))
+      .limit(1);
+    if (!selectedRegion) {
+      return new Failure(FailureCodes.ResourceNotFound, "Region not found.");
+    }
+
+    await db.delete(region).where(eq(region.id, regionId));
+    return new Success(null);
+  } catch {
+    return new Failure(FailureCodes.Fatal, "Unable to delete a region due to an exeception.");
+  }
+}
+
+export async function updateRegion(
+  regionId: string,
+  params: UpdateRegionParameters,
+) {
+  try {
+    const [selectedRegion] = await db
+      .select({ id: region.id })
+      .from(region)
+      .where(eq(region.id, regionId))
+      .limit(1);
+    if (!selectedRegion) {
+      return new Failure(FailureCodes.ResourceNotFound, "Region cannot be found.");
+    }
+
+    const updated = await db.transaction(async tx => {
+      const regionPatch: Partial<{
+        name: string;
+        color: string;
+        shapeType: string;
+      }> = {};
+
+      if (params.regionName !== undefined) regionPatch.name = params.regionName;
+      if (params.regionColor !== undefined) regionPatch.color = params.regionColor;
+      if (params.regionShape !== undefined) regionPatch.shapeType = params.regionShape;
+
+      if (Object.keys(regionPatch).length > 0) {
+        await tx
+          .update(region)
+          .set(regionPatch)
+          .where(eq(region.id, regionId));
+      }
+
+      if (params.points !== undefined) {
+        await tx
+          .delete(regionSequences)
+          .where(eq(regionSequences.regionId, regionId));
+
+        if (params.points.length > 0) {
+          const inserted = await tx
+            .insert(regionSequences)
+            .values(
+              params.points.map(point => ({
+                regionId,
+                sequenceNumber: point.sequence,
+                point: [point.point[1], point.point[0]] as [number, number],
+              })),
+            )
+            .returning({ id: regionSequences.id });
+
+          if (inserted.length !== params.points.length) {
+            return tx.rollback();
+          }
+        }
+      }
+
+      if (params.stations !== undefined) {
+        await tx
+          .delete(regionStations)
+          .where(eq(regionStations.regionId, regionId));
+
+        if (params.stations.length > 0) {
+          const inserted = await tx
+            .insert(regionStations)
+            .values(
+              params.stations.map(point => ({
+                regionId,
+                address: point.address,
+                point: [point.point[1], point.point[0]] as [number, number],
+              })),
+            )
+            .returning({ id: regionStations.id });
+
+          if (inserted.length !== params.stations.length) {
+            return tx.rollback();
+          }
+        }
+      }
+
+      const rows = await tx
+        .select({
+          regionId: region.id,
+          regionName: region.name,
+          regionColor: region.color,
+          regionShape: region.shapeType,
+          pointId: regionSequences.id,
+          sequence: regionSequences.sequenceNumber,
+          sequencePoints: regionSequences.point,
+          stationId: regionStations.id,
+          stationAddress: regionStations.address,
+          stationPoint: regionStations.point,
+        })
+        .from(region)
+        .leftJoin(regionSequences, eq(region.id, regionSequences.regionId))
+        .leftJoin(regionStations, eq(region.id, regionStations.regionId))
+        .where(eq(region.id, regionId))
+        .orderBy(asc(region.createdAt), asc(regionSequences.sequenceNumber));
+
+      const base = rows[0];
+      if (!base) return tx.rollback();
+
+      const updatedRegion: RegionObject = {
+        id: base.regionId,
+        regionName: base.regionName,
+        regionColor: base.regionColor,
+        regionShape: base.regionShape,
+        points: rows
+          .filter(row => !!row.pointId)
+          .map(row => ({
+            id: row.pointId!,
+            sequence: row.sequence!,
+            point: [row.sequencePoints![1], row.sequencePoints![0]] as [number, number],
+          }))
+          .filter((point, index, arr) => arr.findIndex((x) => x.id === point.id) === index),
+        stations: rows
+          .filter(row => !!row.stationId)
+          .map(row => ({
+            id: row.stationId!,
+            address: row.stationAddress!,
+            point: [row.stationPoint![1], row.stationPoint![0]] as [number, number],
+          }))
+          .filter((station, index, arr) => arr.findIndex((x) => x.id === station.id) === index),
+      };
+
+      return updatedRegion;
+    });
+
+    return new Success(updated);
+  } catch {
+    return new Failure(FailureCodes.Fatal, "Failed to update region.");
+  }
+}
+
 export interface AddRouteParameters {
   routeNumber: string;
   routeName: string;
@@ -321,6 +577,51 @@ export interface RouteObject {
   points: Array<{
     id: string;
     sequence: number;
+    address: string;
+    point: [number, number];
+  }>;
+}
+
+export interface RegionObject {
+  id: string;
+  regionName: string;
+  regionColor: string;
+  regionShape: string;
+  points: Array<{
+    id: string;
+    sequence: number;
+    point: [number, number];
+  }>;
+  stations: Array<{
+    id: string;
+    address: string;
+    point: [number, number];
+  }>;
+}
+
+export interface RegionAddParameters {
+  regionName: string;
+  regionColor: string;
+  regionShape: string;
+  points: Array<{
+    sequence: number;
+    point: [number, number];
+  }>;
+  stations: Array<{
+    address: string;
+    point: [number, number];
+  }>;
+}
+
+export interface UpdateRegionParameters {
+  regionName?: string;
+  regionColor?: string;
+  regionShape?: string;
+  points?: Array<{
+    sequence: number;
+    point: [number, number];
+  }>;
+  stations?: Array<{
     address: string;
     point: [number, number];
   }>;

@@ -5,24 +5,6 @@ import * as management from "@/lib/management";
 import { tryParseJson } from "@/lib/http/RequestUtilities";
 import { utils, validator } from "@/lib/validator";
 
-export async function GET() {
-  try {
-    const allRoutes = await management.getAllRoutes();
-    const allRegions = await management.getAllRegions();
-
-    return ResponseComposer.compose(StatusCodes.Status200Ok)
-      .setBody({
-        routes: allRoutes,
-        regions: allRegions,
-      })
-      .orchestrate();
-  } catch {
-    return ExceptionResponseComposer.compose(StatusCodes.Status500InternalServerError, [{
-      message: "Unknown error occurred.",
-    }]).orchestrate();
-  }
-}
-
 export async function POST(req: NextRequest) {
   const data = await tryParseJson<RequestBody>(req);
 
@@ -35,9 +17,9 @@ export async function POST(req: NextRequest) {
   // Validate the body first.
   const validation = await validator.validate<RequestBody>(data, {
     properties: {
-      routeNumber: { type: "string", formatter: "non-empty-string" },
-      routeName: { type: "string", formatter: "non-empty-string" },
-      routeColor: { type: "string", formatter: "hex-color" },
+      regionName: { type: "string", formatter: "non-empty-string" },
+      regionShape: { type: "string", formatter: "non-empty-string" },
+      regionColor: { type: "string", formatter: "hex-color" },
       points: {
         type: "object",
         formatterFn: async (values) => {
@@ -54,7 +36,23 @@ export async function POST(req: NextRequest) {
               return { ok: false, error: "Invalid sequence." };
             }
 
-            if (!utils.isExisty(point.address) || !utils.isNonEmpty(point.address)) {
+            if (!utils.isExisty(point.point) || !utils.isTuple(point.point)) {
+              return { ok: false, error: "Invalid point." };
+            }
+          }
+
+          return { ok: true };
+        },
+      },
+      stations: {
+        type: "object",
+        formatterFn: async (values) => {
+          if (!Array.isArray(values)) {
+            return { ok: false, error: "Invalid points." };
+          }
+
+          for (const point of values) {
+            if (utils.isExisty(point.address) && !utils.isNonEmpty(point.address)) {
               return { ok: false, error: "Invalid address." };
             }
 
@@ -67,7 +65,7 @@ export async function POST(req: NextRequest) {
         },
       },
     },
-    requiredProperties: ["routeNumber", "routeName", "routeColor", "points"],
+    requiredProperties: ["regionName", "regionColor", "regionShape", "points", "stations"],
     allowUnvalidatedProperties: false,
   });
   if (!validation.ok) {
@@ -76,7 +74,7 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    const result = await management.addRoute(data);
+    const result = await management.createRegion(data);
     return ResponseComposer.compose(StatusCodes.Status201Created)
       .setBody(result)
       .orchestrate();
@@ -87,12 +85,15 @@ export async function POST(req: NextRequest) {
 }
 
 type RequestBody = {
-  routeNumber: string;
-  routeName: string;
-  routeColor: string;
+  regionName: string;
+  regionColor: string;
+  regionShape: string;
   points: Array<{
     sequence: number;
+    point: [number, number];
+  }>;
+  stations: Array<{
     address: string;
     point: [number, number];
-  }>
+  }>;
 }

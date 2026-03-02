@@ -1,7 +1,7 @@
 "use client";
 
 import { type ComponentProps, useCallback, useEffect, useRef } from "react";
-import { MapContainer, Marker, useMap, useMapEvents } from "react-leaflet";
+import { MapContainer, Marker, Polygon, Tooltip, useMap, useMapEvents } from "react-leaflet";
 import L from "leaflet";
 
 import "@maplibre/maplibre-gl-leaflet";
@@ -21,7 +21,12 @@ const FocusRouteView = ({ focusKey, focusedWaypoints }: FocusRouteViewProps) => 
   const lastFocusedKeyRef = useRef<string | number | null>(null);
 
   useEffect(() => {
-    if (!map || focusKey === null || focusKey === undefined || !focusedWaypoints?.length) return;
+    if (focusKey === null || focusKey === undefined) {
+      lastFocusedKeyRef.current = null;
+      return;
+    }
+
+    if (!map || !focusedWaypoints?.length) return;
     if (lastFocusedKeyRef.current === focusKey) return;
 
     if (focusedWaypoints.length === 1) {
@@ -38,6 +43,35 @@ const FocusRouteView = ({ focusKey, focusedWaypoints }: FocusRouteViewProps) => 
   return null;
 };
 
+const FocusRegionView = ({ regionFocusKey, focusedRegionWaypoints }: FocusRegionViewProps) => {
+  const map = useMap();
+  const lastFocusedRegionKeyRef = useRef<string | number | null>(null);
+
+  useEffect(() => {
+    if (regionFocusKey === null || regionFocusKey === undefined) {
+      lastFocusedRegionKeyRef.current = null;
+      return;
+    }
+
+    if (!map || !focusedRegionWaypoints?.length) return;
+    if (lastFocusedRegionKeyRef.current === regionFocusKey) return;
+
+    if (focusedRegionWaypoints.length === 1) {
+      map.setView(focusedRegionWaypoints[0], 16, { animate: true });
+      lastFocusedRegionKeyRef.current = regionFocusKey;
+      return;
+    }
+
+    const bounds = L.latLngBounds(focusedRegionWaypoints.map(([lat, lng]) => L.latLng(lat, lng)));
+    if (!bounds.isValid()) return;
+
+    map.fitBounds(bounds, { padding: [40, 40], animate: true, maxZoom: 16 });
+    lastFocusedRegionKeyRef.current = regionFocusKey;
+  }, [map, regionFocusKey, focusedRegionWaypoints]);
+
+  return null;
+};
+
 const fixLeafletIcons = () => {
   // delete (L.Icon.Default.prototype)._getIconUrl;
 
@@ -50,12 +84,30 @@ const fixLeafletIcons = () => {
 
 const MapClickHandler = () => {
   const { isCreating, addWaypoint } = useRouteEditor();
+  const {
+    showRegionEditor,
+    regionShape,
+    isAddingStation,
+    addStation,
+  } = useRegionEditor();
 
   useMapEvents({
     click: (e) => {
       if (isCreating) {
         addWaypoint(e.latlng.lat, e.latlng.lng);
+        return;
       }
+
+      if (!showRegionEditor || !regionShape || !isAddingStation) {
+        return;
+      }
+
+      if (!isPointInsideRegion(regionShape, [e.latlng.lat, e.latlng.lng])) {
+        console.warn("Station must be inside the region.");
+        return;
+      }
+
+      addStation(e.latlng.lat, e.latlng.lng);
     },
   });
 
@@ -126,6 +178,7 @@ const RegionDrawingLayer = ({
   enabled,
   regionName,
   regionColor,
+  regionShape,
   onRegionShapeChange,
 }: RegionDrawingLayerProps) => {
   const map = useMap();
@@ -175,6 +228,44 @@ const RegionDrawingLayer = ({
   }, [enabled, regionColor, regionName, applyRegionLabel, applyRegionStyles]);
 
   useEffect(() => {
+    if (!enabled) return;
+
+    if (!regionShape || regionShape.coordinates.length < 3) {
+      if (regionLayerRef.current) {
+        map.removeLayer(regionLayerRef.current);
+        regionLayerRef.current = null;
+      }
+      return;
+    }
+
+    if (regionLayerRef.current) {
+      map.removeLayer(regionLayerRef.current);
+      regionLayerRef.current = null;
+    }
+
+    const latLngs = regionShape.coordinates.map(([lat, lng]) => L.latLng(lat, lng));
+    const layer = regionShape.type === "Rectangle"
+      ? L.rectangle(L.latLngBounds(latLngs))
+      : L.polygon(latLngs);
+
+    layer.addTo(map);
+    regionLayerRef.current = layer;
+    applyRegionStyles(layer);
+    applyRegionLabel(layer);
+
+    const pmLayer = layer as L.Layer & {
+      pm?: {
+        enable: (options?: object) => void;
+      };
+    };
+
+    pmLayer.pm?.enable({
+      allowSelfIntersection: false,
+      draggable: false,
+    });
+  }, [enabled, map, regionShape, applyRegionLabel, applyRegionStyles]);
+
+  useEffect(() => {
     const pmMap = map as L.Map & {
       pm?: {
         addControls: (options: object) => void;
@@ -208,6 +299,33 @@ const RegionDrawingLayer = ({
         type: event.shape === "Rectangle" ? "Rectangle" : "Polygon",
         coordinates: normalizeCoordinates(layer),
       });
+
+      const pmLayer = layer as L.Layer & {
+        pm?: {
+          enable: (options?: object) => void;
+        };
+      };
+
+      pmLayer.pm?.enable({
+        allowSelfIntersection: false,
+        draggable: false,
+      });
+    };
+
+    const handleEdit = (event: { layer: L.Polygon | L.Rectangle }) => {
+      if (!event.layer || event.layer !== regionLayerRef.current) return;
+
+      onRegionShapeChange({
+        type: event.layer instanceof L.Rectangle ? "Rectangle" : "Polygon",
+        coordinates: normalizeCoordinates(event.layer),
+      });
+    };
+
+    const handleRemove = (event: { layer: L.Polygon | L.Rectangle }) => {
+      if (!event.layer || event.layer !== regionLayerRef.current) return;
+
+      regionLayerRef.current = null;
+      onRegionShapeChange(null);
     };
 
     if (enabled) {
@@ -228,6 +346,8 @@ const RegionDrawingLayer = ({
       });
       pmMap.pm.setGlobalOptions({ continueDrawing: false });
       map.on("pm:create", handleCreate);
+      map.on("pm:edit", handleEdit);
+      map.on("pm:remove", handleRemove);
     } else {
       pmMap.pm.removeControls();
       clearRegionLayer();
@@ -235,6 +355,8 @@ const RegionDrawingLayer = ({
 
     return () => {
       map.off("pm:create", handleCreate);
+      map.off("pm:edit", handleEdit);
+      map.off("pm:remove", handleRemove);
 
       if (pmMap.pm) {
         pmMap.pm.removeControls();
@@ -284,6 +406,37 @@ const createSequenceIcon = (sequence: number, isActive: boolean) => {
   });
 };
 
+const isPointInsidePolygon = (polygon: Array<[number, number]>, point: [number, number]) => {
+  const [lat, lng] = point;
+  const x = lng;
+  const y = lat;
+  let inside = false;
+
+  for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
+    const xi = polygon[i][1];
+    const yi = polygon[i][0];
+    const xj = polygon[j][1];
+    const yj = polygon[j][0];
+
+    const intersect = ((yi > y) !== (yj > y))
+      && (x < ((xj - xi) * (y - yi)) / ((yj - yi) || Number.EPSILON) + xi);
+    if (intersect) inside = !inside;
+  }
+
+  return inside;
+};
+
+const isPointInsideRegion = (shape: RegionDraftShape, point: [number, number]) => {
+  if (shape.coordinates.length < 3) return false;
+
+  if (shape.type === "Rectangle") {
+    const bounds = L.latLngBounds(shape.coordinates.map(([lat, lng]) => L.latLng(lat, lng)));
+    return bounds.contains(L.latLng(point[0], point[1]));
+  }
+
+  return isPointInsidePolygon(shape.coordinates, point);
+};
+
 const WaypointMarkers = () => {
   const {
     waypoints,
@@ -317,14 +470,112 @@ const WaypointMarkers = () => {
   );
 };
 
+const StationMarkers = () => {
+  const {
+    regionShape,
+    stations,
+    activeStationId,
+    updateStation,
+    setActiveStationId,
+  } = useRegionEditor();
+
+  if (!regionShape) return null;
+
+  return (
+    <>
+      {stations.map((station, position) => {
+        const isDraggable = station.id === activeStationId;
+
+        return (
+          <Marker
+            key={station.id}
+            position={[station.lat, station.lng]}
+            icon={createSequenceIcon(position + 1, isDraggable)}
+            draggable={isDraggable}
+            autoPan={true}
+            eventHandlers={{
+              click: () => {
+                setActiveStationId(station.id);
+              },
+              dragend: (event) => {
+                const marker = event.target as L.Marker;
+                const { lat, lng } = marker.getLatLng();
+                const nextPoint: [number, number] = [lat, lng];
+
+                if (!isPointInsideRegion(regionShape, nextPoint)) {
+                  marker.setLatLng(L.latLng(station.lat, station.lng));
+                  console.warn("Station must stay inside the region.");
+                  return;
+                }
+
+                updateStation(station.id, lat, lng);
+              },
+            }}
+          />
+        );
+      })}
+    </>
+  );
+};
+
+const RegionsLayer = ({ regions }: RegionsLayerProps) => {
+  const {
+    showRegionEditor,
+    editingRegionId,
+  } = useRegionEditor();
+
+  const displayRegions = showRegionEditor && editingRegionId
+    ? regions.filter((region) => region.id === editingRegionId)
+    : regions;
+
+  return (
+    <>
+      {displayRegions.map((region) => {
+        const sortedPoints = [...region.points]
+          .sort((a, b) => a.sequence - b.sequence)
+          .map((point) => point.point);
+
+        if (sortedPoints.length < 3) return null;
+
+        return (
+          <Polygon
+            key={region.id}
+            positions={sortedPoints}
+            pathOptions={{
+              color: region.regionColor,
+              fillColor: region.regionColor,
+              fillOpacity: 0.15,
+              weight: 2,
+            }}
+          >
+            <Tooltip
+              permanent
+              direction="center"
+              opacity={1}
+              className="region-name-label"
+            >
+              {region.regionName}
+            </Tooltip>
+          </Polygon>
+        );
+      })}
+    </>
+  );
+};
+
 export default function MapComponent({
+  regions,
   routing,
   focusedWaypoints,
   focusKey,
+  focusedRegionWaypoints,
+  regionFocusKey,
 }: MapProps) {
   const { isCreating, waypoints, selectedColor } = useRouteEditor();
   const {
     showRegionEditor,
+    hasDefinedPolygon,
+    regionShape,
     regionName,
     regionColor,
     setRegionShape,
@@ -339,12 +590,16 @@ export default function MapComponent({
       <VectorTileLayer />
       <MapClickHandler />
       <FocusRouteView focusKey={focusKey} focusedWaypoints={focusedWaypoints} />
+      <FocusRegionView regionFocusKey={regionFocusKey} focusedRegionWaypoints={focusedRegionWaypoints} />
       <RegionDrawingLayer
         enabled={!isCreating && showRegionEditor}
         regionName={regionName}
         regionColor={regionColor}
+        regionShape={regionShape}
         onRegionShapeChange={setRegionShape}
       />
+      {!showRegionEditor && <RegionsLayer regions={regions ?? []} />}
+      {!isCreating && showRegionEditor && hasDefinedPolygon && <StationMarkers />}
       {isCreating && <WaypointMarkers />}
 
       {isCreating && waypoints.length >= 2 && (
@@ -369,9 +624,27 @@ export interface RoutingMachineProps {
 }
 
 export interface MapProps {
+  regions?: Array<{
+    id: string;
+    regionName: string;
+    regionColor: string;
+    regionShape: string;
+    points: Array<{
+      id: string;
+      sequence: number;
+      point: [number, number];
+    }>;
+    stations: Array<{
+      id: string;
+      address: string;
+      point: [number, number];
+    }>;
+  }>;
   routing?: Array<ComponentProps<typeof RoutingMachine>>;
   focusedWaypoints?: Array<[number, number]>;
   focusKey?: string | number | null;
+  focusedRegionWaypoints?: Array<[number, number]>;
+  regionFocusKey?: string | number | null;
 }
 
 interface FocusRouteViewProps {
@@ -379,11 +652,36 @@ interface FocusRouteViewProps {
   focusKey?: string | number | null;
 }
 
+interface FocusRegionViewProps {
+  focusedRegionWaypoints?: Array<[number, number]>;
+  regionFocusKey?: string | number | null;
+}
+
 interface RegionDrawingLayerProps {
   enabled: boolean;
   regionName: string;
   regionColor: string;
+  regionShape: RegionDraftShape | null;
   onRegionShapeChange: (shape: RegionDraftShape | null) => void;
+}
+
+interface RegionsLayerProps {
+  regions: Array<{
+    id: string;
+    regionName: string;
+    regionColor: string;
+    regionShape: string;
+    points: Array<{
+      id: string;
+      sequence: number;
+      point: [number, number];
+    }>;
+    stations: Array<{
+      id: string;
+      address: string;
+      point: [number, number];
+    }>;
+  }>;
 }
 
 export interface RegionDraftShape {
