@@ -220,6 +220,45 @@ const RegionDrawingLayer = ({
     layer.openTooltip(center);
   }, [regionName]);
 
+  const toShapeFromLayer = useCallback((layer: L.Polygon | L.Rectangle): RegionDraftShape => ({
+    type: layer instanceof L.Rectangle ? "Rectangle" : "Polygon",
+    coordinates: normalizeCoordinates(layer),
+  }), [normalizeCoordinates]);
+
+  const areShapesEqual = useCallback((left: RegionDraftShape, right: RegionDraftShape) => {
+    if (left.type !== right.type) return false;
+    if (left.coordinates.length !== right.coordinates.length) return false;
+
+    return left.coordinates.every(([leftLat, leftLng], index) => {
+      const [rightLat, rightLng] = right.coordinates[index];
+      return Math.abs(leftLat - rightLat) < 1e-7 && Math.abs(leftLng - rightLng) < 1e-7;
+    });
+  }, []);
+
+  const syncShapeFromLayer = useCallback((layer?: L.Polygon | L.Rectangle | null) => {
+    const targetLayer = layer ?? regionLayerRef.current;
+    if (!targetLayer) return;
+    onRegionShapeChange(toShapeFromLayer(targetLayer));
+  }, [onRegionShapeChange, toShapeFromLayer]);
+
+  const bindLayerMutationEvents = useCallback((layer: L.Polygon | L.Rectangle) => {
+    const shapeLayer = layer as L.Layer;
+    shapeLayer.on("pm:edit", () => syncShapeFromLayer(layer));
+    shapeLayer.on("pm:update", () => syncShapeFromLayer(layer));
+    shapeLayer.on("pm:markerdragend", () => syncShapeFromLayer(layer));
+    shapeLayer.on("pm:vertexadded", () => syncShapeFromLayer(layer));
+    shapeLayer.on("pm:vertexremoved", () => syncShapeFromLayer(layer));
+  }, [syncShapeFromLayer]);
+
+  const unbindLayerMutationEvents = useCallback((layer: L.Polygon | L.Rectangle) => {
+    const shapeLayer = layer as L.Layer;
+    shapeLayer.off("pm:edit");
+    shapeLayer.off("pm:update");
+    shapeLayer.off("pm:markerdragend");
+    shapeLayer.off("pm:vertexadded");
+    shapeLayer.off("pm:vertexremoved");
+  }, []);
+
   useEffect(() => {
     if (!enabled || !regionLayerRef.current) return;
 
@@ -232,6 +271,7 @@ const RegionDrawingLayer = ({
 
     if (!regionShape || regionShape.coordinates.length < 3) {
       if (regionLayerRef.current) {
+        unbindLayerMutationEvents(regionLayerRef.current);
         map.removeLayer(regionLayerRef.current);
         regionLayerRef.current = null;
       }
@@ -239,6 +279,16 @@ const RegionDrawingLayer = ({
     }
 
     if (regionLayerRef.current) {
+      const currentShape = toShapeFromLayer(regionLayerRef.current);
+      if (areShapesEqual(currentShape, regionShape)) {
+        applyRegionStyles(regionLayerRef.current);
+        applyRegionLabel(regionLayerRef.current);
+        return;
+      }
+    }
+
+    if (regionLayerRef.current) {
+      unbindLayerMutationEvents(regionLayerRef.current);
       map.removeLayer(regionLayerRef.current);
       regionLayerRef.current = null;
     }
@@ -252,6 +302,7 @@ const RegionDrawingLayer = ({
     regionLayerRef.current = layer;
     applyRegionStyles(layer);
     applyRegionLabel(layer);
+    bindLayerMutationEvents(layer);
 
     const pmLayer = layer as L.Layer & {
       pm?: {
@@ -263,7 +314,7 @@ const RegionDrawingLayer = ({
       allowSelfIntersection: false,
       draggable: false,
     });
-  }, [enabled, map, regionShape, applyRegionLabel, applyRegionStyles]);
+  }, [enabled, map, regionShape, applyRegionLabel, applyRegionStyles, areShapesEqual, bindLayerMutationEvents, toShapeFromLayer, unbindLayerMutationEvents]);
 
   useEffect(() => {
     const pmMap = map as L.Map & {
@@ -279,6 +330,7 @@ const RegionDrawingLayer = ({
     const clearRegionLayer = () => {
       if (!regionLayerRef.current) return;
 
+      unbindLayerMutationEvents(regionLayerRef.current);
       map.removeLayer(regionLayerRef.current);
       regionLayerRef.current = null;
       onRegionShapeChange(null);
@@ -294,6 +346,7 @@ const RegionDrawingLayer = ({
 
       applyRegionStyles(layer);
       applyRegionLabel(layer);
+      bindLayerMutationEvents(layer);
 
       onRegionShapeChange({
         type: event.shape === "Rectangle" ? "Rectangle" : "Polygon",
@@ -314,11 +367,12 @@ const RegionDrawingLayer = ({
 
     const handleEdit = (event: { layer: L.Polygon | L.Rectangle }) => {
       if (!event.layer || event.layer !== regionLayerRef.current) return;
+      syncShapeFromLayer(event.layer);
+    };
 
-      onRegionShapeChange({
-        type: event.layer instanceof L.Rectangle ? "Rectangle" : "Polygon",
-        coordinates: normalizeCoordinates(event.layer),
-      });
+    const handleGeometryMutated = (event: { layer?: L.Polygon | L.Rectangle }) => {
+      if (event.layer && event.layer !== regionLayerRef.current) return;
+      syncShapeFromLayer(event.layer ?? regionLayerRef.current);
     };
 
     const handleRemove = (event: { layer: L.Polygon | L.Rectangle }) => {
@@ -347,6 +401,10 @@ const RegionDrawingLayer = ({
       pmMap.pm.setGlobalOptions({ continueDrawing: false });
       map.on("pm:create", handleCreate);
       map.on("pm:edit", handleEdit);
+      map.on("pm:update", handleGeometryMutated);
+      map.on("pm:markerdragend", handleGeometryMutated);
+      map.on("pm:vertexadded", handleGeometryMutated);
+      map.on("pm:vertexremoved", handleGeometryMutated);
       map.on("pm:remove", handleRemove);
     } else {
       pmMap.pm.removeControls();
@@ -356,7 +414,15 @@ const RegionDrawingLayer = ({
     return () => {
       map.off("pm:create", handleCreate);
       map.off("pm:edit", handleEdit);
+      map.off("pm:update", handleGeometryMutated);
+      map.off("pm:markerdragend", handleGeometryMutated);
+      map.off("pm:vertexadded", handleGeometryMutated);
+      map.off("pm:vertexremoved", handleGeometryMutated);
       map.off("pm:remove", handleRemove);
+
+      if (regionLayerRef.current) {
+        unbindLayerMutationEvents(regionLayerRef.current);
+      }
 
       if (pmMap.pm) {
         pmMap.pm.removeControls();
@@ -366,7 +432,7 @@ const RegionDrawingLayer = ({
         clearRegionLayer();
       }
     };
-  }, [enabled, map, onRegionShapeChange, applyRegionLabel, applyRegionStyles, normalizeCoordinates]);
+  }, [enabled, map, onRegionShapeChange, applyRegionLabel, applyRegionStyles, normalizeCoordinates, syncShapeFromLayer, bindLayerMutationEvents, unbindLayerMutationEvents]);
 
   return null;
 };
