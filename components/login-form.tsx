@@ -96,9 +96,6 @@ export function LoginForm({ className, ...props }: ComponentProps<"div">) {
           </form>
         </CardContent>
       </Card>
-      <FieldDescription className="px-6 text-center">
-        If you want an API Key, click <a href="#">here</a>. We issue public API keys for everyone to use.
-      </FieldDescription>
     </div>
   );
 }
