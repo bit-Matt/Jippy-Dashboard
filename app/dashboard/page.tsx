@@ -12,6 +12,7 @@ import {
   BreadcrumbSeparator,
 } from "@/components/ui/breadcrumb";
 import MapComponent from "@/components/map-component";
+import RegionEditor from "@/components/region-editor";
 import RouteEditor from "@/components/route-editor";
 import { Separator } from "@/components/ui/separator";
 import Simulator from "@/components/simulator";
@@ -23,6 +24,7 @@ import {
 
 import { $fetch } from "@/lib/http/client";
 import type { IApiResponse } from "@/lib/http/ResponseComposer";
+import { RegionEditorProvider, useRegionEditor } from "@/contexts/RegionEditorContext";
 import { RouteEditorProvider, useRouteEditor } from "@/contexts/RouteEditorContext";
 
 function DashboardContent() {
@@ -30,6 +32,7 @@ function DashboardContent() {
   const [routes, setRoutes] = useState<RouteSummary[]>([]);
   const [editingRoute, setEditingRoute] = useState<RouteSummary | null>(null);
   const { isCreating, startCreating, startEditing, stopCreating } = useRouteEditor();
+  const { showRegionEditor, openRegionEditor, closeRegionEditor } = useRegionEditor();
 
   const fetchRoutes = async () => {
     const { data, error } = await $fetch<IApiResponse<RouteSummary[]>>("/api/restricted/management/route", {
@@ -60,14 +63,30 @@ function DashboardContent() {
       stopCreating();
       setEditingRoute(null);
     } else {
+      closeRegionEditor();
       setEditingRoute(null);
       startCreating();
     }
     setShowSimulator(false);
   };
 
+  const handleShowRegions = () => {
+    if (showRegionEditor) {
+      closeRegionEditor();
+    } else {
+      openRegionEditor();
+      if (isCreating) {
+        stopCreating();
+      }
+      setEditingRoute(null);
+    }
+
+    setShowSimulator(false);
+  };
+
   const handleOpenRouteForEdit = (route: RouteSummary) => {
     setShowSimulator(false);
+    closeRegionEditor();
     setEditingRoute(route);
 
     const sortedPoints = [...route.points].sort((a, b) => a.sequence - b.sequence);
@@ -79,6 +98,8 @@ function DashboardContent() {
 
   const handleShowSimulator = () => {
     setShowSimulator(!showSimulator);
+    closeRegionEditor();
+    setEditingRoute(null);
     stopCreating();
   };
 
@@ -86,6 +107,7 @@ function DashboardContent() {
     <SidebarProvider>
       <AppSidebar
         onAddRouteClick={handleShowRoutes}
+        onAddRegionClick={handleShowRegions}
         onSimulationClick={handleShowSimulator}
         routes={routes}
         onRouteClick={handleOpenRouteForEdit}
@@ -134,6 +156,9 @@ function DashboardContent() {
               onClosed={() => setEditingRoute(null)}
             />
           )}
+          {!isCreating && showRegionEditor && (
+            <RegionEditor />
+          )}
         </div>
       </SidebarInset>
     </SidebarProvider>
@@ -143,7 +168,9 @@ function DashboardContent() {
 export default function DashboardClient() {
   return (
     <RouteEditorProvider>
-      <DashboardContent />
+      <RegionEditorProvider>
+        <DashboardContent />
+      </RegionEditorProvider>
     </RouteEditorProvider>
   );
 }

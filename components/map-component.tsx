@@ -1,16 +1,19 @@
 "use client";
 
-import { type ComponentProps, useEffect, useRef } from "react";
+import { type ComponentProps, useCallback, useEffect, useRef } from "react";
 import { MapContainer, Marker, useMap, useMapEvents } from "react-leaflet";
 import L from "leaflet";
 
 import "@maplibre/maplibre-gl-leaflet";
+import "@geoman-io/leaflet-geoman-free";
 import "leaflet-routing-machine";
 import "lrm-mapzen";
 
 import "leaflet/dist/leaflet.css";
+import "@geoman-io/leaflet-geoman-free/dist/leaflet-geoman.css";
 import "leaflet-routing-machine/dist/leaflet-routing-machine.css";
 
+import { useRegionEditor } from "@/contexts/RegionEditorContext";
 import { useRouteEditor } from "@/contexts/RouteEditorContext";
 
 const FocusRouteView = ({ focusKey, focusedWaypoints }: FocusRouteViewProps) => {
@@ -119,6 +122,133 @@ const RoutingMachine = ({ waypoints, color }: RoutingMachineProps) => {
   return null;
 };
 
+const RegionDrawingLayer = ({
+  enabled,
+  regionName,
+  regionColor,
+  onRegionShapeChange,
+}: RegionDrawingLayerProps) => {
+  const map = useMap();
+  const regionLayerRef = useRef<L.Polygon | L.Rectangle | null>(null);
+
+  const normalizeCoordinates = useCallback((layer: L.Polygon | L.Rectangle): Array<[number, number]> => {
+    const latLngs = layer.getLatLngs();
+    const first = latLngs[0];
+
+    if (Array.isArray(first)) {
+      return (first as L.LatLng[]).map((latLng) => [latLng.lat, latLng.lng]);
+    }
+
+    return (latLngs as L.LatLng[]).map((latLng) => [latLng.lat, latLng.lng]);
+  }, []);
+
+  const applyRegionStyles = useCallback((layer: L.Polygon | L.Rectangle) => {
+    layer.setStyle({
+      color: regionColor,
+      fillColor: regionColor,
+      fillOpacity: 0.2,
+      weight: 3,
+    });
+  }, [regionColor]);
+
+  const applyRegionLabel = useCallback((layer: L.Polygon | L.Rectangle) => {
+    layer.unbindTooltip();
+
+    const label = regionName.trim();
+    if (!label) return;
+
+    const center = layer.getBounds().getCenter();
+    layer.bindTooltip(label, {
+      permanent: true,
+      direction: "center",
+      opacity: 1,
+      className: "region-name-label",
+    });
+    layer.openTooltip(center);
+  }, [regionName]);
+
+  useEffect(() => {
+    if (!enabled || !regionLayerRef.current) return;
+
+    applyRegionStyles(regionLayerRef.current);
+    applyRegionLabel(regionLayerRef.current);
+  }, [enabled, regionColor, regionName, applyRegionLabel, applyRegionStyles]);
+
+  useEffect(() => {
+    const pmMap = map as L.Map & {
+      pm?: {
+        addControls: (options: object) => void;
+        removeControls: () => void;
+        setGlobalOptions: (options: object) => void;
+      };
+    };
+
+    if (!pmMap.pm) return;
+
+    const clearRegionLayer = () => {
+      if (!regionLayerRef.current) return;
+
+      map.removeLayer(regionLayerRef.current);
+      regionLayerRef.current = null;
+      onRegionShapeChange(null);
+    };
+
+    const handleCreate: (event: { layer: L.Polygon | L.Rectangle; shape?: string }) => void = (event) => {
+      if (regionLayerRef.current) {
+        map.removeLayer(regionLayerRef.current);
+      }
+
+      const layer = event.layer;
+      regionLayerRef.current = layer;
+
+      applyRegionStyles(layer);
+      applyRegionLabel(layer);
+
+      onRegionShapeChange({
+        type: event.shape === "Rectangle" ? "Rectangle" : "Polygon",
+        coordinates: normalizeCoordinates(layer),
+      });
+    };
+
+    if (enabled) {
+      pmMap.pm.addControls({
+        position: "bottomleft",
+        drawCircle: false,
+        drawCircleMarker: false,
+        drawMarker: false,
+        drawPolyline: false,
+        drawText: false,
+        drawPolygon: true,
+        drawRectangle: true,
+        editMode: true,
+        dragMode: false,
+        cutPolygon: false,
+        removalMode: true,
+        rotateMode: true,
+      });
+      pmMap.pm.setGlobalOptions({ continueDrawing: false });
+      map.on("pm:create", handleCreate);
+    } else {
+      pmMap.pm.removeControls();
+      clearRegionLayer();
+    }
+
+    return () => {
+      map.off("pm:create", handleCreate);
+
+      if (pmMap.pm) {
+        pmMap.pm.removeControls();
+      }
+
+      if (!enabled) {
+        clearRegionLayer();
+      }
+    };
+  }, [enabled, map, onRegionShapeChange, applyRegionLabel, applyRegionStyles, normalizeCoordinates]);
+
+  return null;
+};
+
 const createSequenceIcon = (sequence: number, isActive: boolean) => {
   const background = isActive ? "#2563eb" : "#0f172a";
   const border = isActive ? "#93c5fd" : "#e2e8f0";
@@ -187,8 +317,18 @@ const WaypointMarkers = () => {
   );
 };
 
-export default function MapComponent({ routing, focusedWaypoints, focusKey }: MapProps) {
+export default function MapComponent({
+  routing,
+  focusedWaypoints,
+  focusKey,
+}: MapProps) {
   const { isCreating, waypoints, selectedColor } = useRouteEditor();
+  const {
+    showRegionEditor,
+    regionName,
+    regionColor,
+    setRegionShape,
+  } = useRegionEditor();
 
   useEffect(() => {
     fixLeafletIcons();
@@ -199,6 +339,12 @@ export default function MapComponent({ routing, focusedWaypoints, focusKey }: Ma
       <VectorTileLayer />
       <MapClickHandler />
       <FocusRouteView focusKey={focusKey} focusedWaypoints={focusedWaypoints} />
+      <RegionDrawingLayer
+        enabled={!isCreating && showRegionEditor}
+        regionName={regionName}
+        regionColor={regionColor}
+        onRegionShapeChange={setRegionShape}
+      />
       {isCreating && <WaypointMarkers />}
 
       {isCreating && waypoints.length >= 2 && (
@@ -231,4 +377,16 @@ export interface MapProps {
 interface FocusRouteViewProps {
   focusedWaypoints?: Array<[number, number]>;
   focusKey?: string | number | null;
+}
+
+interface RegionDrawingLayerProps {
+  enabled: boolean;
+  regionName: string;
+  regionColor: string;
+  onRegionShapeChange: (shape: RegionDraftShape | null) => void;
+}
+
+export interface RegionDraftShape {
+  type: "Polygon" | "Rectangle";
+  coordinates: Array<[number, number]>;
 }

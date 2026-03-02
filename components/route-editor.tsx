@@ -134,12 +134,6 @@ export default function RouteEditor({ editingRoute, onSaved, onClosed }: RouteEd
 
     const route = saveRoute();
     if (route) {
-      console.log("Route saved:", {
-        number: routeNumber,
-        name: routeName,
-        waypoints: route,
-      });
-
       const endpoint = editingRoute
         ? `/api/restricted/management/route/${editingRoute.id}`
         : "/api/restricted/management/route";
@@ -164,8 +158,6 @@ export default function RouteEditor({ editingRoute, onSaved, onClosed }: RouteEd
             console.error("Error saving route:", error);
             return;
           }
-
-          console.log(data, error);
 
           setRouteNumber("");
           setRouteName("");

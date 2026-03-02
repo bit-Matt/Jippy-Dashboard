@@ -1,5 +1,5 @@
 import { type ComponentProps } from "react";
-import { Command, Map, Pin } from "lucide-react";
+import { Command, Map, Pin, SquareDashed } from "lucide-react";
 
 import { NavMain } from "@/components/nav-main";
 import { NavUser } from "@/components/nav-user";
@@ -27,6 +27,18 @@ export function AppSidebar({ onAddRouteClick, onAddRegionClick, onSimulationClic
             url: "#",
             onClick: onAddRouteClick,
           },
+          ...routes.map((route) => ({
+            title: `${route.routeNumber} - ${route.routeName}`,
+            url: "#",
+            onClick: () => onRouteClick?.(route),
+          })),
+        ],
+      },
+      {
+        title: "Region Management",
+        url: "#",
+        icon: SquareDashed,
+        items: [
           {
             title: "Add a new Region",
             url: "#",
@@ -39,17 +51,6 @@ export function AppSidebar({ onAddRouteClick, onAddRegionClick, onSimulationClic
         url: "#",
         icon: Pin,
         onClick: onSimulationClick,
-      },
-      {
-        title: "Routes",
-        url: "#",
-        icon: Map,
-        isActive: true,
-        items: routes.map((route) => ({
-          title: `${route.routeNumber} - ${route.routeName}`,
-          url: "#",
-          onClick: () => onRouteClick?.(route),
-        })),
       },
     ],
   };
