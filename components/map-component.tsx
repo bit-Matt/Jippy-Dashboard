@@ -119,6 +119,41 @@ const RoutingMachine = ({ waypoints, color }: RoutingMachineProps) => {
   return null;
 };
 
+const createSequenceIcon = (sequence: number, isActive: boolean) => {
+  const background = isActive ? "#2563eb" : "#0f172a";
+  const border = isActive ? "#93c5fd" : "#e2e8f0";
+
+  return L.divIcon({
+    className: "",
+    html: `<div style="
+      width: 44px;
+      height: 44px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: ${isActive ? "grab" : "pointer"};
+      user-select: none;
+    ">
+      <div style="
+        width: 30px;
+        height: 30px;
+        border-radius: 9999px;
+        background: ${background};
+        border: 2px solid ${border};
+        color: #ffffff;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 12px;
+        font-weight: 700;
+        box-shadow: 0 2px 6px rgba(0,0,0,0.25);
+      ">${sequence}</div>
+    </div>`,
+    iconSize: [44, 44],
+    iconAnchor: [22, 22],
+  });
+};
+
 const WaypointMarkers = () => {
   const {
     waypoints,
@@ -128,20 +163,17 @@ const WaypointMarkers = () => {
 
   return (
     <>
-      {waypoints.map((waypoint) => {
+      {waypoints.map((waypoint, index) => {
         const isDraggable = waypoint.id === activePointIndex;
 
         return (
           <Marker
             key={waypoint.id}
             position={[waypoint.lat, waypoint.lng]}
+            icon={createSequenceIcon(index + 1, isDraggable)}
             draggable={isDraggable}
+            autoPan={true}
             eventHandlers={{
-              drag: (event) => {
-                const marker = event.target as L.Marker;
-                const { lat, lng } = marker.getLatLng();
-                updateWaypoint(waypoint.id, lat, lng);
-              },
               dragend: (event) => {
                 const marker = event.target as L.Marker;
                 const { lat, lng } = marker.getLatLng();
