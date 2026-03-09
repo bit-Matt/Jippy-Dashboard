@@ -390,6 +390,15 @@ export const env = {
   },
 };
 
+export const str = {
+  isEmpty(str) {
+    if (str === null || str === undefined) return true;
+    if (typeof str !== "string") return true;
+    if (str.trim().length === 0) return true;
+    return str.replace(/\s/g, "").length === 0;
+  },
+};
+
 function checkPasswordComplexity(password) {
   // Zero-length or undefined inputs
   if (!password || password.trim().length === 0 || password.length < 8) {

@@ -3,7 +3,7 @@ services:
     restart: unless-stopped
     image: postgis/postgis:18-3.6
     ports:
-      - "5432:5432"
+      - "${POSTGRES_PORT}:5432"
     networks:
       - defaultNetwork
     environment:
