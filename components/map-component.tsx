@@ -121,7 +121,7 @@ const VectorTileLayer = () => {
     if (!map) return;
 
     const glLayer = L.maplibreGL({
-      style: "https://api.maptiler.com/maps/openstreetmap/style.json?key=mNI9bvVhZy4T5HcVvqIr",
+      style: "https://api.maptiler.com/maps/019cd1ee-731b-7ea4-9766-7cef92fd7369/style.json?key=mNI9bvVhZy4T5HcVvqIr",
     });
 
     glLayer.addTo(map);
