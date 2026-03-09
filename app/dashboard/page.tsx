@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/breadcrumb";
 import MapComponent from "@/components/map-component";
 import RegionEditor from "@/components/region-editor";
+import RouteListCard from "@/components/route-list-card";
 import RouteEditor from "@/components/route-editor";
 import { Separator } from "@/components/ui/separator";
 import Simulator from "@/components/simulator";
@@ -32,6 +33,7 @@ function DashboardContent() {
   const [routes, setRoutes] = useState<AllResponse["routes"]>([]);
   const [regions, setRegions] = useState<AllResponse["regions"]>([]);
   const [editingRoute, setEditingRoute] = useState<AllResponse["routes"][0] | null>(null);
+  const [selectedRegionId, setSelectedRegionId] = useState<string | null>(null);
   const [routeFocusKey, setRouteFocusKey] = useState<string | number | null>(null);
   const [focusedRegionWaypoints, setFocusedRegionWaypoints] = useState<Array<[number, number]> | undefined>(undefined);
   const [regionFocusKey, setRegionFocusKey] = useState<string | number | null>(null);
@@ -93,6 +95,7 @@ function DashboardContent() {
     }
     setFocusedRegionWaypoints(undefined);
     setRegionFocusKey(null);
+    setSelectedRegionId(null);
     setShowSimulator(false);
   };
 
@@ -108,6 +111,7 @@ function DashboardContent() {
       setRouteFocusKey(null);
     }
 
+    setSelectedRegionId(null);
     setShowSimulator(false);
   };
 
@@ -124,6 +128,7 @@ function DashboardContent() {
       .map((point) => point.point);
     setFocusedRegionWaypoints(sortedRegionPoints);
     setRegionFocusKey(`${region.id}-${Date.now()}`);
+    setSelectedRegionId(region.id);
 
     openRegionEditorForEdit({
       id: region.id,
@@ -140,6 +145,7 @@ function DashboardContent() {
     closeRegionEditor();
     setFocusedRegionWaypoints(undefined);
     setRegionFocusKey(null);
+    setSelectedRegionId(null);
     setRouteFocusKey(`${route.id}-${Date.now()}`);
     setEditingRoute(route);
 
@@ -155,6 +161,7 @@ function DashboardContent() {
     closeRegionEditor();
     setFocusedRegionWaypoints(undefined);
     setRegionFocusKey(null);
+    setSelectedRegionId(null);
     setRouteFocusKey(null);
     setEditingRoute(null);
     stopCreating();
@@ -166,10 +173,6 @@ function DashboardContent() {
         onAddRouteClick={handleShowRoutes}
         onAddRegionClick={handleShowRegions}
         onSimulationClick={handleShowSimulator}
-        routes={routes}
-        regions={regions}
-        onRouteClick={handleOpenRouteForEdit}
-        onRegionClick={handleOpenRegionForEdit}
       />
       <SidebarInset>
         <header className="flex h-16 shrink-0 items-center gap-2">
@@ -209,6 +212,14 @@ function DashboardContent() {
             focusKey={routeFocusKey}
             focusedRegionWaypoints={focusedRegionWaypoints}
             regionFocusKey={regionFocusKey}
+          />
+          <RouteListCard
+            routes={routes}
+            regions={regions}
+            selectedRouteId={editingRoute?.id ?? null}
+            selectedRegionId={selectedRegionId}
+            onRouteSelect={handleOpenRouteForEdit}
+            onRegionSelect={handleOpenRegionForEdit}
           />
           {showSimulator && <Simulator />}
           {isCreating && (

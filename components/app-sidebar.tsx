@@ -13,7 +13,7 @@ import {
   SidebarMenuItem,
 } from "@/components/ui/sidebar";
 
-export function AppSidebar({ onAddRouteClick, onAddRegionClick, onSimulationClick, routes, regions, onRouteClick, onRegionClick, ...props }: SidebarProps) {
+export function AppSidebar({ onAddRouteClick, onAddRegionClick, onSimulationClick, ...props }: SidebarProps) {
   const data = {
     navMain: [
       {
@@ -27,11 +27,6 @@ export function AppSidebar({ onAddRouteClick, onAddRegionClick, onSimulationClic
             url: "#",
             onClick: onAddRouteClick,
           },
-          ...routes.map((route) => ({
-            title: `${route.routeNumber} - ${route.routeName}`,
-            url: "#",
-            onClick: () => onRouteClick?.(route),
-          })),
         ],
       },
       {
@@ -44,11 +39,6 @@ export function AppSidebar({ onAddRouteClick, onAddRegionClick, onSimulationClic
             url: "#",
             onClick: onAddRegionClick,
           },
-          ...regions.map((region) => ({
-            title: region.regionName,
-            url: "#",
-            onClick: () => onRegionClick?.(region),
-          })),
         ],
       },
       {
@@ -93,10 +83,6 @@ interface SidebarProps extends ComponentProps<typeof Sidebar> {
   onAddRouteClick?: () => void
   onAddRegionClick?: () => void
   onSimulationClick?: () => void
-  routes: AllResponse["routes"]
-  regions: AllResponse["regions"]
-  onRouteClick?: (route: AllResponse["routes"][0]) => void
-  onRegionClick?: (region: AllResponse["regions"][0]) => void
 }
 
 export interface AllResponse {

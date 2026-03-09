@@ -26,9 +26,20 @@ const COLORS = [
   "#bad80a",
 ];
 
+const ROUTE_DISTRICTS = [
+  "Arevalo (Villa de Arevalo)",
+  "City Proper",
+  "Jaro",
+  "La Paz",
+  "Lapuz",
+  "Mandurriao",
+  "Molo",
+];
+
 export default function RouteEditor({ editingRoute, onSaved, onClosed }: RouteEditorProps) {
   const [routeNumber, setRouteNumber] = useState("");
   const [routeName, setRouteName] = useState("");
+  const [routeDistrict, setRouteDistrict] = useState("");
   const [draggedWaypointId, setDraggedWaypointId] = useState<number | null>(null);
   const dragPreviewRef = useRef<HTMLElement | null>(null);
   const [addresses, setAddresses] = useState<Record<number, string>>({});
@@ -153,7 +164,7 @@ export default function RouteEditor({ editingRoute, onSaved, onClosed }: RouteEd
           })),
         },
       })
-        .then(({ data, error }) => {
+        .then(({ error }) => {
           if (error) {
             console.error("Error saving route:", error);
             return;
@@ -161,6 +172,7 @@ export default function RouteEditor({ editingRoute, onSaved, onClosed }: RouteEd
 
           setRouteNumber("");
           setRouteName("");
+          setRouteDistrict("");
           setAddresses({});
           setAddressCoords({});
           clearWaypoints();
@@ -185,6 +197,7 @@ export default function RouteEditor({ editingRoute, onSaved, onClosed }: RouteEd
 
     setRouteNumber("");
     setRouteName("");
+    setRouteDistrict("");
     setAddresses({});
     setAddressCoords({});
     clearWaypoints();
@@ -210,6 +223,7 @@ export default function RouteEditor({ editingRoute, onSaved, onClosed }: RouteEd
 
       setRouteNumber("");
       setRouteName("");
+      setRouteDistrict("");
       setAddresses({});
       setAddressCoords({});
       clearWaypoints();
@@ -276,23 +290,41 @@ export default function RouteEditor({ editingRoute, onSaved, onClosed }: RouteEd
         </CardHeader>
         <CardContent className="flex max-h-[75vh] flex-col space-y-5 overflow-hidden">
           <div className="space-y-3">
-            <div className="space-y-2">
-              <Label htmlFor="route-number">Route Number</Label>
-              <Input
-                id="route-number"
-                placeholder="e.g., 101"
-                value={routeNumber}
-                onChange={(e) => setRouteNumber(e.target.value)}
-              />
+            <div className="flex items-end gap-3">
+              <div className="w-20 shrink-0 space-y-2">
+                <Label htmlFor="route-number">Route No.</Label>
+                <Input
+                  id="route-number"
+                  placeholder="e.g., 101"
+                  value={routeNumber}
+                  onChange={(e) => setRouteNumber(e.target.value)}
+                />
+              </div>
+              <div className="min-w-0 flex-1 space-y-2">
+                <Label htmlFor="route-name">Route Name</Label>
+                <Input
+                  id="route-name"
+                  placeholder="e.g., Downtown Express"
+                  value={routeName}
+                  onChange={(e) => setRouteName(e.target.value)}
+                />
+              </div>
             </div>
             <div className="space-y-2">
-              <Label htmlFor="route-name">Route Name</Label>
-              <Input
-                id="route-name"
-                placeholder="e.g., Downtown Express"
-                value={routeName}
-                onChange={(e) => setRouteName(e.target.value)}
-              />
+              <Label htmlFor="route-district">Route District</Label>
+              <select
+                id="route-district"
+                value={routeDistrict}
+                onChange={(e) => setRouteDistrict(e.target.value)}
+                className="border-input bg-background ring-offset-background placeholder:text-muted-foreground focus-visible:ring-ring flex h-9 w-full rounded-md border px-3 py-1 text-sm shadow-xs focus-visible:ring-1 focus-visible:outline-hidden disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                <option value="">Select district</option>
+                {ROUTE_DISTRICTS.map((district) => (
+                  <option key={district} value={district}>
+                    {district}
+                  </option>
+                ))}
+              </select>
             </div>
           </div>
 
