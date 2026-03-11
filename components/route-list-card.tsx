@@ -48,44 +48,46 @@ export default function RouteListCard({
             {viewMode === "routes"
               ? (
                 routes.length === 0 ? (
-                  <p className="text-muted-foreground text-sm">No routes available</p>
+                  <p className="text-muted-foreground text-sm text-center">No routes available</p>
                 ) : (
-                  routes.map((route) => {
-                    const routeDistrict = "routeDistrict" in route
-                      ? (route.routeDistrict as string | null | undefined)
-                      : undefined;
+                  routes
+                    .toSorted((a, b) => a.routeNumber.localeCompare(b.routeNumber, undefined, { numeric: true }))
+                    .map((route) => {
+                      const routeDistrict = "routeDistrict" in route
+                        ? (route.routeDistrict as string | null | undefined)
+                        : undefined;
 
-                    return (
-                      <button
-                        key={route.id}
-                        type="button"
-                        onClick={() => onRouteSelect(route)}
-                        className={`hover:bg-accent hover:text-accent-foreground flex w-full items-start gap-2 rounded-md border px-3 py-2 text-left text-sm transition-colors ${
-                          selectedRouteId === route.id ? "border-primary bg-accent" : "border-border"
-                        }`}
-                      >
-                        <span
-                          aria-hidden="true"
-                          className="mt-1 h-2.5 w-2.5 shrink-0 rounded-full"
-                          style={{ backgroundColor: route.routeColor }}
-                        />
-                        <span className="min-w-0 flex-1">
-                          <span className="block truncate">
-                            {route.routeNumber} - {route.routeName}
-                          </span>
-                          {routeDistrict ? (
-                            <span className="text-muted-foreground block truncate text-xs">
-                              {routeDistrict}
+                      return (
+                        <button
+                          key={route.id}
+                          type="button"
+                          onClick={() => onRouteSelect(route)}
+                          className={`hover:bg-accent hover:text-accent-foreground flex w-full items-start gap-2 rounded-md border px-3 py-2 text-left text-sm transition-colors ${
+                            selectedRouteId === route.id ? "border-primary bg-accent" : "border-border"
+                          }`}
+                        >
+                          <span
+                            aria-hidden="true"
+                            className="mt-1 h-2.5 w-2.5 shrink-0 rounded-full"
+                            style={{ backgroundColor: route.routeColor }}
+                          />
+                          <span className="min-w-0 flex-1">
+                            <span className="block truncate">
+                              {route.routeNumber} - {route.routeName}
                             </span>
-                          ) : null}
-                        </span>
-                      </button>
-                    );
-                  })
+                            {routeDistrict ? (
+                              <span className="text-muted-foreground block truncate text-xs">
+                                {routeDistrict}
+                              </span>
+                            ) : null}
+                          </span>
+                        </button>
+                      );
+                    })
                 )
               ) : (
                 regions.length === 0 ? (
-                  <p className="text-muted-foreground text-sm">No regions available</p>
+                  <p className="text-muted-foreground text-sm text-center">No regions available</p>
                 ) : (
                   regions.map((region) => (
                     <button
