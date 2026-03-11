@@ -1,4 +1,5 @@
 import fs from "node:fs";
+import fsp from "node:fs/promises";
 import child_process from "node:child_process";
 import crypto from "node:crypto";
 import * as readline from "node:readline/promises";
@@ -304,6 +305,25 @@ export const timers = {
    */
   wait: (secs) => {
     return new Promise((resolve) => setTimeout(resolve, secs * 1000));
+  },
+};
+
+export const csv = {
+  read: async (location) => {
+    const file = await fsp.readFile(location, "utf-8");
+    const [header, ...data] = file.split(/\r?\n/).map((row) => row.split(","));
+ 
+    const output = [];
+    for (const item of data) {
+      const result = {};
+      for (let i = 0; i < header.length; i++) {
+        result[header[i]] = item[i];
+      }
+ 
+      output.push(result);
+    }
+ 
+    return output;
   },
 };
 
