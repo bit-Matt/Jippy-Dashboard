@@ -13,5 +13,10 @@ export const auth = betterAuth({
     enabled: true,
     autoSignIn: false,
   },
-  plugins: [nextCookies()]
+  user: {
+    additionalFields: {
+      role: { type: "string", required: true },
+    },
+  },
+  plugins: [nextCookies()],
 });

@@ -1,0 +1,1 @@
+ALTER TABLE "regionMarkers" ADD COLUMN "color" text DEFAULT '#000000' NOT NULL;

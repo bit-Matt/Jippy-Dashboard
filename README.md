@@ -6,7 +6,7 @@ This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-
 
 ### Requirements
 
-1. [Docker Engine/Desktop](https://www.docker.com/) with [`docker-compose`](https://docs.docker.com/compose/)
+1. [Docker Engine/Desktop](https://www.docker.com/) with [`docker-compose`](https://docs.docker.com/compose/) (Optional, but recommended)
 2. [Node.js 24 (LTS) or >= 25](https://nodejs.org/en) (Recommended to use LTS versions of Node.js)
 3. [npm >= 11] (Bundled with Node.js)
 
@@ -14,7 +14,7 @@ This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-
 
 > [!IMPORTANT]  
 > Always check if you have other instances of PostgreSQL or Redis in your machine. If so, you can disable
-> container creation by using `--skip-container-build`. Ensure that your local PostgreSQL has [PostGIS](https://postgis.net/documentation/getting_started/)
+> container creation by using `--use-own-deployments`. Ensure that your local PostgreSQL has [PostGIS](https://postgis.net/documentation/getting_started/)
 > extension enabled.
 
 1. Install required dependencies first:
@@ -26,8 +26,18 @@ This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-
 2. Run the automated environment setup script:
 
    ```sh
-   npm run env:generate
+   npm run setup
    ```
+   
+   Note: You can configure only `.env` file without the automatic environment setup. To do so,
+   add: `--use-own-deployments` flag on the setup script:
+
+   ```sh
+   npm run setup -- --use-own-deployments
+   ```
+   
+   However, there will be a manual configuration to be done on your end. Follow the instructions
+   in the output of the script.
 
 3. Then run the development server:
 
@@ -43,23 +53,44 @@ You can start editing the page by modifying `app/page.tsx`. The page auto-update
 
 To learn more about how this project is developed, take a look at the following resources:
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-- [OpenStreetMaps API Documentation](https://www.openstreetmap.org/help)
-- [ShadCn Documentation](https://ui.shadcn.com/)
+- [Next.js Documentation](https://nextjs.org/docs) – learn about Next.js features and API.
+- [Learn Next.js](https://nextjs.org/learn) – an interactive Next.js tutorial.
+- [Shadcn Documentation](https://ui.shadcn.com/)
 - [Drizzle ORM](https://orm.drizzle.team/docs/overview) especially [PostGIS geometry point](https://orm.drizzle.team/docs/guides/postgis-geometry-point) queries.
+- [react-leaflet](https://react-leaflet.js.org/) & [Leaflet](https://leafletjs.com/)
+- [Valhalla](https://valhalla.github.io/valhalla/)
+- [Nominatim](https://nominatim.org/)
 - The official Software Architecture Document
 
 ## Interacting with the API
 
-To interact with the API, You can access `/api/v1/routes` to fetch route data. No APIs are exposed for write operations.
+### Public API Access
 
-Fetching route data requires an token. Developers can create a API token that should be declared in the header at
-each request:
+Public API endpoints are available at `/api/public/`. Where they don't require any authentication. However,
+the data only covers the Philippines.
 
-```
-Authentication: Bearer GENERATED-API-KEY
-```
+It has geocoding endpoints such as:
+
+- `/api/public/osm/nominatim/search`
+- `/api/public/osm/nominatim/reverse`
+- `/api/public/valhalla/*`
+
+They support all parameters that Nominatim and Valhalla supports.
+
+It also supports all parameters that Valhalla Routing API supports.
+
+These have IP-based rate limitation, so please keep the requests on this public API to a minimum of 1 per
+second.
+
+### Restricted APIs
+
+Restricted APIs are available at `/api/restricted/`. Where they require authentication or an API key to access.
+API keys are generated only for the application itself. It has no rate-limits but is, however, more restrictive
+than what the public API provides. This only covers the Iloilo area.
+
+- `/api/restricted/osm/nominatim/search` (Only supports `q` parameter)
+- `/api/restricted/osm/nominatim/reverse` (Only supports `lat` and `lon` parameters)
+- `/api/restricted/valhalla/*`
 
 ## Deploy on Vercel
 

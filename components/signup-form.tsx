@@ -1,13 +1,13 @@
-import {type SyntheticEvent, useState} from "react";
-import {configureUser, type User} from "@/lib/accounts";
+import {type ComponentProps, type SyntheticEvent, useState} from "react";
+import {configureUser, type UserCredentials} from "@/lib/accounts";
 import {redirect, RedirectType} from "next/navigation";
 
-import {Button} from "@/components/ui/button"
-import {Card, CardContent, CardDescription, CardHeader, CardTitle,} from "@/components/ui/card"
-import {Field, FieldDescription, FieldGroup, FieldLabel,} from "@/components/ui/field"
-import {Input} from "@/components/ui/input"
+import {Button} from "@/components/ui/button";
+import {Card, CardContent, CardDescription, CardHeader, CardTitle} from "@/components/ui/card";
+import {Field, FieldDescription, FieldGroup, FieldLabel} from "@/components/ui/field";
+import {Input} from "@/components/ui/input";
 
-export function SignupForm({ ...props }: React.ComponentProps<typeof Card>) {
+export function SignupForm({ ...props }: ComponentProps<typeof Card>) {
   const [form, setForm] = useState<StateType>({
     fullName: "",
     email: "",
@@ -20,7 +20,7 @@ export function SignupForm({ ...props }: React.ComponentProps<typeof Card>) {
       ...l,
       [field]: (e.target as HTMLInputElement).value,
     }));
-  }
+  };
 
   const submitForm = async (e: SyntheticEvent) => {
     e.preventDefault();
@@ -116,7 +116,7 @@ export function SignupForm({ ...props }: React.ComponentProps<typeof Card>) {
         </form>
       </CardContent>
     </Card>
-  )
+  );
 }
 
-type StateType = User & { confirmPassword: string };
+type StateType = UserCredentials & { confirmPassword: string };

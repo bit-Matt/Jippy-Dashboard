@@ -124,3 +124,10 @@
     @apply bg-background text-foreground;
   }
 }
+
+/* Hide Leaflet Routing Machine control widgets (itinerary/collapse UI) from the map view. */
+.leaflet-routing-container,
+.leaflet-routing-container-hide,
+.leaflet-routing-collapse-btn {
+  display: none !important;
+}

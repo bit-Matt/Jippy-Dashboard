@@ -6,7 +6,7 @@ import type {
   ValidationResult,
   ValidationTypes,
   ValidatorFormatterMetaData,
-} from "./types";
+} from "@/lib/validator/types";
 
 export class Validator {
   private readonly _formatters: Record<string, ValidatorFormatterMetaData<ValidationTypes>> = {};
