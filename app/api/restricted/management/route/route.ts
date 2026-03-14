@@ -80,8 +80,7 @@ export async function POST(req: NextRequest) {
     return ResponseComposer.compose(StatusCodes.Status201Created)
       .setBody(result)
       .orchestrate();
-  } catch (e) {
-    console.error(e);
+  } catch {
     return ExceptionResponseComposer.compose(StatusCodes.Status500InternalServerError, [{ message: "Internal Server Error." }])
       .orchestrate();
   }
