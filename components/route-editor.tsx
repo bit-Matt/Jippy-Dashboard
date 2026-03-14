@@ -386,11 +386,11 @@ export default function RouteEditor({ editingRoute, onSaved, onClosed }: RouteEd
 
           <div className="space-y-2">
             <Label>Direction</Label>
-            <div className="bg-muted inline-flex rounded-md p-0.5">
+            <div className="bg-muted inline-flex rounded-md p-0.5 w-full">
               <button
                 type="button"
                 onClick={() => setActiveDirection("goingTo")}
-                className={`rounded px-2 py-1 text-xs transition-colors ${
+                className={`grow rounded px-2 py-1 text-xs transition-colors ${
                   activeDirection === "goingTo" ? "bg-background text-foreground shadow-xs" : "text-muted-foreground"
                 }`}
               >
@@ -399,7 +399,7 @@ export default function RouteEditor({ editingRoute, onSaved, onClosed }: RouteEd
               <button
                 type="button"
                 onClick={() => setActiveDirection("goingBack")}
-                className={`rounded px-2 py-1 text-xs transition-colors ${
+                className={`grow rounded px-2 py-1 text-xs transition-colors ${
                   activeDirection === "goingBack" ? "bg-background text-foreground shadow-xs" : "text-muted-foreground"
                 }`}
               >
