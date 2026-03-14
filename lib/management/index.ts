@@ -67,29 +67,29 @@ export async function addRoute(params: AddRouteParameters): Promise<RouteObject>
     if (!route) return tx.rollback();
 
     // Then generate the route sequences
-    const sequences = await tx
-      .insert(routeSequences)
-      .values(
-        [
-          ...params.points.goingTo.map(m => ({
-            routeId: route.id,
-            type: "going_to",
-            sequenceNumber: m.sequence,
-            address: m.address,
-            point: [m.point[1], m.point[0]] as [number, number],
-          })),
-          ...params.points.goingBack.map(m => ({
-            routeId: route.id,
-            type: "going_back",
-            sequenceNumber: m.sequence,
-            address: m.address,
-            point: [m.point[1], m.point[0]] as [number, number],
-          })),
-        ],
-      )
-      .returning();
-    if (sequences.length === (params.points.goingTo.length + params.points.goingBack.length)) {
-      return tx.rollback();
+    const newPoints = [
+      ...params.points.goingTo.map(m => ({
+        routeId: route.id,
+        sequenceType: "going_to" as const,
+        sequenceNumber: m.sequence,
+        address: m.address,
+        point: [m.point[1], m.point[0]] as [number, number],
+      })),
+      ...params.points.goingBack.map(m => ({
+        routeId: route.id,
+        sequenceType: "going_back" as const,
+        sequenceNumber: m.sequence,
+        address: m.address,
+        point: [m.point[1], m.point[0]] as [number, number],
+      })),
+    ];
+
+    let sequences: typeof routeSequences.$inferSelect[] = [];
+    if (newPoints.length > 0) {
+      sequences = await tx
+        .insert(routeSequences)
+        .values(newPoints)
+        .returning();
     }
 
     return {
