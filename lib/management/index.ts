@@ -1,90 +1,58 @@
-import { asc, eq } from "drizzle-orm";
+import { asc, eq, sql } from "drizzle-orm";
 
 import { db } from "@/lib/db";
 import { region, regionSequences, regionStations, routes, routeSequences } from "@/lib/db/schema";
 import { Failure, FailureCodes, Success } from "@/lib/oneOf/response-types";
 
 export async function getAllRoutes() {
-  const rows = await db
+  const result = await db
     .select({
-      // Route Fields
-      routeId: routes.id,
+      id: routes.id,
       routeNumber: routes.routeNumber,
       routeName: routes.routeName,
       routeColor: routes.routeColor,
 
-      // Sequence Fields
-      pointId: routeSequences.id,
-      sequence: routeSequences.sequenceNumber,
-      address: routeSequences.address,
-      sequencePoints: routeSequences.point,
+      // Build the nested { goingTo: [], goingBack: [] } structure
+      points: sql<{ goingTo: PointObject[]; goingBack: PointObject[] }>`
+        json_build_object(
+          'goingTo', COALESCE(
+            json_agg(
+              json_build_object(
+                'id', ${routeSequences.id},
+                'sequence', ${routeSequences.sequenceNumber},
+                'address', ${routeSequences.address},
+                -- Manually parse the geometry into a JSON [x, y] array
+                'point', json_build_array(
+                  ST_Y(${routeSequences.point}),
+                  ST_X(${routeSequences.point})
+                )
+              ) ORDER BY ${routeSequences.sequenceNumber} ASC
+            ) FILTER (WHERE ${routeSequences.sequenceType} = 'going_to'), '[]'::json
+          ),
+          'goingBack', COALESCE(
+            json_agg(
+              json_build_object(
+                'id', ${routeSequences.id},
+                'sequence', ${routeSequences.sequenceNumber},
+                'address', ${routeSequences.address},
+                -- Again, manually parse the geometry into a JSON [x, y] array
+                'point', json_build_array(
+                  ST_Y(${routeSequences.point}),
+                  ST_X(${routeSequences.point})
+                )
+              ) ORDER BY ${routeSequences.sequenceNumber} ASC
+            ) FILTER (WHERE ${routeSequences.sequenceType} = 'going_back'), '[]'::json
+          )
+        )
+      `,
     })
     .from(routes)
     .leftJoin(routeSequences, eq(routes.id, routeSequences.routeId))
-    .orderBy(asc(routes.routeNumber), asc(routeSequences.sequenceNumber));
-
-  // Transform flat rows
-  const result = rows.reduce((acc, row) => {
-    let route = acc.find(r => r.id === row.routeId);
-
-    if (!route) {
-      route = {
-        id: row.routeId,
-        routeNumber: row.routeNumber,
-        routeName: row.routeName,
-        routeColor: row.routeColor,
-        points: [],
-      };
-
-      acc.push(route);
-    }
-
-    if (row.pointId) {
-      route.points.push({
-        id: row.pointId,
-        sequence: row.sequence!,
-        address: row.address!,
-        point: [row.sequencePoints![1], row.sequencePoints![0]] as [number, number],
-      });
-    }
-
-    return acc;
-  }, [] as RouteObject[]);
+    .groupBy(routes.id, routes.routeNumber, routes.routeName, routes.routeColor);
 
   return result;
 }
 
-/**
- * Creates a new route and its ordered sequence of points atomically.
- *
- * Inserts the route record first, then inserts one route-sequence row per point
- * within the same database transaction. If any insert step fails, the transaction
- * is rolled back and no partial data should be persisted.
- *
- * Notes:
- * - Points are persisted in the database as `[lng, lat]`.
- * - Returned points are mapped back as `[lat, lng]` for the API response.
- *
- * @param {AddRouteParameters} params
- *   Input payload used to create the route and its route-sequence points.
- * @param {string} params.routeNumber
- *   Human-readable/unique-ish route identifier (e.g., "42A").
- * @param {string} params.routeName
- *   Display name of the route.
- * @param {string} params.routeColor
- *   Route color (typically a CSS color string such as `#RRGGBB`).
- * @param {Array<{sequence:number,lat:number,lng:number,address:string}>} params.points
- *   Ordered list of points to associate with this route.
- *   `sequence` is stored as `sequenceNumber` in the DB.
- *   Coordinates are provided as `lat`/`lng` but stored as `[lng, lat]`.
- *
- * @returns {Promise<RouteObject>}
- *   Resolves with the created route and its created points. Each returned `point`
- *   is a `[lat, lng]` tuple.
- *
- * @throws {unknown}
- *   May throw if the underlying database operation fails or the transaction is aborted.
- */
 export async function addRoute(params: AddRouteParameters): Promise<RouteObject> {
   return db.transaction(async tx => {
     // Create the route first
@@ -102,45 +70,55 @@ export async function addRoute(params: AddRouteParameters): Promise<RouteObject>
     const sequences = await tx
       .insert(routeSequences)
       .values(
-        params.points.map((point) => ({
-          routeId: route.id,
-          sequenceNumber: point.sequence,
-          address: point.address,
-          point: [point.point[1], point.point[0]] as [number, number],
-        }))).returning();
-    if (sequences.length !== params.points.length) return tx.rollback();
+        [
+          ...params.points.goingTo.map(m => ({
+            routeId: route.id,
+            type: "going_to",
+            sequenceNumber: m.sequence,
+            address: m.address,
+            point: [m.point[1], m.point[0]] as [number, number],
+          })),
+          ...params.points.goingBack.map(m => ({
+            routeId: route.id,
+            type: "going_back",
+            sequenceNumber: m.sequence,
+            address: m.address,
+            point: [m.point[1], m.point[0]] as [number, number],
+          })),
+        ],
+      )
+      .returning();
+    if (sequences.length === (params.points.goingTo.length + params.points.goingBack.length)) {
+      return tx.rollback();
+    }
 
     return {
       id: route.id,
       routeNumber: route.routeNumber,
       routeName: route.routeName,
       routeColor: route.routeColor,
-      points: sequences.map(x => ({
-        id: x.id,
-        sequence: x.sequenceNumber,
-        address: x.address,
-        point: [x.point[1], x.point[0]],
-      })),
+      points: {
+        goingTo: sequences
+          .filter(x => x.sequenceType === "going_to")
+          .map(x => ({
+            id: x.id,
+            address: x.address,
+            sequence: x.sequenceNumber,
+            point: x.point,
+          })),
+        goingBack: sequences
+          .filter(x => x.sequenceType === "going_back")
+          .map(x => ({
+            id: x.id,
+            address: x.address,
+            sequence: x.sequenceNumber,
+            point: x.point,
+          })),
+      },
     };
   });
 }
 
-/**
- * Deletes a route by its ID.
- *
- * Performs a lookup to confirm the route exists before deleting it. Returns a
- * typed `Failure` when the route does not exist or when the delete operation
- * fails, otherwise returns `Success(null)` on completion.
- *
- * @param {string} routeId
- *   The unique identifier of the route to remove.
- *
- * @returns {Promise<Failure<string> | Success<null>>}
- *   A discriminated result:
- *   - `Success(null)` when the route was deleted successfully.
- *   - `Failure(FailureCodes.ResourceNotFound, "Route not found")` when no route exists for the given ID.
- *   - `Failure(FailureCodes.Fatal, "Failed to delete route")` on unexpected/database errors.
- */
 export async function removeRoute(routeId: string): Promise<Failure<string> | Success<null>> {
   try {
     const [route] = await db
@@ -159,112 +137,115 @@ export async function removeRoute(routeId: string): Promise<Failure<string> | Su
   }
 }
 
-/**
- * Updates a route and its sequence points atomically.
- *
- * - Route fields (`routeNumber`, `routeName`, `routeColor`) are optional and updated only when provided.
- * - If `points` is provided, the existing route sequence rows are replaced with the incoming ordered list.
- *   This guarantees reordering/add/delete behavior in one transaction.
- * - Incoming points are `[lat, lng]`; points are persisted as `[lng, lat]` for PostGIS.
- *
- * @param routeId Route identifier.
- * @param params Partial update payload.
- * @returns Failure or updated RouteObject.
- */
 export async function updateRoute(
   routeId: string,
   params: UpdateRouteParameters,
 ): Promise<Failure<string> | Success<RouteObject>> {
   try {
-    const [existingRoute] = await db
-      .select({ id: routes.id })
-      .from(routes)
-      .where(eq(routes.id, routeId))
-      .limit(1);
-    if (!existingRoute) {
-      return new Failure(FailureCodes.ResourceNotFound, "Route not found");
-    }
-
-    const updated = await db.transaction(async tx => {
-      const routePatch: Partial<{
-        routeNumber: string;
-        routeName: string;
-        routeColor: string;
-      }> = {};
-
-      if (params.routeNumber !== undefined) routePatch.routeNumber = params.routeNumber;
-      if (params.routeName !== undefined) routePatch.routeName = params.routeName;
-      if (params.routeColor !== undefined) routePatch.routeColor = params.routeColor;
+    const finalResult = await db.transaction(async (tx) => {
+      // Handle Route Parent Data
+      let routeData;
+      const routePatch = {
+        ...(params.routeNumber !== undefined && { routeNumber: params.routeNumber }),
+        ...(params.routeName !== undefined && { routeName: params.routeName }),
+        ...(params.routeColor !== undefined && { routeColor: params.routeColor }),
+      };
 
       if (Object.keys(routePatch).length > 0) {
-        await tx
+        // Update and grab the fresh row
+        [routeData] = await tx
           .update(routes)
           .set(routePatch)
-          .where(eq(routes.id, routeId));
+          .where(eq(routes.id, routeId))
+          .returning();
+      } else {
+        // If we didn't update the parent, just fetch it once to ensure it exists
+        [routeData] = await tx
+          .select()
+          .from(routes)
+          .where(eq(routes.id, routeId))
+          .limit(1);
       }
 
-      if (params.points !== undefined) {
-        await tx
-          .delete(routeSequences)
-          .where(eq(routeSequences.routeId, routeId));
+      if (!routeData) {
+        tx.rollback();
+      }
 
-        if (params.points.length > 0) {
-          const inserted = await tx
-            .insert(routeSequences)
-            .values(
-              params.points.map((point) => ({
-                routeId,
-                sequenceNumber: point.sequence,
-                address: point.address ?? "Unknown Address",
-                point: [point.point[1], point.point[0]] as [number, number],
-              })),
-            )
-            .returning({ id: routeSequences.id });
+      // Handle Sequences Data
+      const goingTo: PointObject[] = [];
+      const goingBack: PointObject[] = [];
 
-          if (inserted.length !== params.points.length) {
-            return tx.rollback();
+      if (params.points) {
+        // Delete old points
+        await tx.delete(routeSequences).where(eq(routeSequences.routeId, routeId));
+
+        const totalExpected = params.points.goingTo.length + params.points.goingBack.length;
+        if (totalExpected > 0) {
+          const newPoints = [
+            ...params.points.goingTo.map(m => ({
+              routeId,
+              sequenceType: "going_to" as const,
+              sequenceNumber: m.sequence,
+              address: m.address,
+              point: [m.point[1], m.point[0]] as [number, number],
+            })),
+            ...params.points.goingBack.map(m => ({
+              routeId,
+              sequenceType: "going_back" as const,
+              sequenceNumber: m.sequence,
+              address: m.address,
+              point: [m.point[1], m.point[0]] as [number, number],
+            })),
+          ];
+
+          const insertedSeqs = await tx.insert(routeSequences).values(newPoints).returning();
+          for (const seq of insertedSeqs) {
+            const pointObj: PointObject = {
+              id: seq.id,
+              sequence: seq.sequenceNumber,
+              address: seq.address,
+              point: seq.point as [number, number],
+            };
+            if (seq.sequenceType === "going_to") goingTo.push(pointObj);
+            else goingBack.push(pointObj);
+          }
+        }
+      } else {
+        // If points weren't updated, we MUST fetch the existing ones to fulfill the return type
+        const existingSeqs = await tx.query.routeSequences.findMany({
+          where: eq(routeSequences.routeId, routeId),
+          orderBy: (seq, { asc }) => [asc(seq.sequenceNumber)],
+        });
+
+        for (const seq of existingSeqs) {
+          const pointObj: PointObject = {
+            id: seq.id,
+            sequence: seq.sequenceNumber,
+            address: seq.address,
+            point: seq.point as [number, number],
+          };
+          if (seq.sequenceType === "going_to") {
+            goingTo.push(pointObj);
+          } else {
+            goingBack.push(pointObj);
           }
         }
       }
 
-      const rows = await tx
-        .select({
-          routeId: routes.id,
-          routeNumber: routes.routeNumber,
-          routeName: routes.routeName,
-          routeColor: routes.routeColor,
-          pointId: routeSequences.id,
-          sequence: routeSequences.sequenceNumber,
-          address: routeSequences.address,
-          sequencePoints: routeSequences.point,
-        })
-        .from(routes)
-        .leftJoin(routeSequences, eq(routes.id, routeSequences.routeId))
-        .where(eq(routes.id, routeId))
-        .orderBy(asc(routeSequences.sequenceNumber));
+      return {
+        id: routeData.id,
+        routeNumber: routeData.routeNumber,
+        routeName: routeData.routeName,
+        routeColor: routeData.routeColor,
+        points: {
+          goingTo,
+          goingBack,
+        },
+      } as RouteObject;
 
-      const base = rows[0];
-      if (!base) return tx.rollback();
-
-      const route: RouteObject = {
-        id: base.routeId,
-        routeNumber: base.routeNumber,
-        routeName: base.routeName,
-        routeColor: base.routeColor,
-        points: rows
-          .filter((row) => !!row.pointId)
-          .map((row) => ({
-            id: row.pointId!,
-            sequence: row.sequence!,
-            address: row.address!,
-            point: [row.sequencePoints![1], row.sequencePoints![0]],
-          })),
-      };
-
-      return route;
     });
 
-    return new Success(updated);
+    return new Success(finalResult);
   } catch {
     return new Failure(FailureCodes.Fatal, "Failed to update route");
   }
@@ -547,26 +528,31 @@ export async function updateRegion(
   }
 }
 
+export interface PointObject {
+  id: string;
+  sequence: number;
+  address: string;
+  point: [number, number];
+}
+
 export interface AddRouteParameters {
   routeNumber: string;
   routeName: string;
   routeColor: string;
-  points: Array<{
-    sequence: number;
-    address: string;
-    point: [number, number];
-  }>;
+  points: {
+    goingTo: Array<Omit<PointObject, "id">>;
+    goingBack: Array<Omit<PointObject, "id">>;
+  }
 }
 
 export interface UpdateRouteParameters {
   routeNumber?: string;
   routeName?: string;
   routeColor?: string;
-  points?: Array<{
-    sequence: number;
-    address?: string;
-    point: [number, number];
-  }>;
+  points?: {
+    goingTo: Array<Omit<PointObject, "id">>;
+    goingBack: Array<Omit<PointObject, "id">>;
+  };
 }
 
 export interface RouteObject {
@@ -574,12 +560,10 @@ export interface RouteObject {
   routeNumber: string;
   routeName: string;
   routeColor: string;
-  points: Array<{
-    id: string;
-    sequence: number;
-    address: string;
-    point: [number, number];
-  }>;
+  points: {
+    goingTo: Array<PointObject>;
+    goingBack: Array<PointObject>;
+  }
 }
 
 export interface RegionObject {

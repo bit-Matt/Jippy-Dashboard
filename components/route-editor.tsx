@@ -1,6 +1,6 @@
 "use client";
 
-import { Check, MapPin, Trash2, X } from "lucide-react";
+import { MapPin, Trash2, X } from "lucide-react";
 import { useState, useEffect, useRef, type DragEvent } from "react";
 
 import { Card, CardContent, CardHeader} from "@/components/ui/card";
@@ -13,17 +13,30 @@ import {
   InputGroupInput,
 } from "@/components/ui/input-group";
 import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 import { $fetch } from "@/lib/http/client";
 import { nominatim } from "@/lib/osm/client/nominatim";
 import type { AllResponse } from "@/components/app-sidebar";
 import { useRouteEditor } from "@/contexts/RouteEditorContext";
 
-const COLORS = [
-  "#fff100", "#ff8c00", "#e81123",
-  "#ec008c", "#68217a", "#00188f",
-  "#00bcf2", "#00b294", "#009e49",
-  "#bad80a",
+const ROUTE_COLORS = [
+  { label: "Sun Yellow", value: "#fff100" },
+  { label: "Orange", value: "#ff8c00" },
+  { label: "Red", value: "#e81123" },
+  { label: "Magenta", value: "#ec008c" },
+  { label: "Purple", value: "#68217a" },
+  { label: "Navy", value: "#00188f" },
+  { label: "Sky", value: "#00bcf2" },
+  { label: "Teal", value: "#00b294" },
+  { label: "Green", value: "#009e49" },
+  { label: "Lime", value: "#bad80a" },
 ];
 
 const ROUTE_DISTRICTS = [
@@ -47,13 +60,17 @@ export default function RouteEditor({ editingRoute, onSaved, onClosed }: RouteEd
   const [loadingAddresses, setLoadingAddresses] = useState<Set<number>>(new Set());
   const {
     selectedColor,
+    activeDirection,
+    waypointCounts,
     setSelectedColor,
+    setActiveDirection,
     waypoints,
     activePointIndex,
     setActivePointIndex,
     removeWaypoint,
     reorderWaypoints,
     clearWaypoints,
+    clearAllWaypoints,
     saveRoute,
     stopCreating,
   } = useRouteEditor();
@@ -67,12 +84,19 @@ export default function RouteEditor({ editingRoute, onSaved, onClosed }: RouteEd
     const initialAddresses: Record<number, string> = {};
     const initialAddressCoords: Record<number, string> = {};
 
-    [...editingRoute.points]
-      .sort((a, b) => a.sequence - b.sequence)
-      .forEach((point, index) => {
-        initialAddresses[index] = point.address;
-        initialAddressCoords[index] = `${point.point[0]},${point.point[1]}`;
-      });
+    const sortedGoingTo = [...editingRoute.points.goingTo].sort((a, b) => a.sequence - b.sequence);
+    const sortedGoingBack = [...editingRoute.points.goingBack].sort((a, b) => a.sequence - b.sequence);
+
+    sortedGoingTo.forEach((point, index) => {
+      initialAddresses[index] = point.address;
+      initialAddressCoords[index] = `${point.point[0]},${point.point[1]}`;
+    });
+
+    sortedGoingBack.forEach((point, index) => {
+      const mappedId = sortedGoingTo.length + index;
+      initialAddresses[mappedId] = point.address;
+      initialAddressCoords[mappedId] = `${point.point[0]},${point.point[1]}`;
+    });
 
     setAddresses(initialAddresses);
     setAddressCoords(initialAddressCoords);
@@ -157,11 +181,18 @@ export default function RouteEditor({ editingRoute, onSaved, onClosed }: RouteEd
           routeNumber: routeNumber,
           routeName: routeName,
           routeColor: selectedColor,
-          points: route.map(x => ({
-            sequence: x.sequence,
-            address: addresses[x.id] ?? "Unknown Address",
-            point: [x.lat, x.lng],
-          })),
+          points: {
+            goingTo: route.goingTo.map(x => ({
+              sequence: x.sequence,
+              address: addresses[x.id] ?? "Unknown Address",
+              point: [x.lat, x.lng] as [number, number],
+            })),
+            goingBack: route.goingBack.map(x => ({
+              sequence: x.sequence,
+              address: addresses[x.id] ?? "Unknown Address",
+              point: [x.lat, x.lng] as [number, number],
+            })),
+          },
         },
       })
         .then(({ error }) => {
@@ -175,7 +206,7 @@ export default function RouteEditor({ editingRoute, onSaved, onClosed }: RouteEd
           setRouteDistrict("");
           setAddresses({});
           setAddressCoords({});
-          clearWaypoints();
+          clearAllWaypoints();
           stopCreating();
           onSaved?.();
           onClosed?.();
@@ -187,7 +218,7 @@ export default function RouteEditor({ editingRoute, onSaved, onClosed }: RouteEd
   };
 
   const handleCloseEditor = () => {
-    if (waypoints.length > 0) {
+    if ((waypointCounts.goingTo + waypointCounts.goingBack) > 0) {
       const shouldDiscard = window.confirm(
         "You have waypoint items in this editor. Discard and close?",
       );
@@ -200,7 +231,7 @@ export default function RouteEditor({ editingRoute, onSaved, onClosed }: RouteEd
     setRouteDistrict("");
     setAddresses({});
     setAddressCoords({});
-    clearWaypoints();
+    clearAllWaypoints();
     stopCreating();
     onClosed?.();
   };
@@ -226,7 +257,7 @@ export default function RouteEditor({ editingRoute, onSaved, onClosed }: RouteEd
       setRouteDistrict("");
       setAddresses({});
       setAddressCoords({});
-      clearWaypoints();
+      clearAllWaypoints();
       stopCreating();
       onSaved?.();
       onClosed?.();
@@ -264,6 +295,8 @@ export default function RouteEditor({ editingRoute, onSaved, onClosed }: RouteEd
     setDraggedWaypointId(null);
   };
 
+  const canSave = waypointCounts.goingTo >= 2 && waypointCounts.goingBack >= 2;
+
   return (
     <div className="absolute top-2 left-6 z-9999 w-1/4">
       <Card>
@@ -273,7 +306,7 @@ export default function RouteEditor({ editingRoute, onSaved, onClosed }: RouteEd
             <Button
               size="sm"
               onClick={handleSaveRoute}
-              disabled={waypoints.length < 2 || !routeNumber.trim() || !routeName.trim()}
+              disabled={!canSave || !routeNumber.trim() || !routeName.trim()}
             >
               Save
             </Button>
@@ -330,22 +363,48 @@ export default function RouteEditor({ editingRoute, onSaved, onClosed }: RouteEd
 
           <div className="space-y-2">
             <Label>Route Color</Label>
-            <div className="flex flex-wrap gap-2">
-              {COLORS.map((color) => (
-                <button
-                  key={color}
-                  onClick={() => setSelectedColor(color)}
-                  className="relative h-10 w-10 rounded-full border-2 transition-transform hover:scale-105"
-                  style={{
-                    backgroundColor: color,
-                    borderColor: selectedColor === color ? "#111827" : "#e5e7eb",
-                  }}
-                >
-                  {selectedColor === color && (
-                    <Check className="absolute inset-0 m-auto h-5 w-5 text-white drop-shadow-lg" />
-                  )}
-                </button>
-              ))}
+            <Select value={selectedColor} onValueChange={setSelectedColor}>
+              <SelectTrigger className="w-full">
+                <SelectValue placeholder="Select route color" />
+              </SelectTrigger>
+              <SelectContent>
+                {ROUTE_COLORS.map((color) => (
+                  <SelectItem key={color.value} value={color.value}>
+                    <span className="flex items-center gap-2">
+                      <span
+                        aria-hidden="true"
+                        className="h-2.5 w-2.5 rounded-full"
+                        style={{ backgroundColor: color.value }}
+                      />
+                      {color.label}
+                    </span>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="space-y-2">
+            <Label>Direction</Label>
+            <div className="bg-muted inline-flex rounded-md p-0.5">
+              <button
+                type="button"
+                onClick={() => setActiveDirection("goingTo")}
+                className={`rounded px-2 py-1 text-xs transition-colors ${
+                  activeDirection === "goingTo" ? "bg-background text-foreground shadow-xs" : "text-muted-foreground"
+                }`}
+              >
+                Going To City ({waypointCounts.goingTo})
+              </button>
+              <button
+                type="button"
+                onClick={() => setActiveDirection("goingBack")}
+                className={`rounded px-2 py-1 text-xs transition-colors ${
+                  activeDirection === "goingBack" ? "bg-background text-foreground shadow-xs" : "text-muted-foreground"
+                }`}
+              >
+                Going Back ({waypointCounts.goingBack})
+              </button>
             </div>
           </div>
 
@@ -371,7 +430,7 @@ export default function RouteEditor({ editingRoute, onSaved, onClosed }: RouteEd
               >
                 <div className="flex items-center justify-between">
                   <span className="text-sm font-medium">
-                    Waypoint {index + 1}
+                    {activeDirection === "goingTo" ? "Going To" : "Going Back"} Waypoint {index + 1}
                   </span>
                   <Button
                     size="sm"
@@ -422,12 +481,12 @@ export default function RouteEditor({ editingRoute, onSaved, onClosed }: RouteEd
               }}
               disabled={waypoints.length === 0}
             >
-              Clear Waypoints
+              Clear Active Direction
             </Button>
           )}
 
           <p className="text-xs text-muted-foreground">
-            Click map to add points. Drag waypoint cards up or down to reorder sequence. Points are locked after placement; click a waypoint card to enable dragging that point on the map. You need at least 2 waypoints to save.
+            Use the direction tabs to edit each path independently. New map clicks are added to the active direction. Each direction needs at least 2 waypoints to save.
           </p>
         </CardContent>
       </Card>

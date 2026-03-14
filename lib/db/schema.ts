@@ -94,6 +94,8 @@ export const routes = pgTable(
   },
 );
 
+export const sequenceType = pgEnum("route_sequence_type", ["going_to", "going_back"]);
+
 export const routeSequences = pgTable(
   "routeSequences",
   {
@@ -103,6 +105,9 @@ export const routeSequences = pgTable(
     routeId: text("route_id")
       .notNull()
       .references(() => routes.id, { onDelete: "cascade" }),
+    sequenceType: sequenceType("sequence_type")
+      .default("going_to")
+      .notNull(),
     sequenceNumber: integer("sequence_number").notNull(),
     address: text("address")
       .default("Unknown Address")

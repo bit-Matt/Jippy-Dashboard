@@ -11,25 +11,42 @@ export interface Waypoint {
   address?: string;
 }
 
+export type RouteDirection = "goingTo" | "goingBack";
+
+export interface RouteDirectionalWaypoints {
+  goingTo: Waypoint[];
+  goingBack: Waypoint[];
+}
+
 export interface RouteEditorContextType {
   // State
   isCreating: boolean;
   selectedColor: string;
+  activeDirection: RouteDirection;
+  waypointCounts: Record<RouteDirection, number>;
   waypoints: Waypoint[];
   activePointIndex: number | null;
 
   // Actions
   startCreating: () => void;
-  startEditing: (payload: { color: string; points: Array<{ point: [number, number] }> }) => void;
+  startEditing: (payload: {
+    color: string;
+    points: {
+      goingTo: Array<{ point: [number, number] }>;
+      goingBack: Array<{ point: [number, number] }>;
+    };
+  }) => void;
   stopCreating: () => void;
   setSelectedColor: (color: string) => void;
+  setActiveDirection: (direction: RouteDirection) => void;
   addWaypoint: (lat: number, lng: number) => void;
   removeWaypoint: (id: number) => void;
   reorderWaypoints: (draggedId: number, targetId: number) => void;
   updateWaypoint: (id: number, lat: number, lng: number) => void;
   clearWaypoints: () => void;
+  clearAllWaypoints: () => void;
   setActivePointIndex: (index: number | null) => void;
-  saveRoute: () => Waypoint[] | null;
+  saveRoute: () => RouteDirectionalWaypoints | null;
 
   // Map integration
   mapInvokeCalls: {
@@ -53,8 +70,15 @@ export function RouteEditorProvider({
 }) {
   const [isCreating, setIsCreating] = useState(false);
   const [selectedColor, setSelectedColor] = useState("#fff100");
-  const [waypoints, setWaypoints] = useState<Waypoint[]>([]);
-  const [activePointIndex, setActivePointIndex] = useState<number | null>(null);
+  const [activeDirection, setActiveDirection] = useState<RouteDirection>("goingTo");
+  const [waypointsByDirection, setWaypointsByDirection] = useState<RouteDirectionalWaypoints>({
+    goingTo: [],
+    goingBack: [],
+  });
+  const [activePointByDirection, setActivePointByDirection] = useState<Record<RouteDirection, number | null>>({
+    goingTo: null,
+    goingBack: null,
+  });
   const [waypointCounter, setWaypointCounter] = useState(0);
 
   const [mapCallbacks, setMapCallbacks] = useState<{
@@ -67,15 +91,20 @@ export function RouteEditorProvider({
 
   const startCreating = useCallback(() => {
     setIsCreating(true);
-    setWaypoints([]);
+    setActiveDirection("goingTo");
+    setWaypointsByDirection({ goingTo: [], goingBack: [] });
     setWaypointCounter(0);
-    setActivePointIndex(null);
+    setActivePointByDirection({ goingTo: null, goingBack: null });
   }, []);
 
-  const startEditing = useCallback((payload: { color: string; points: Array<{ point: [number, number] }> }) => {
-    const sortedPoints = [...payload.points];
-
-    const mappedWaypoints: Waypoint[] = sortedPoints.map((point, index) => ({
+  const startEditing = useCallback((payload: {
+    color: string;
+    points: {
+      goingTo: Array<{ point: [number, number] }>;
+      goingBack: Array<{ point: [number, number] }>;
+    };
+  }) => {
+    const mappedGoingTo: Waypoint[] = payload.points.goingTo.map((point, index) => ({
       id: index,
       lat: point.point[0],
       lng: point.point[1],
@@ -83,91 +112,145 @@ export function RouteEditorProvider({
       sequence: index,
     }));
 
+    const mappedGoingBack: Waypoint[] = payload.points.goingBack.map((point, index) => ({
+      id: mappedGoingTo.length + index,
+      lat: point.point[0],
+      lng: point.point[1],
+      color: payload.color,
+      sequence: index,
+    }));
+
     setIsCreating(true);
+    setActiveDirection("goingTo");
     setSelectedColor(payload.color);
-    setWaypoints(mappedWaypoints);
-    setWaypointCounter(mappedWaypoints.length);
-    setActivePointIndex(mappedWaypoints.length > 0 ? mappedWaypoints[0].id : null);
+    setWaypointsByDirection({
+      goingTo: mappedGoingTo,
+      goingBack: mappedGoingBack,
+    });
+    setWaypointCounter(mappedGoingTo.length + mappedGoingBack.length);
+    setActivePointByDirection({
+      goingTo: mappedGoingTo.length > 0 ? mappedGoingTo[0].id : null,
+      goingBack: mappedGoingBack.length > 0 ? mappedGoingBack[0].id : null,
+    });
   }, []);
 
   const stopCreating = useCallback(() => {
     setIsCreating(false);
-    setWaypoints([]);
-    setActivePointIndex(null);
+    setActiveDirection("goingTo");
+    setWaypointsByDirection({ goingTo: [], goingBack: [] });
+    setActivePointByDirection({ goingTo: null, goingBack: null });
+    setWaypointCounter(0);
   }, []);
 
   const addWaypoint = useCallback(
     (lat: number, lng: number) => {
+      const activeWaypoints = waypointsByDirection[activeDirection];
       const newWaypoint: Waypoint = {
         id: waypointCounter,
         lat,
         lng,
         color: selectedColor,
-        sequence: waypoints.length,
+        sequence: activeWaypoints.length,
       };
-      setWaypoints((prev) => [...prev, newWaypoint]);
+
+      setWaypointsByDirection((prev) => ({
+        ...prev,
+        [activeDirection]: [...prev[activeDirection], newWaypoint],
+      }));
       setWaypointCounter((prev) => prev + 1);
-      setActivePointIndex(newWaypoint.id);
+      setActivePointByDirection((prev) => ({
+        ...prev,
+        [activeDirection]: newWaypoint.id,
+      }));
     },
-    [selectedColor, waypoints.length, waypointCounter],
+    [activeDirection, selectedColor, waypointsByDirection, waypointCounter],
   );
 
   const removeWaypoint = useCallback((id: number) => {
-    setWaypoints((prev) => {
-      const filtered = prev.filter((wp) => wp.id !== id);
-      // Update sequence numbers
-      return filtered.map((wp, index) => ({
-        ...wp,
-        sequence: index,
-      }));
+    setWaypointsByDirection((prev) => {
+      const filtered = prev[activeDirection].filter((wp) => wp.id !== id);
+
+      return {
+        ...prev,
+        [activeDirection]: filtered.map((wp, index) => ({
+          ...wp,
+          sequence: index,
+        })),
+      };
     });
 
-    setActivePointIndex((prev) => (prev === id ? null : prev));
-  }, []);
+    setActivePointByDirection((prev) => ({
+      ...prev,
+      [activeDirection]: prev[activeDirection] === id ? null : prev[activeDirection],
+    }));
+  }, [activeDirection]);
 
   const reorderWaypoints = useCallback((draggedId: number, targetId: number) => {
     if (draggedId === targetId) return;
 
-    setWaypoints((prev) => {
-      const draggedIndex = prev.findIndex((wp) => wp.id === draggedId);
-      const targetIndex = prev.findIndex((wp) => wp.id === targetId);
+    setWaypointsByDirection((prev) => {
+      const activeWaypoints = prev[activeDirection];
+      const draggedIndex = activeWaypoints.findIndex((wp) => wp.id === draggedId);
+      const targetIndex = activeWaypoints.findIndex((wp) => wp.id === targetId);
 
       if (draggedIndex === -1 || targetIndex === -1) return prev;
 
-      const next = [...prev];
+      const next = [...activeWaypoints];
       const [draggedWaypoint] = next.splice(draggedIndex, 1);
       next.splice(targetIndex, 0, draggedWaypoint);
 
-      return next.map((wp, index) => ({
-        ...wp,
-        sequence: index,
-      }));
+      return {
+        ...prev,
+        [activeDirection]: next.map((wp, index) => ({
+          ...wp,
+          sequence: index,
+        })),
+      };
     });
 
-    setActivePointIndex(draggedId);
-  }, []);
+    setActivePointByDirection((prev) => ({
+      ...prev,
+      [activeDirection]: draggedId,
+    }));
+  }, [activeDirection]);
 
   const updateWaypoint = useCallback((id: number, lat: number, lng: number) => {
-    setWaypoints((prev) =>
-      prev.map((wp) =>
-        wp.id === id ? { ...wp, lat, lng } : wp,
-      ),
-    );
-  }, []);
+    setWaypointsByDirection((prev) => ({
+      ...prev,
+      [activeDirection]: prev[activeDirection].map((wp) => (
+        wp.id === id ? { ...wp, lat, lng } : wp
+      )),
+    }));
+  }, [activeDirection]);
 
   const clearWaypoints = useCallback(() => {
-    setWaypoints([]);
-    setActivePointIndex(null);
+    setWaypointsByDirection((prev) => ({
+      ...prev,
+      [activeDirection]: [],
+    }));
+    setActivePointByDirection((prev) => ({
+      ...prev,
+      [activeDirection]: null,
+    }));
+  }, [activeDirection]);
+
+  const clearAllWaypoints = useCallback(() => {
+    setWaypointsByDirection({ goingTo: [], goingBack: [] });
+    setActivePointByDirection({ goingTo: null, goingBack: null });
+    setWaypointCounter(0);
   }, []);
 
   const saveRoute = useCallback(() => {
-    if (waypoints.length < 2) {
-      console.warn("Route must have at least 2 waypoints");
+    if (waypointsByDirection.goingTo.length < 2 || waypointsByDirection.goingBack.length < 2) {
+      console.warn("Each direction must have at least 2 waypoints");
       return null;
     }
-    // Return the waypoints array and let the parent handle saving
-    return waypoints;
-  }, [waypoints]);
+
+    return {
+      goingTo: waypointsByDirection.goingTo,
+      goingBack: waypointsByDirection.goingBack,
+    };
+  }, [waypointsByDirection]);
 
   const registerMapCallbacks = useCallback(
     (
@@ -182,24 +265,39 @@ export function RouteEditorProvider({
     [],
   );
 
+  const activeWaypoints = waypointsByDirection[activeDirection];
+  const waypointCounts = {
+    goingTo: waypointsByDirection.goingTo.length,
+    goingBack: waypointsByDirection.goingBack.length,
+  };
+
   const value: RouteEditorContextType = {
     // State
     isCreating,
     selectedColor,
-    waypoints,
-    activePointIndex,
+    activeDirection,
+    waypointCounts,
+    waypoints: activeWaypoints,
+    activePointIndex: activePointByDirection[activeDirection],
 
     // Actions
     startCreating,
     startEditing,
     stopCreating,
     setSelectedColor,
+    setActiveDirection,
     addWaypoint,
     removeWaypoint,
     reorderWaypoints,
     updateWaypoint,
     clearWaypoints,
-    setActivePointIndex,
+    clearAllWaypoints,
+    setActivePointIndex: (index) => {
+      setActivePointByDirection((prev) => ({
+        ...prev,
+        [activeDirection]: index,
+      }));
+    },
     saveRoute,
 
     // Map integration

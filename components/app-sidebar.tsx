@@ -91,12 +91,20 @@ export interface AllResponse {
     routeNumber: string
     routeName: string
     routeColor: string
-    points: Array<{
-      id: string | number
-      sequence: number
-      address: string
-      point: [number, number]
-    }>
+    points: {
+      goingTo: Array<{
+        id: string | number
+        sequence: number
+        address: string
+        point: [number, number]
+      }>;
+      goingBack: Array<{
+        id: string | number
+        sequence: number
+        address: string
+        point: [number, number]
+      }>;
+    }
   }>;
   regions: Array<{
     id: string;

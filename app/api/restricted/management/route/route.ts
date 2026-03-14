@@ -16,7 +16,8 @@ export async function GET() {
         regions: allRegions,
       })
       .orchestrate();
-  } catch {
+  } catch (e) {
+    console.error(e);
     return ExceptionResponseComposer.compose(StatusCodes.Status500InternalServerError, [{
       message: "Unknown error occurred.",
     }]).orchestrate();
@@ -41,15 +42,15 @@ export async function POST(req: NextRequest) {
       points: {
         type: "object",
         formatterFn: async (values) => {
-          if (!Array.isArray(values)) {
+          if (!Array.isArray(values.goingTo) || !Array.isArray(values.goingBack)) {
             return { ok: false, error: "Invalid points." };
           }
 
-          if (values.length < 2) {
-            return { ok: false, error: "Invalid points." };
+          if (values.goingTo.length < 2 || values.goingBack.length < 2) {
+            return { ok: false, error: "Some of your points does not meet the >=2 point criteria." };
           }
 
-          for (const point of values) {
+          for (const point of [...values.goingTo, ...values.goingBack]) {
             if (!utils.isExisty(point.sequence) || !utils.isFinite(point.sequence)) {
               return { ok: false, error: "Invalid sequence." };
             }
@@ -90,9 +91,16 @@ type RequestBody = {
   routeNumber: string;
   routeName: string;
   routeColor: string;
-  points: Array<{
-    sequence: number;
-    address: string;
-    point: [number, number];
-  }>
+  points: {
+    goingTo: Array<{
+      sequence: number;
+      address: string;
+      point: [number, number];
+    }>;
+    goingBack: Array<{
+      sequence: number;
+      address: string;
+      point: [number, number];
+    }>
+  }
 }

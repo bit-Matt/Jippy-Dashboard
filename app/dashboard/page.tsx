@@ -149,10 +149,16 @@ function DashboardContent() {
     setRouteFocusKey(`${route.id}-${Date.now()}`);
     setEditingRoute(route);
 
-    const sortedPoints = [...route.points].sort((a, b) => a.sequence - b.sequence);
     startEditing({
       color: route.routeColor,
-      points: sortedPoints.map((point) => ({ point: point.point })),
+      points: {
+        goingTo: [...route.points.goingTo]
+          .sort((a, b) => a.sequence - b.sequence)
+          .map((point) => ({ point: point.point })),
+        goingBack: [...route.points.goingBack]
+          .sort((a, b) => a.sequence - b.sequence)
+          .map((point) => ({ point: point.point })),
+      },
     });
   };
 
@@ -198,14 +204,28 @@ function DashboardContent() {
         <div className="relative z-0 flex flex-1 flex-col gap-4 overflow-hidden p-4 pt-0">
           <MapComponent
             regions={regions}
-            routing={routes.map((route) => ({
-              color: route.routeColor,
-              waypoints: [...route.points]
+            routing={routes.flatMap((route) => {
+              const goingToWaypoints = [...route.points.goingTo]
                 .sort((a, b) => a.sequence - b.sequence)
-                .map((point) => point.point),
-            }))}
+                .map((point) => point.point);
+
+              const goingBackWaypoints = [...route.points.goingBack]
+                .sort((a, b) => a.sequence - b.sequence)
+                .map((point) => point.point);
+
+              return [
+                {
+                  color: route.routeColor,
+                  waypoints: goingToWaypoints,
+                },
+                {
+                  color: route.routeColor,
+                  waypoints: goingBackWaypoints,
+                },
+              ].filter((entry) => entry.waypoints.length >= 2);
+            })}
             focusedWaypoints={editingRoute
-              ? [...editingRoute.points]
+              ? [...editingRoute.points.goingTo]
                 .sort((a, b) => a.sequence - b.sequence)
                 .map((point) => point.point)
               : undefined}
