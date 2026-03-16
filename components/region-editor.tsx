@@ -8,9 +8,8 @@ import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useRegionEditor } from "@/contexts/RegionEditorContext";
-import { $fetch } from "@/lib/http/client";
-import type { IApiResponse } from "@/lib/http/ResponseComposer";
-import type { NominatimReverseResponse } from "@/lib/osm/nominatim";
+
+import * as nominatim from "@/lib/osm/nominatim";
 
 const COLORS = [
   "#fff100", "#ff8c00", "#e81123",
@@ -84,21 +83,17 @@ export default function RegionEditor() {
       const nextCoords: Record<number, string> = { ...stationAddressCoords };
 
       for (const station of toGeocode) {
-        const { data, error } = await $fetch<IApiResponse<NominatimReverseResponse>>(
-          "/api/restricted/osm/nominatim/reverse",
+        const { data, error } = await nominatim.reverse(
           {
-            method: "GET",
-            query: {
-              lat: station.lat,
-              lon: station.lng,
-              zoom: 18,
-            },
+            lat: station.lat,
+            lon: station.lng,
+            zoom: 18,
           },
         );
 
-        nextAddresses[station.id] = error || !data?.data?.display_name
+        nextAddresses[station.id] = error || !data?.display_name
           ? "Unable to fetch address"
-          : data.data.display_name;
+          : data.display_name;
         nextCoords[station.id] = `${station.lat},${station.lng}`;
       }
 

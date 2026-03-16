@@ -7,6 +7,7 @@ import L from "leaflet";
 import "@maplibre/maplibre-gl-leaflet";
 import "@geoman-io/leaflet-geoman-free";
 import "leaflet-routing-machine";
+import "leaflet.vectorgrid";
 import "lrm-mapzen";
 
 import "leaflet/dist/leaflet.css";
@@ -121,7 +122,7 @@ const VectorTileLayer = () => {
     if (!map) return;
 
     const glLayer = L.maplibreGL({
-      style: "https://api.maptiler.com/maps/streets-v4/style.json?key=mNI9bvVhZy4T5HcVvqIr",
+      style: "/tileserver/style.json",
     });
 
     glLayer.addTo(map);
@@ -140,7 +141,7 @@ const RoutingMachine = ({ waypoints, color }: RoutingMachineProps) => {
   useEffect(() => {
     if (!map || waypoints.length < 2) return;
 
-    const serviceUrl = new URL("/api/restricted/osm/valhalla/route", window.location.origin);
+    const serviceUrl = new URL("route", process.env.NEXT_PUBLIC_VALHALLA_URL);
 
     // Create Valhalla router instance
     const mapzenRouter = L.Routing.mapzen("valhalla-", {

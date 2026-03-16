@@ -22,7 +22,7 @@ import {
 } from "@/components/ui/select";
 
 import { $fetch } from "@/lib/http/client";
-import { nominatim } from "@/lib/osm/client/nominatim";
+import * as nominatim from "@/lib/osm/nominatim";
 import type { AllResponse } from "@/components/app-sidebar";
 import { useRouteEditor } from "@/contexts/RouteEditorContext";
 
@@ -134,11 +134,10 @@ export default function RouteEditor({ editingRoute, onSaved, onClosed }: RouteEd
             lon: waypoint.lng,
             zoom: 18,
           },
-          { restricted: false },
         );
 
-        if (data && data.data) {
-          newAddresses[waypoint.id] = data.data.display_name || "Unknown location";
+        if (data) {
+          newAddresses[waypoint.id] = data.display_name || "Unknown location";
           newAddressCoords[waypoint.id] = `${waypoint.lat},${waypoint.lng}`;
         } else if (error) {
           newAddresses[waypoint.id] = "Unable to fetch address";

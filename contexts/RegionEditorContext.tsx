@@ -2,8 +2,7 @@
 
 import { createContext, useContext, useCallback, useState } from "react";
 import { $fetch } from "@/lib/http/client";
-import type { IApiResponse } from "@/lib/http/ResponseComposer";
-import type { NominatimReverseResponse } from "@/lib/osm/nominatim";
+import * as nominatim from "@/lib/osm/nominatim";
 
 export interface RegionDraftShape {
   type: "Polygon" | "Rectangle";
@@ -188,21 +187,17 @@ export function RegionEditorProvider({ children }: { children: React.ReactNode }
           };
         }
 
-        const { data, error } = await $fetch<IApiResponse<NominatimReverseResponse>>(
-          "/api/restricted/osm/nominatim/reverse",
+        const { data, error } = await nominatim.reverse(
           {
-            method: "GET",
-            query: {
-              lat: station.lat,
-              lon: station.lng,
-              zoom: 18,
-            },
+            lat: station.lat,
+            lon: station.lng,
+            zoom: 18,
           },
         );
 
-        const address = error || !data?.data?.display_name
+        const address = error || !data?.display_name
           ? "Unknown Address"
-          : data.data.display_name;
+          : data.display_name;
 
         return {
           address,
