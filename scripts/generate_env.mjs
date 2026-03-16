@@ -23,7 +23,7 @@ async function main() {
 
   // Token generation for authentication
   const token = utils.token.generatePassword(32, "!#%&()*+,/:;<=>?@[]^`{|}");
-  utils.env.write("runtime.better.auth.token", token);
+  utils.env.write("runtime.better.auth.secret", token);
   utils.env.write("runtime.better.auth.url", "http://localhost:3000");
 
   // Database configuration
