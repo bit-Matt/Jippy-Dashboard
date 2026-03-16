@@ -8,6 +8,8 @@ import RegionEditor from "@/components/region-editor";
 import RouteListCard from "@/components/route-list-card";
 import RouteEditor from "@/components/route-editor";
 import Simulator from "@/components/simulator";
+import ClosureLineEditor from "@/components/closure-line-editor";
+import ClosureRegionEditor from "@/components/closure-region-editor";
 import {
   SidebarInset,
   SidebarProvider,
@@ -17,12 +19,15 @@ import { $fetch } from "@/lib/http/client";
 import type { IApiResponse } from "@/lib/http/ResponseComposer";
 import { RegionEditorProvider, useRegionEditor } from "@/contexts/RegionEditorContext";
 import { RouteEditorProvider, useRouteEditor } from "@/contexts/RouteEditorContext";
+import { ClosureEditorProvider, useClosureEditor } from "@/contexts/ClosureEditorContext";
 
 function DashboardContent() {
   const [showSimulator, setShowSimulator] = useState(false);
   const [routes, setRoutes] = useState<AllResponse["routes"]>([]);
   const [regions, setRegions] = useState<AllResponse["regions"]>([]);
   const [editingRoute, setEditingRoute] = useState<AllResponse["routes"][0] | null>(null);
+  const [closureLines, setClosureLines] = useState<AllResponse["closures"]["lineClosures"]>([]);
+  const [closureRegions, setClosureRegions] = useState<AllResponse["closures"]["regionClosures"]>([]);
   const [selectedRegionId, setSelectedRegionId] = useState<string | null>(null);
   const [routeFocusKey, setRouteFocusKey] = useState<string | number | null>(null);
   const [focusedRegionWaypoints, setFocusedRegionWaypoints] = useState<Array<[number, number]> | undefined>(undefined);
@@ -35,6 +40,12 @@ function DashboardContent() {
     openRegionEditorForEdit,
     closeRegionEditor,
   } = useRegionEditor();
+  const {
+    mode: closureMode,
+    startCreatingLine,
+    startCreatingRegion,
+    stopEditing: stopClosureEditing,
+  } = useClosureEditor();
 
   const fetchRoutes = async () => {
     const { data, error } = await $fetch<IApiResponse<AllResponse>>("/api/restricted/management/route", {
@@ -46,9 +57,10 @@ function DashboardContent() {
       return;
     }
 
-    console.log(data.data);
     setRoutes(data.data.routes);
     setRegions(data.data.regions);
+    setClosureLines(data.data.closures.lineClosures);
+    setClosureRegions(data.data.closures.regionClosures);
   };
 
   useEffect(() => {
@@ -74,6 +86,7 @@ function DashboardContent() {
   }, [mutationVersion]);
 
   const handleShowRoutes = () => {
+    stopClosureEditing();
     if (isCreating) {
       stopCreating();
       setEditingRoute(null);
@@ -90,6 +103,42 @@ function DashboardContent() {
   };
 
   const handleShowRegions = () => {
+    stopClosureEditing();
+  const handleShowClosureLine = () => {
+    if (isCreating) {
+      stopCreating();
+      setEditingRoute(null);
+      setRouteFocusKey(null);
+    }
+
+    if (showRegionEditor) {
+      closeRegionEditor();
+    }
+
+    setFocusedRegionWaypoints(undefined);
+    setRegionFocusKey(null);
+    setSelectedRegionId(null);
+    setShowSimulator(false);
+    startCreatingLine();
+  };
+
+  const handleShowClosureRegion = () => {
+    if (isCreating) {
+      stopCreating();
+      setEditingRoute(null);
+      setRouteFocusKey(null);
+    }
+
+    if (showRegionEditor) {
+      closeRegionEditor();
+    }
+
+    setFocusedRegionWaypoints(undefined);
+    setRegionFocusKey(null);
+    setSelectedRegionId(null);
+    setShowSimulator(false);
+    startCreatingRegion();
+  };
     if (showRegionEditor) {
       closeRegionEditor();
     } else {
@@ -161,6 +210,7 @@ function DashboardContent() {
     setRouteFocusKey(null);
     setEditingRoute(null);
     stopCreating();
+    stopClosureEditing();
   };
 
   return (
@@ -169,11 +219,15 @@ function DashboardContent() {
         onAddRouteClick={handleShowRoutes}
         onAddRegionClick={handleShowRegions}
         onSimulationClick={handleShowSimulator}
+        onAddClosureLineClick={handleShowClosureLine}
+        onAddClosureRegionClick={handleShowClosureRegion}
       />
       <SidebarInset>
         <div className="relative z-0 flex flex-1 flex-col gap-4 overflow-hidden mt-4 p-4 pt-0">
           <MapComponent
             regions={regions}
+            closureLines={closureLines}
+            closureRegions={closureRegions}
             routing={routes.flatMap((route) => {
               const goingToWaypoints = [...route.points.goingTo]
                 .sort((a, b) => a.sequence - b.sequence)
@@ -222,6 +276,8 @@ function DashboardContent() {
           {!isCreating && showRegionEditor && (
             <RegionEditor />
           )}
+          <ClosureLineEditor onSaved={fetchRoutes} />
+          <ClosureRegionEditor onSaved={fetchRoutes} />
         </div>
       </SidebarInset>
     </SidebarProvider>
@@ -232,7 +288,9 @@ export default function DashboardClient() {
   return (
     <RouteEditorProvider>
       <RegionEditorProvider>
-        <DashboardContent />
+        <ClosureEditorProvider>
+          <DashboardContent />
+        </ClosureEditorProvider>
       </RegionEditorProvider>
     </RouteEditorProvider>
   );
