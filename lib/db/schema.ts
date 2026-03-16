@@ -206,6 +206,57 @@ export const sessionRelations = relations(session, ({ one }) => ({
   }),
 }));
 
+export const closureDirection = pgEnum("closure_direction", ["one_way", "both"]);
+
+export const roadClosures = pgTable(
+  "roadClosures",
+  {
+    id: text("id")
+      .primaryKey()
+      .$default(() => uuidv7()),
+    label: text("label"),
+    color: text("color").default("#ef4444").notNull(),
+    type: text("type").notNull(), // "line" | "region"
+    direction: closureDirection("direction"),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at")
+      .defaultNow()
+      .$onUpdate(() => new Date())
+      .notNull(),
+  },
+);
+
+export const roadClosureSequences = pgTable(
+  "roadClosureSequences",
+  {
+    id: text("id")
+      .primaryKey()
+      .$default(() => uuidv7()),
+    closureId: text("closure_id")
+      .notNull()
+      .references(() => roadClosures.id, { onDelete: "cascade" }),
+    sequenceNumber: integer("sequence_number").notNull(),
+    address: text("address"),
+    point: geometry("point", { type: "point", mode: "tuple", srid: 4326 }).notNull(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at")
+      .defaultNow()
+      .$onUpdate(() => new Date())
+      .notNull(),
+  },
+  (t) => [
+    index("spatial_index_road_closure").using("gist", t.point),
+    index("road_closure_seq_idx").on(t.closureId, t.sequenceNumber),
+  ],
+);
+
+export const roadClosureRelations = relations(roadClosureSequences, ({ one }) => ({
+  closure: one(roadClosures, {
+    fields: [roadClosureSequences.closureId],
+    references: [roadClosures.id],
+  }),
+}));
+
 export const accountRelations = relations(account, ({ one }) => ({
   user: one(user, {
     fields: [account.userId],
