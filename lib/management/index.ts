@@ -1,7 +1,15 @@
 import { asc, eq, sql } from "drizzle-orm";
 
 import { db } from "@/lib/db";
-import { region, regionSequences, regionStations, routes, routeSequences } from "@/lib/db/schema";
+import {
+  region,
+  regionSequences,
+  regionStations,
+  routes,
+  routeSequences,
+  roadClosures,
+  roadClosureSequences,
+} from "@/lib/db/schema";
 import { Failure, FailureCodes, Success } from "@/lib/oneOf/response-types";
 
 export async function getAllRoutes() {
@@ -319,6 +327,79 @@ export async function getAllRegions() {
   return result;
 }
 
+// NOTE: Road closures are currently treated as walkable segments/areas but are not drivable by vehicles.
+// For line closures, the direction field indicates whether the road is closed one-way or both ways for vehicles.
+// For region closures, all roads inside the region are treated as closed in both directions for vehicles.
+// Mobile client should block vehicle routing through these but may still allow pedestrian routing.
+// In future, we may add an explicit tag (e.g. walkable/non-walkable).
+
+export async function getAllClosures() {
+  const rows = await db
+    .select({
+      id: roadClosures.id,
+      label: roadClosures.label,
+      color: roadClosures.color,
+      type: roadClosures.type,
+      direction: roadClosures.direction,
+      sequenceId: roadClosureSequences.id,
+      sequenceNumber: roadClosureSequences.sequenceNumber,
+      address: roadClosureSequences.address,
+      point: roadClosureSequences.point,
+    })
+    .from(roadClosures)
+    .leftJoin(roadClosureSequences, eq(roadClosures.id, roadClosureSequences.closureId))
+    .orderBy(asc(roadClosures.createdAt), asc(roadClosureSequences.sequenceNumber));
+
+  const lineClosures: ClosureLineObject[] = [];
+  const regionClosures: ClosureRegionObject[] = [];
+
+  for (const row of rows) {
+    const targetArray: Array<ClosureLineObject | ClosureRegionObject> =
+      row.type === "line" ? lineClosures : regionClosures;
+    let closure = targetArray.find(c => c.id === row.id);
+
+    if (!closure) {
+      if (row.type === "line") {
+        closure = {
+          id: row.id,
+          type: "line",
+          label: row.label ?? "",
+          color: row.color,
+          direction: (row.direction ?? "both"),
+          points: [],
+        } as ClosureLineObject;
+      } else {
+        closure = {
+          id: row.id,
+          type: "region",
+          label: row.label ?? "",
+          color: row.color,
+          points: [],
+        } as ClosureRegionObject;
+      }
+      targetArray.push(closure);
+    }
+
+    if (row.sequenceId) {
+      const point = {
+        id: row.sequenceId,
+        sequence: row.sequenceNumber!,
+        address: row.address ?? "",
+        point: [row.point![1], row.point![0]] as [number, number],
+      };
+
+      if (!closure.points.find((p: any) => p.id === point.id)) {
+        closure.points.push(point as any);
+      }
+    }
+  }
+
+  return {
+    lineClosures,
+    regionClosures,
+  };
+}
+
 export async function createRegion(payload: RegionAddParameters) {
   return db.transaction(async tx => {
     const [newRegion] = await tx
@@ -375,6 +456,86 @@ export async function createRegion(payload: RegionAddParameters) {
       })),
       stations,
     } satisfies RegionObject;
+  });
+}
+
+export async function addClosureLine(params: ClosureAddLineParameters): Promise<ClosureLineObject> {
+  return db.transaction(async tx => {
+    const [closure] = await tx
+      .insert(roadClosures)
+      .values({
+        label: params.label,
+        color: params.color,
+        type: "line",
+        direction: params.direction,
+      })
+      .returning();
+
+    if (!closure) return tx.rollback();
+
+    const sequences = await tx
+      .insert(roadClosureSequences)
+      .values(
+        params.points.map(point => ({
+          closureId: closure.id,
+          sequenceNumber: point.sequence,
+          address: point.address,
+          point: [point.point[1], point.point[0]] as [number, number],
+        })),
+      )
+      .returning();
+
+    return {
+      id: closure.id,
+      type: "line",
+      label: closure.label ?? "",
+      color: closure.color,
+      direction: closure.direction ?? "both",
+      points: sequences.map(x => ({
+        id: x.id,
+        sequence: x.sequenceNumber,
+        address: x.address ?? "",
+        point: [x.point[1], x.point[0]] as [number, number],
+      })),
+    };
+  });
+}
+
+export async function addClosureRegion(params: ClosureAddRegionParameters): Promise<ClosureRegionObject> {
+  return db.transaction(async tx => {
+    const [closure] = await tx
+      .insert(roadClosures)
+      .values({
+        label: params.label,
+        color: params.color,
+        type: "region",
+      })
+      .returning();
+
+    if (!closure) return tx.rollback();
+
+    const sequences = await tx
+      .insert(roadClosureSequences)
+      .values(
+        params.points.map(point => ({
+          closureId: closure.id,
+          sequenceNumber: point.sequence,
+          point: [point.point[1], point.point[0]] as [number, number],
+        })),
+      )
+      .returning();
+
+    return {
+      id: closure.id,
+      type: "region",
+      label: closure.label ?? "",
+      color: closure.color,
+      points: sequences.map(x => ({
+        id: x.id,
+        sequence: x.sequenceNumber,
+        point: [x.point[1], x.point[0]] as [number, number],
+      })),
+    };
   });
 }
 
@@ -607,6 +768,52 @@ export interface UpdateRegionParameters {
   }>;
   stations?: Array<{
     address: string;
+    point: [number, number];
+  }>;
+}
+
+export interface ClosureLineObject {
+  id: string;
+  type: "line";
+  label: string;
+  color: string;
+  direction: "one_way" | "both";
+  points: Array<{
+    id: string;
+    sequence: number;
+    address: string;
+    point: [number, number];
+  }>;
+}
+
+export interface ClosureRegionObject {
+  id: string;
+  type: "region";
+  label: string;
+  color: string;
+  points: Array<{
+    id: string;
+    sequence: number;
+    point: [number, number];
+  }>;
+}
+
+export interface ClosureAddLineParameters {
+  label: string;
+  color: string;
+  direction: "one_way" | "both";
+  points: Array<{
+    sequence: number;
+    address: string;
+    point: [number, number];
+  }>;
+}
+
+export interface ClosureAddRegionParameters {
+  label: string;
+  color: string;
+  points: Array<{
+    sequence: number;
     point: [number, number];
   }>;
 }
