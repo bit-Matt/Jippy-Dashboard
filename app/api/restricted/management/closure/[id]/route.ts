@@ -4,7 +4,7 @@ import { ExceptionResponseComposer, ResponseComposer, StatusCodes } from "@/lib/
 import * as management from "@/lib/management";
 import { tryParseJson } from "@/lib/http/RequestUtilities";
 import { oneOf } from "@/lib/oneOf";
-import { Failure, FailureCodes } from "@/lib/oneOf/response-types";
+import { Failure, FailureCodes, Success } from "@/lib/oneOf/response-types";
 import { db } from "@/lib/db";
 import { roadClosures, roadClosureSequences } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
@@ -142,7 +142,7 @@ async function removeClosure(id: string) {
     }
 
     await db.delete(roadClosures).where(eq(roadClosures.id, id));
-    return new management.Success(null);
+    return new Success<null>(null);
   } catch {
     return new Failure(FailureCodes.Fatal, "Failed to delete closure");
   }
@@ -205,7 +205,7 @@ async function updateClosure(id: string, params: PatchRequestBody) {
         return new Failure(FailureCodes.Fatal, "Failed to load updated closure.");
       }
 
-      return updatedClosure;
+      return new Success(updatedClosure);
     });
 
     return updated;

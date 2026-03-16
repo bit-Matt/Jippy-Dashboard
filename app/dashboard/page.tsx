@@ -104,6 +104,21 @@ function DashboardContent() {
 
   const handleShowRegions = () => {
     stopClosureEditing();
+    if (showRegionEditor) {
+      closeRegionEditor();
+    } else {
+      openRegionEditor();
+      if (isCreating) {
+        stopCreating();
+      }
+      setEditingRoute(null);
+      setRouteFocusKey(null);
+    }
+
+    setSelectedRegionId(null);
+    setShowSimulator(false);
+  };
+
   const handleShowClosureLine = () => {
     if (isCreating) {
       stopCreating();
@@ -138,20 +153,6 @@ function DashboardContent() {
     setSelectedRegionId(null);
     setShowSimulator(false);
     startCreatingRegion();
-  };
-    if (showRegionEditor) {
-      closeRegionEditor();
-    } else {
-      openRegionEditor();
-      if (isCreating) {
-        stopCreating();
-      }
-      setEditingRoute(null);
-      setRouteFocusKey(null);
-    }
-
-    setSelectedRegionId(null);
-    setShowSimulator(false);
   };
 
   const handleOpenRegionForEdit = (region: AllResponse["regions"][0]) => {
