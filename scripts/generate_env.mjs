@@ -139,6 +139,11 @@ async function main() {
     cwd: path.join(__dirname, "../"),
   });
 
+  console.log("  - Producing required assets...");
+  await utils.process.spawnAsync("npm", ["run", "setup:tileserver-style"], {
+    cwd: path.join(__dirname, "../"),
+  });
+
   console.log("");
   console.log("Successfully generated .env file!");
   console.log("You may run 'service:*' and 'db:*' scripts on npm without running the setup again.");

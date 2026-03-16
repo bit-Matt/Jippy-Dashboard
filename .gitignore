@@ -45,3 +45,4 @@ next-env.d.ts
 .pbf
 .osm-data/
 route-seed-data.json
+public/tileserver/style.json
