@@ -1,5 +1,5 @@
 import { type ComponentProps } from "react";
-import { Command, Map, Pin, SquareDashed } from "lucide-react";
+import { Command, Map, Pin, SquareDashed, TriangleAlert } from "lucide-react";
 
 import { NavMain } from "@/components/nav-main";
 import { NavUser } from "@/components/nav-user";
@@ -13,7 +13,14 @@ import {
   SidebarMenuItem,
 } from "@/components/ui/sidebar";
 
-export function AppSidebar({ onAddRouteClick, onAddRegionClick, onSimulationClick, ...props }: SidebarProps) {
+export function AppSidebar({
+  onAddRouteClick,
+  onAddRegionClick,
+  onSimulationClick,
+  onAddClosureLineClick,
+  onAddClosureRegionClick,
+  ...props
+}: SidebarProps) {
   const data = {
     navMain: [
       {
@@ -38,6 +45,23 @@ export function AppSidebar({ onAddRouteClick, onAddRegionClick, onSimulationClic
             title: "Add a new Region",
             url: "#",
             onClick: onAddRegionClick,
+          },
+        ],
+      },
+      {
+        title: "Road Closure",
+        url: "#",
+        icon: TriangleAlert,
+        items: [
+          {
+            title: "Add closure (line)",
+            url: "#",
+            onClick: onAddClosureLineClick,
+          },
+          {
+            title: "Add closure (region)",
+            url: "#",
+            onClick: onAddClosureRegionClick,
           },
         ],
       },
@@ -83,6 +107,8 @@ interface SidebarProps extends ComponentProps<typeof Sidebar> {
   onAddRouteClick?: () => void
   onAddRegionClick?: () => void
   onSimulationClick?: () => void
+  onAddClosureLineClick?: () => void
+  onAddClosureRegionClick?: () => void
 }
 
 export interface AllResponse {
@@ -121,5 +147,31 @@ export interface AllResponse {
       address: string;
       point: [number, number];
     }>;
-  }>
+  }>;
+  closures: {
+    lineClosures: Array<{
+      id: string;
+      type: "line";
+      label: string;
+      color: string;
+      direction: "one_way" | "both";
+      points: Array<{
+        id: string;
+        sequence: number;
+        address: string;
+        point: [number, number];
+      }>;
+    }>;
+    regionClosures: Array<{
+      id: string;
+      type: "region";
+      label: string;
+      color: string;
+      points: Array<{
+        id: string;
+        sequence: number;
+        point: [number, number];
+      }>;
+    }>;
+  }
 }
