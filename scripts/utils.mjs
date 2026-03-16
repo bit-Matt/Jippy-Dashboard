@@ -2,9 +2,10 @@ import fs from "node:fs";
 import fsp from "node:fs/promises";
 import child_process from "node:child_process";
 import crypto from "node:crypto";
-import * as readline from "node:readline/promises";
+import os from "node:os";
 import path from "node:path";
 import * as pg from "pg";
+import * as readline from "node:readline/promises";
 import {stdin, stdout} from "node:process";
 
 const __dirname = import.meta.dirname;
@@ -138,6 +139,23 @@ export const fsUtils = {
   },
   removeDir(loc) {
     fs.rmSync(loc, { recursive: true });
+  },
+  async unpackWith7z(args) {
+    const platform = os.platform();
+    const arch = platform === "darwin" ? "any" : `${os.arch()}`;
+    const exe = platform === "win32" ? "7z.exe" : "7zz";
+
+    const exePath = path.join(__dirname, "7z", `${platform}-${arch}`, exe);
+    if (!fs.existsSync(exePath)) {
+      console.error("No such platform prefix exists for unpacking: %s", `${platform}-${arch}/${exe}`);
+      process.exit(1);
+    }
+
+    if (platform !== "win32") {
+      fs.chmodSync(exePath, 0o755);
+    }
+
+    await process.spawnAsync(exePath, args);
   },
 };
 
@@ -317,10 +335,10 @@ export const db = {
     }
 
     // Extract
-    console.log("Extracting ne_10m_urban_areas.zip to tileserver/landcover/ne_10m_urban_areas...");
-    await process.spawnAsync("unzip", [
-      "-d", ne10mExtractPath,
+    await fsUtils.unpackWith7z([
+      "x",
       ne10m,
+      `-o${ne10mExtractPath}`,
     ]);
 
     const coastline = path.join(root, "water-polygons-split-4326.zip");
@@ -345,10 +363,11 @@ export const db = {
 
     // Extract
     console.log("Extracting water-polygons-split-4326.zip to tileserver/coastline...");
-    await process.spawnAsync("unzip", [
-      "-j",
-      "-d", coastlineExtractPath,
+    await fsUtils.unpackWith7z([
+      "e",
       coastline,
+      `-o${coastlineExtractPath}`,
+      "-y",
     ]);
 
     const pbfPath = path.join(root, "philippines-latest.osm.pbf");
