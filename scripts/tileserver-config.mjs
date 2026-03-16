@@ -13,8 +13,4 @@ template = template.replaceAll("{TILESERVER_HOSTNAME}", process.env.NEXT_PUBLIC_
 template = template.replaceAll("{ASSET_HOSTNAME}", process.env.BETTER_AUTH_URL);
 
 const templateWritePath = path.join(__dirname, "../public/tileserver/style.json");
-await fsp.writeFile(
-  templateWritePath,
-  JSON.stringify(template, null, 2),
-  { encoding: "utf-8" },
-);
+await fsp.writeFile(templateWritePath, template, { encoding: "utf-8" });
