@@ -16,6 +16,7 @@ import "leaflet-routing-machine/dist/leaflet-routing-machine.css";
 
 import { useRegionEditor } from "@/contexts/RegionEditorContext";
 import { useRouteEditor } from "@/contexts/RouteEditorContext";
+import { useClosureEditor } from "@/contexts/ClosureEditorContext";
 
 const FocusRouteView = ({ focusKey, focusedWaypoints }: FocusRouteViewProps) => {
   const map = useMap();
@@ -91,11 +92,26 @@ const MapClickHandler = () => {
     isAddingStation,
     addStation,
   } = useRegionEditor();
+  const {
+    mode: closureMode,
+    addLinePoint,
+    addRegionPoint,
+  } = useClosureEditor();
 
   useMapEvents({
     click: (e) => {
       if (isCreating) {
         addWaypoint(e.latlng.lat, e.latlng.lng);
+        return;
+      }
+
+      if (closureMode === "creating-line" || closureMode === "editing-line") {
+        addLinePoint(e.latlng.lat, e.latlng.lng);
+        return;
+      }
+
+      if (closureMode === "creating-region" || closureMode === "editing-region") {
+        addRegionPoint(e.latlng.lat, e.latlng.lng);
         return;
       }
 
@@ -630,6 +646,82 @@ const RegionsLayer = ({ regions }: RegionsLayerProps) => {
   );
 };
 
+const ClosureLinesLayer = ({ closures }: ClosureLinesLayerProps) => {
+  return (
+    <>
+      {closures.map(closure => {
+        const sortedPoints = [...closure.points]
+          .sort((a, b) => a.sequence - b.sequence)
+          .map(p => p.point);
+
+        if (sortedPoints.length < 2) return null;
+
+        return (
+          <Polygon
+            // Polygon with no fill effectively behaves like a polyline here
+            key={closure.id}
+            positions={sortedPoints}
+            pathOptions={{
+              color: closure.color,
+              weight: 4,
+              dashArray: "6 4",
+              fill: false,
+            }}
+          >
+            {closure.label && (
+              <Tooltip
+                permanent={false}
+                direction="top"
+                opacity={0.9}
+              >
+                {closure.label} ({closure.direction === "one_way" ? "one-way" : "both ways"})
+              </Tooltip>
+            )}
+          </Polygon>
+        );
+      })}
+    </>
+  );
+};
+
+const ClosureRegionsLayer = ({ closures }: ClosureRegionsLayerProps) => {
+  return (
+    <>
+      {closures.map(closure => {
+        const sortedPoints = [...closure.points]
+          .sort((a, b) => a.sequence - b.sequence)
+          .map(p => p.point);
+
+        if (sortedPoints.length < 3) return null;
+
+        return (
+          <Polygon
+            key={closure.id}
+            positions={sortedPoints}
+            pathOptions={{
+              color: closure.color,
+              fillColor: closure.color,
+              fillOpacity: 0.25,
+              weight: 2,
+            }}
+          >
+            {closure.label && (
+              <Tooltip
+                permanent
+                direction="center"
+                opacity={1}
+                className="region-name-label"
+              >
+                {closure.label}
+              </Tooltip>
+            )}
+          </Polygon>
+        );
+      })}
+    </>
+  );
+};
+
 export default function MapComponent({
   regions,
   routing,
@@ -637,6 +729,8 @@ export default function MapComponent({
   focusKey,
   focusedRegionWaypoints,
   regionFocusKey,
+  closureLines,
+  closureRegions,
 }: MapProps) {
   const { isCreating, waypoints, selectedColor } = useRouteEditor();
   const {
@@ -647,6 +741,7 @@ export default function MapComponent({
     regionColor,
     setRegionShape,
   } = useRegionEditor();
+  const { mode: closureMode, lineDraft, regionDraft } = useClosureEditor();
 
   useEffect(() => {
     fixLeafletIcons();
@@ -681,6 +776,14 @@ export default function MapComponent({
           <RoutingMachine key={i} waypoints={r.waypoints} color={r.color} />
         ))
         : null}
+
+      {/* Existing persisted closures */}
+      <ClosureLinesLayer
+        closures={closureLines ?? []}
+      />
+      <ClosureRegionsLayer
+        closures={closureRegions ?? []}
+      />
     </MapContainer>
   );
 }
@@ -712,6 +815,30 @@ export interface MapProps {
   focusKey?: string | number | null;
   focusedRegionWaypoints?: Array<[number, number]>;
   regionFocusKey?: string | number | null;
+  closureLines?: Array<{
+    id: string;
+    type: "line";
+    label: string;
+    color: string;
+    direction: "one_way" | "both";
+    points: Array<{
+      id: string;
+      sequence: number;
+      address: string;
+      point: [number, number];
+    }>;
+  }>;
+  closureRegions?: Array<{
+    id: string;
+    type: "region";
+    label: string;
+    color: string;
+    points: Array<{
+      id: string;
+      sequence: number;
+      point: [number, number];
+    }>;
+  }>;
 }
 
 interface FocusRouteViewProps {
@@ -749,6 +876,14 @@ interface RegionsLayerProps {
       point: [number, number];
     }>;
   }>;
+}
+
+interface ClosureLinesLayerProps {
+  closures: NonNullable<MapProps["closureLines"]>;
+}
+
+interface ClosureRegionsLayerProps {
+  closures: NonNullable<MapProps["closureRegions"]>;
 }
 
 export interface RegionDraftShape {
