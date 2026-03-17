@@ -1,6 +1,6 @@
 "use client";
 
-import { type ComponentProps, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { MapContainer, Marker, Polygon, Polyline, Tooltip, useMap, useMapEvents } from "react-leaflet";
 import L from "leaflet";
 
@@ -131,6 +131,32 @@ const MapClickHandler = () => {
   return null;
 };
 
+const MapInteractionLock = ({ locked }: { locked: boolean }) => {
+  const map = useMap();
+
+  useEffect(() => {
+    if (!map) return;
+
+    const interactions: Array<{ disable: () => void; enable: () => void }> = [
+      map.dragging,
+      map.touchZoom,
+      map.doubleClickZoom,
+      map.scrollWheelZoom,
+      map.boxZoom,
+      map.keyboard,
+    ];
+
+    if (locked) {
+      interactions.forEach((interaction) => interaction?.disable());
+      return;
+    }
+
+    interactions.forEach((interaction) => interaction?.enable());
+  }, [map, locked]);
+
+  return null;
+};
+
 const POLYLINE6_PRECISION = 1_000_000;
 
 const decodePolyline6 = (encoded: string): Array<[number, number]> => {
@@ -167,19 +193,6 @@ const decodePolyline6 = (encoded: string): Array<[number, number]> => {
   }
 
   return coordinates;
-};
-
-const SavedPolylineLayer = ({ polyline, color }: { polyline: string; color: string }) => {
-  const coordinates = useMemo(() => decodePolyline6(polyline), [polyline]);
-
-  if (coordinates.length < 2) return null;
-
-  return (
-    <Polyline
-      positions={coordinates}
-      pathOptions={{ color, weight: 4, opacity: 0.85 }}
-    />
-  );
 };
 
 const VectorTileLayer = () => {
@@ -991,9 +1004,13 @@ export default function MapComponent({
   closureRegions,
   onClosureLineClick,
   onClosureRegionClick,
+  isRoutesLoading = false,
+  onRoutesReadyChange,
 }: MapProps) {
   const { isCreating, waypoints, selectedColor } = useRouteEditor();
   const [activeRouteCoordinates, setActiveRouteCoordinates] = useState<Array<[number, number]>>([]);
+  const [preparedRouting, setPreparedRouting] = useState<Array<{ coordinates: Array<[number, number]>; color: string }>>([]);
+  const [isPreparingRoutes, setIsPreparingRoutes] = useState(false);
   const activeRoutingWaypoints = useMemo(
     () => waypoints.map((waypoint) => [waypoint.lat, waypoint.lng] as [number, number]),
     [waypoints],
@@ -1006,58 +1023,107 @@ export default function MapComponent({
     regionColor,
     setRegionShape,
   } = useRegionEditor();
-  const { mode: closureMode, lineDraft, regionDraft } = useClosureEditor();
-
   useEffect(() => {
     fixLeafletIcons();
   }, []);
+
+  useEffect(() => {
+    let isCancelled = false;
+
+    const prepareRoutes = async () => {
+      if (!routing?.length || isCreating) {
+        setPreparedRouting([]);
+        setIsPreparingRoutes(false);
+        onRoutesReadyChange?.(true);
+        return;
+      }
+
+      setIsPreparingRoutes(true);
+      onRoutesReadyChange?.(false);
+
+      const nextPrepared = await Promise.all(routing.map(async (route) => ({
+        color: route.color,
+        coordinates: decodePolyline6(route.polyline),
+      })));
+
+      if (isCancelled) return;
+
+      setPreparedRouting(nextPrepared.filter((route) => route.coordinates.length >= 2));
+      setIsPreparingRoutes(false);
+      onRoutesReadyChange?.(true);
+    };
+
+    void prepareRoutes();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [routing, isCreating, onRoutesReadyChange]);
 
   const shouldRenderDirectionArrows = isCreating
     && !showRegionEditor
     && (activeRouteCoordinates.length >= 2 || activeRoutingWaypoints.length >= 2);
 
+  const showRouteLoadingOverlay = isRoutesLoading || isPreparingRoutes;
+
   return (
-    <MapContainer center={[10.7302, 122.5591]} zoom={13} className="h-full w-full">
-      <VectorTileLayer />
-      <MapClickHandler />
-      <FocusRouteView focusKey={focusKey} focusedWaypoints={focusedWaypoints} />
-      <FocusRegionView regionFocusKey={regionFocusKey} focusedRegionWaypoints={focusedRegionWaypoints} />
-      <RegionDrawingLayer
-        enabled={!isCreating && showRegionEditor}
-        regionName={regionName}
-        regionColor={regionColor}
-        regionShape={regionShape}
-        onRegionShapeChange={setRegionShape}
-      />
-      {!showRegionEditor && <RegionsLayer regions={regions ?? []} />}
-      {!isCreating && showRegionEditor && hasDefinedPolygon && <StationMarkers />}
-      {isCreating && <WaypointMarkers />}
-      {shouldRenderDirectionArrows && <DirectionArrows routeCoordinates={activeRouteCoordinates} />}
-
-      {isCreating && activeRoutingWaypoints.length >= 2 && (
-        <RoutingMachine
-          waypoints={activeRoutingWaypoints}
-          color={selectedColor}
-          onRouteCoordinatesChange={setActiveRouteCoordinates}
+    <div className="relative h-full w-full">
+      <MapContainer center={[10.7302, 122.5591]} zoom={13} className="h-full w-full">
+        <MapInteractionLock locked={showRouteLoadingOverlay} />
+        <VectorTileLayer />
+        <MapClickHandler />
+        <FocusRouteView focusKey={focusKey} focusedWaypoints={focusedWaypoints} />
+        <FocusRegionView regionFocusKey={regionFocusKey} focusedRegionWaypoints={focusedRegionWaypoints} />
+        <RegionDrawingLayer
+          enabled={!isCreating && showRegionEditor}
+          regionName={regionName}
+          regionColor={regionColor}
+          regionShape={regionShape}
+          onRegionShapeChange={setRegionShape}
         />
+        {!showRegionEditor && <RegionsLayer regions={regions ?? []} />}
+        {!isCreating && showRegionEditor && hasDefinedPolygon && <StationMarkers />}
+        {isCreating && <WaypointMarkers />}
+        {shouldRenderDirectionArrows && <DirectionArrows routeCoordinates={activeRouteCoordinates} />}
+
+        {isCreating && activeRoutingWaypoints.length >= 2 && (
+          <RoutingMachine
+            waypoints={activeRoutingWaypoints}
+            color={selectedColor}
+            onRouteCoordinatesChange={setActiveRouteCoordinates}
+          />
+        )}
+
+        {!isCreating && !showRouteLoadingOverlay
+          ? preparedRouting.map((route, index) => (
+            <Polyline
+              key={`${route.color}-${index}`}
+              positions={route.coordinates}
+              pathOptions={{ color: route.color, weight: 4, opacity: 0.85 }}
+            />
+          ))
+          : null}
+
+        {/* Existing persisted closures */}
+        <ClosureLinesLayer
+          closures={closureLines ?? []}
+          onClosureClick={onClosureLineClick}
+        />
+        <ClosureRegionsLayer
+          closures={closureRegions ?? []}
+          onClosureClick={onClosureRegionClick}
+        />
+      </MapContainer>
+
+      {showRouteLoadingOverlay && (
+        <div className="absolute inset-0 z-1000 flex items-center justify-center bg-slate-900/40 backdrop-blur-[1px]">
+          <div className="flex items-center gap-3 rounded-md bg-background/95 px-4 py-2 shadow-lg">
+            <span className="h-5 w-5 animate-spin rounded-full border-2 border-slate-300 border-t-slate-700" />
+            <span className="text-sm font-medium">Loading routes...</span>
+          </div>
+        </div>
       )}
-
-      {routing && !isCreating
-        ? routing.map((r, i) => (
-          <SavedPolylineLayer key={i} polyline={r.polyline} color={r.color} />
-        ))
-        : null}
-
-      {/* Existing persisted closures */}
-      <ClosureLinesLayer
-        closures={closureLines ?? []}
-        onClosureClick={onClosureLineClick}
-      />
-      <ClosureRegionsLayer
-        closures={closureRegions ?? []}
-        onClosureClick={onClosureRegionClick}
-      />
-    </MapContainer>
+    </div>
   );
 }
 
@@ -1119,6 +1185,8 @@ export interface MapProps {
   }>;
   onClosureLineClick?: (closure: NonNullable<MapProps["closureLines"]>[number]) => void;
   onClosureRegionClick?: (closure: NonNullable<MapProps["closureRegions"]>[number]) => void;
+  isRoutesLoading?: boolean;
+  onRoutesReadyChange?: (isReady: boolean) => void;
 }
 
 interface FocusRouteViewProps {

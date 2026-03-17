@@ -10,6 +10,7 @@ export default function RouteListCard({
   regions,
   closureLines,
   closureRegions,
+  isRoutesLoading,
   selectedRouteId,
   selectedRegionId,
   selectedClosureId,
@@ -62,7 +63,12 @@ export default function RouteListCard({
         </CardHeader>
         <CardContent className="flex min-h-0 flex-1 flex-col px-4">
           <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto pr-1">
-            {viewMode === "routes"
+            {isRoutesLoading ? (
+              <div className="flex h-full min-h-24 flex-col items-center justify-center gap-3">
+                <span className="h-6 w-6 animate-spin rounded-full border-2 border-slate-300 border-t-slate-700" />
+                <p className="text-muted-foreground text-sm">Loading routes...</p>
+              </div>
+            ) : viewMode === "routes"
               ? (
                 routes.length === 0 ? (
                   <p className="text-muted-foreground text-sm text-center">No routes available</p>
@@ -195,6 +201,7 @@ interface RouteListCardProps {
   regions: AllResponse["regions"];
   closureLines: NonNullable<AllResponse["closures"]>["lineClosures"];
   closureRegions: NonNullable<AllResponse["closures"]>["regionClosures"];
+  isRoutesLoading: boolean;
   selectedRouteId: string | null;
   selectedRegionId: string | null;
   selectedClosureId: string | null;

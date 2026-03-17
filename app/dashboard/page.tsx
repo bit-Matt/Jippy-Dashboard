@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import { AppSidebar, type AllResponse } from "@/components/app-sidebar";
 import MapComponent from "@/components/map-component";
@@ -23,6 +23,8 @@ import { ClosureEditorProvider, useClosureEditor } from "@/contexts/ClosureEdito
 
 function DashboardContent() {
   const [showSimulator, setShowSimulator] = useState(false);
+  const [isFetchingRoutes, setIsFetchingRoutes] = useState(true);
+  const [areRouteLayersReady, setAreRouteLayersReady] = useState(false);
   const [routes, setRoutes] = useState<AllResponse["routes"]>([]);
   const [regions, setRegions] = useState<AllResponse["regions"]>([]);
   const [editingRoute, setEditingRoute] = useState<AllResponse["routes"][0] | null>(null);
@@ -43,7 +45,6 @@ function DashboardContent() {
     closeRegionEditor,
   } = useRegionEditor();
   const {
-    mode: closureMode,
     startCreatingLine,
     startCreatingRegion,
     startEditingLine,
@@ -51,13 +52,31 @@ function DashboardContent() {
     stopEditing: stopClosureEditing,
   } = useClosureEditor();
 
+  const persistedRouting = useMemo(
+    () => routes.flatMap((route) => [
+      route.points.polylineGoingTo
+        ? { color: route.routeColor, polyline: route.points.polylineGoingTo }
+        : null,
+      route.points.polylineGoingBack
+        ? { color: route.routeColor, polyline: route.points.polylineGoingBack }
+        : null,
+    ].filter((entry): entry is { color: string; polyline: string } => entry !== null)),
+    [routes],
+  );
+
   const fetchRoutes = async () => {
+    setIsFetchingRoutes(true);
+    setAreRouteLayersReady(false);
+    setRoutes([]);
+
     const { data, error } = await $fetch<IApiResponse<AllResponse>>("/api/restricted/management/route", {
       method: "GET",
     });
 
     if (error) {
       console.error("Failed to fetch routes:", error);
+      setIsFetchingRoutes(false);
+      setAreRouteLayersReady(true);
       return;
     }
 
@@ -65,7 +84,10 @@ function DashboardContent() {
     setRegions(data.data.regions);
     setClosureLines(data.data.closures?.lineClosures ?? []);
     setClosureRegions(data.data.closures?.regionClosures ?? []);
+    setIsFetchingRoutes(false);
   };
+
+  const isRoutesLoading = isFetchingRoutes || !areRouteLayersReady;
 
   useEffect(() => {
     const timerId = window.setTimeout(() => {
@@ -281,14 +303,9 @@ function DashboardContent() {
             closureRegions={closureRegions}
             onClosureLineClick={handleOpenClosureLineForEdit}
             onClosureRegionClick={handleOpenClosureRegionForEdit}
-            routing={routes.flatMap((route) => [
-              route.points.polylineGoingTo
-                ? { color: route.routeColor, polyline: route.points.polylineGoingTo }
-                : null,
-              route.points.polylineGoingBack
-                ? { color: route.routeColor, polyline: route.points.polylineGoingBack }
-                : null,
-            ].filter((entry): entry is { color: string; polyline: string } => entry !== null))}
+            isRoutesLoading={isRoutesLoading}
+            onRoutesReadyChange={setAreRouteLayersReady}
+            routing={persistedRouting}
             focusedWaypoints={editingRoute
               ? [...editingRoute.points.goingTo]
                 .sort((a, b) => a.sequence - b.sequence)
@@ -303,6 +320,7 @@ function DashboardContent() {
             regions={regions}
             closureLines={closureLines}
             closureRegions={closureRegions}
+            isRoutesLoading={isRoutesLoading}
             selectedRouteId={editingRoute?.id ?? null}
             selectedRegionId={selectedRegionId}
             selectedClosureId={selectedClosureId}
