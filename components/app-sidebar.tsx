@@ -117,6 +117,7 @@ export interface AllResponse {
     routeNumber: string
     routeName: string
     routeColor: string
+    routeDetails: string
     points: {
       polylineGoingTo: string;
       goingTo: Array<{

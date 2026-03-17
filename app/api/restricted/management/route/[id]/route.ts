@@ -29,6 +29,7 @@ export async function PATCH(
     data.routeNumber !== undefined
     || data.routeName !== undefined
     || data.routeColor !== undefined
+    || data.routeDetails !== undefined
     || data.points !== undefined;
   if (!hasAnyPatchField) {
     return ExceptionResponseComposer.compose(StatusCodes.Status400BadRequest, [{ message: "No update fields provided." }])
@@ -40,6 +41,7 @@ export async function PATCH(
       routeNumber: { type: "string", formatter: "non-empty-string" },
       routeName: { type: "string", formatter: "non-empty-string" },
       routeColor: { type: "string", formatter: "hex-color" },
+      routeDetails: { type: "string", formatter: "non-empty-string" },
       points: {
         type: "object",
         formatterFn: async (values) => {
@@ -142,6 +144,7 @@ type PatchRequestBody = {
   routeNumber?: string;
   routeName?: string;
   routeColor?: string;
+  routeDetails?: string;
   points?: {
     goingTo: Array<{
       sequence: number;

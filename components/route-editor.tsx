@@ -6,6 +6,7 @@ import { useState, useEffect, useRef, type DragEvent } from "react";
 import { Card, CardContent, CardHeader} from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import {
   InputGroup,
   InputGroupAddon,
@@ -39,20 +40,10 @@ const ROUTE_COLORS = [
   { label: "Lime", value: "#bad80a" },
 ];
 
-const ROUTE_DISTRICTS = [
-  "Arevalo (Villa de Arevalo)",
-  "City Proper",
-  "Jaro",
-  "La Paz",
-  "Lapuz",
-  "Mandurriao",
-  "Molo",
-];
-
 export default function RouteEditor({ editingRoute, onSaved, onClosed }: RouteEditorProps) {
   const [routeNumber, setRouteNumber] = useState("");
   const [routeName, setRouteName] = useState("");
-  const [routeDistrict, setRouteDistrict] = useState("");
+  const [routeDetails, setRouteDetails] = useState("");
   const [draggedWaypointId, setDraggedWaypointId] = useState<number | null>(null);
   const dragPreviewRef = useRef<HTMLElement | null>(null);
   const [addresses, setAddresses] = useState<Record<number, string>>({});
@@ -80,6 +71,7 @@ export default function RouteEditor({ editingRoute, onSaved, onClosed }: RouteEd
 
     setRouteNumber(editingRoute.routeNumber);
     setRouteName(editingRoute.routeName);
+    setRouteDetails(editingRoute.routeDetails ?? "");
 
     const initialAddresses: Record<number, string> = {};
     const initialAddressCoords: Record<number, string> = {};
@@ -188,6 +180,7 @@ export default function RouteEditor({ editingRoute, onSaved, onClosed }: RouteEd
           routeNumber: routeNumber,
           routeName: routeName,
           routeColor: selectedColor,
+          routeDetails: routeDetails,
           points: {
             goingTo: route.goingTo.map(x => ({
               sequence: x.sequence,
@@ -210,7 +203,7 @@ export default function RouteEditor({ editingRoute, onSaved, onClosed }: RouteEd
 
           setRouteNumber("");
           setRouteName("");
-          setRouteDistrict("");
+          setRouteDetails("");
           setAddresses({});
           setAddressCoords({});
           clearAllWaypoints();
@@ -235,7 +228,7 @@ export default function RouteEditor({ editingRoute, onSaved, onClosed }: RouteEd
 
     setRouteNumber("");
     setRouteName("");
-    setRouteDistrict("");
+    setRouteDetails("");
     setAddresses({});
     setAddressCoords({});
     clearAllWaypoints();
@@ -261,7 +254,7 @@ export default function RouteEditor({ editingRoute, onSaved, onClosed }: RouteEd
 
       setRouteNumber("");
       setRouteName("");
-      setRouteDistrict("");
+      setRouteDetails("");
       setAddresses({});
       setAddressCoords({});
       clearAllWaypoints();
@@ -302,7 +295,7 @@ export default function RouteEditor({ editingRoute, onSaved, onClosed }: RouteEd
     setDraggedWaypointId(null);
   };
 
-  const canSave = waypointCounts.goingTo >= 2 && waypointCounts.goingBack >= 2;
+  const canSave = waypointCounts.goingTo >= 2 && waypointCounts.goingBack >= 2 && routeDetails.trim().length > 0;
 
   return (
     <div className="absolute top-2 left-6 z-9999 w-1/4">
@@ -351,20 +344,14 @@ export default function RouteEditor({ editingRoute, onSaved, onClosed }: RouteEd
               </div>
             </div>
             <div className="space-y-2">
-              <Label htmlFor="route-district">Route District</Label>
-              <select
-                id="route-district"
-                value={routeDistrict}
-                onChange={(e) => setRouteDistrict(e.target.value)}
-                className="border-input bg-background ring-offset-background placeholder:text-muted-foreground focus-visible:ring-ring flex h-9 w-full rounded-md border px-3 py-1 text-sm shadow-xs focus-visible:ring-1 focus-visible:outline-hidden disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                <option value="">Select district</option>
-                {ROUTE_DISTRICTS.map((district) => (
-                  <option key={district} value={district}>
-                    {district}
-                  </option>
-                ))}
-              </select>
+              <Label htmlFor="route-details">Route Details</Label>
+              <Textarea
+                id="route-details"
+                placeholder="Describe the route coverage, stops, or other relevant info..."
+                value={routeDetails}
+                onChange={(e) => setRouteDetails(e.target.value)}
+                className="min-h-16 max-h-32 resize-y"
+              />
             </div>
           </div>
 

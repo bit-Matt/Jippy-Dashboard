@@ -86,6 +86,7 @@ export const routes = pgTable(
     routeNumber: text("route_number").notNull(),
     routeName: text("route_name").notNull(),
     routeColor: text("route_color").notNull().default("#FFF000"),
+    routeDetails: text("route_details").default("").notNull(),
     createdAt: timestamp("created_at").defaultNow().notNull(),
     updatedAt: timestamp("updated_at")
       .defaultNow()

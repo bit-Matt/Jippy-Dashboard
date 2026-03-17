@@ -41,6 +41,7 @@ export async function POST(req: NextRequest) {
       routeNumber: { type: "string", formatter: "non-empty-string" },
       routeName: { type: "string", formatter: "non-empty-string" },
       routeColor: { type: "string", formatter: "hex-color" },
+      routeDetails: { type: "string", formatter: "non-empty-string" },
       points: {
         type: "object",
         formatterFn: async (values) => {
@@ -70,7 +71,7 @@ export async function POST(req: NextRequest) {
         },
       },
     },
-    requiredProperties: ["routeNumber", "routeName", "routeColor", "points"],
+    requiredProperties: ["routeNumber", "routeName", "routeColor", "routeDetails", "points"],
     allowUnvalidatedProperties: false,
   });
   if (!validation.ok) {
@@ -103,6 +104,7 @@ type RequestBody = {
   routeNumber: string;
   routeName: string;
   routeColor: string;
+  routeDetails: string;
   points: {
     goingTo: Array<{
       sequence: number;

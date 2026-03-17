@@ -19,6 +19,7 @@ export async function getAllRoutes() {
       routeNumber: routes.routeNumber,
       routeName: routes.routeName,
       routeColor: routes.routeColor,
+      routeDetails: routes.routeDetails,
 
       // Build the nested { goingTo: [], goingBack: [] } structure
       points: sql<{ goingTo: PointObject[]; goingBack: PointObject[] }>`
@@ -72,6 +73,7 @@ export async function addRoute(params: AddRouteParameters): Promise<RouteObject>
         routeName: params.routeName,
         routeNumber: params.routeNumber,
         routeColor: params.routeColor,
+        routeDetails: params.routeDetails ?? "",
         polylineGoingTo: params.polylineGoingTo ?? "",
         polylineGoingBack: params.polylineGoingBack ?? "",
       })
@@ -109,6 +111,7 @@ export async function addRoute(params: AddRouteParameters): Promise<RouteObject>
       routeNumber: route.routeNumber,
       routeName: route.routeName,
       routeColor: route.routeColor,
+      routeDetails: route.routeDetails,
       points: {
         polylineGoingTo: route.polylineGoingTo,
         goingTo: sequences
@@ -163,6 +166,7 @@ export async function updateRoute(
         ...(params.routeNumber !== undefined && { routeNumber: params.routeNumber }),
         ...(params.routeName !== undefined && { routeName: params.routeName }),
         ...(params.routeColor !== undefined && { routeColor: params.routeColor }),
+        ...(params.routeDetails !== undefined && { routeDetails: params.routeDetails }),
         ...(params.polylineGoingTo !== undefined && { polylineGoingTo: params.polylineGoingTo }),
         ...(params.polylineGoingBack !== undefined && { polylineGoingBack: params.polylineGoingBack }),
       };
@@ -253,6 +257,7 @@ export async function updateRoute(
         routeNumber: routeData.routeNumber,
         routeName: routeData.routeName,
         routeColor: routeData.routeColor,
+        routeDetails: routeData.routeDetails,
         points: {
           polylineGoingTo: routeData.polylineGoingTo,
           goingTo,
@@ -710,6 +715,7 @@ export interface AddRouteParameters {
   routeNumber: string;
   routeName: string;
   routeColor: string;
+  routeDetails: string;
   polylineGoingTo: string;
   polylineGoingBack: string;
   points: {
@@ -722,6 +728,7 @@ export interface UpdateRouteParameters {
   routeNumber?: string;
   routeName?: string;
   routeColor?: string;
+  routeDetails?: string;
   polylineGoingTo?: string;
   polylineGoingBack?: string;
   points?: {
@@ -735,6 +742,7 @@ export interface RouteObject {
   routeNumber: string;
   routeName: string;
   routeColor: string;
+  routeDetails: string;
   points: {
     polylineGoingTo: string;
     goingTo: Array<PointObject>;
