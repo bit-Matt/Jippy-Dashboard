@@ -9,6 +9,7 @@
     "lint": "eslint",
     "lint:fix": "eslint --fix",
     "setup": "node ./scripts/generate_env.mjs",
+    "setup:tileserver-style": "node ./scripts/tileserver-config.mjs",
     "service:start": "node ./scripts/containers.mjs --container-start",
     "service:stop": "node ./scripts/containers.mjs --container-stop",
     "service:down": "node ./scripts/containers.mjs --container-down",

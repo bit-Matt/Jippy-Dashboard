@@ -5,11 +5,11 @@
   "sources": {
     "openmaptiles": {
       "type": "vector",
-      "url": "http://tileserver.shinosawa-laboratories.dev/data/v3.json"
+      "url": "{TILESERVER_HOSTNAME}/data/v3.json"
     }
   },
-  "sprite": "http://localhost:3000/tileserver/sprite",
-  "glyphs": "http://localhost:3000/tileserver/fontstack/{fontstack}/{range}.pbf",
+  "sprite": "{ASSET_HOSTNAME}/tileserver/sprite",
+  "glyphs": "{ASSET_HOSTNAME}/tileserver/fontstack/{fontstack}/{range}.pbf",
   "layers": [
     {
       "id": "background",
