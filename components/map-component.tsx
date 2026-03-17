@@ -14,7 +14,7 @@ import "leaflet/dist/leaflet.css";
 import "@geoman-io/leaflet-geoman-free/dist/leaflet-geoman.css";
 import "leaflet-routing-machine/dist/leaflet-routing-machine.css";
 
-import { useRegionEditor } from "@/contexts/RegionEditorContext";
+import { useRegionEditor, type ActiveRegionTool } from "@/contexts/RegionEditorContext";
 import { useRouteEditor } from "@/contexts/RouteEditorContext";
 import { useClosureEditor } from "@/contexts/ClosureEditorContext";
 
@@ -271,13 +271,30 @@ const RoutingMachine = ({ waypoints, color, onRouteCoordinatesChange }: RoutingM
 
 const RegionDrawingLayer = ({
   enabled,
+  activeRegionTool,
   regionName,
   regionColor,
   regionShape,
   onRegionShapeChange,
+  onToolComplete,
 }: RegionDrawingLayerProps) => {
   const map = useMap();
   const regionLayerRef = useRef<L.Polygon | L.Rectangle | null>(null);
+
+  type PmMapApi = {
+    setGlobalOptions?: (options: object) => void;
+    enableDraw?: (shape: "Polygon" | "Rectangle", options?: object) => void;
+    disableDraw?: (shape: "Polygon" | "Rectangle") => void;
+    disableGlobalDrawMode?: () => void;
+    enableGlobalEditMode?: (options?: object) => void;
+    disableGlobalEditMode?: () => void;
+    enableGlobalRemovalMode?: () => void;
+    disableGlobalRemovalMode?: () => void;
+  };
+
+  type PmLayerApi = {
+    disable?: () => void;
+  };
 
   const normalizeCoordinates = useCallback((layer: L.Polygon | L.Rectangle): Array<[number, number]> => {
     const latLngs = layer.getLatLngs();
@@ -354,6 +371,23 @@ const RegionDrawingLayer = ({
     shapeLayer.off("pm:vertexremoved");
   }, []);
 
+  const disableLayerEditing = useCallback(() => {
+    const pmLayer = regionLayerRef.current as (L.Layer & { pm?: PmLayerApi }) | null;
+    pmLayer?.pm?.disable?.();
+  }, []);
+
+  const disableAllRegionTools = useCallback(() => {
+    const pmMap = map as L.Map & { pm?: PmMapApi };
+    if (!pmMap.pm) return;
+
+    pmMap.pm.disableDraw?.("Polygon");
+    pmMap.pm.disableDraw?.("Rectangle");
+    pmMap.pm.disableGlobalDrawMode?.();
+    pmMap.pm.disableGlobalEditMode?.();
+    pmMap.pm.disableGlobalRemovalMode?.();
+    disableLayerEditing();
+  }, [map, disableLayerEditing]);
+
   useEffect(() => {
     if (!enabled || !regionLayerRef.current) return;
 
@@ -399,26 +433,10 @@ const RegionDrawingLayer = ({
     applyRegionLabel(layer);
     bindLayerMutationEvents(layer);
 
-    const pmLayer = layer as L.Layer & {
-      pm?: {
-        enable: (options?: object) => void;
-      };
-    };
-
-    pmLayer.pm?.enable({
-      allowSelfIntersection: false,
-      draggable: false,
-    });
   }, [enabled, map, regionShape, applyRegionLabel, applyRegionStyles, areShapesEqual, bindLayerMutationEvents, toShapeFromLayer, unbindLayerMutationEvents]);
 
   useEffect(() => {
-    const pmMap = map as L.Map & {
-      pm?: {
-        addControls: (options: object) => void;
-        removeControls: () => void;
-        setGlobalOptions: (options: object) => void;
-      };
-    };
+    const pmMap = map as L.Map & { pm?: PmMapApi };
 
     if (!pmMap.pm) return;
 
@@ -433,6 +451,7 @@ const RegionDrawingLayer = ({
 
     const handleCreate: (event: { layer: L.Polygon | L.Rectangle; shape?: string }) => void = (event) => {
       if (regionLayerRef.current) {
+        unbindLayerMutationEvents(regionLayerRef.current);
         map.removeLayer(regionLayerRef.current);
       }
 
@@ -448,16 +467,7 @@ const RegionDrawingLayer = ({
         coordinates: normalizeCoordinates(layer),
       });
 
-      const pmLayer = layer as L.Layer & {
-        pm?: {
-          enable: (options?: object) => void;
-        };
-      };
-
-      pmLayer.pm?.enable({
-        allowSelfIntersection: false,
-        draggable: false,
-      });
+      onToolComplete();
     };
 
     const handleEdit = (event: { layer: L.Polygon | L.Rectangle }) => {
@@ -475,25 +485,11 @@ const RegionDrawingLayer = ({
 
       regionLayerRef.current = null;
       onRegionShapeChange(null);
+      onToolComplete();
     };
 
     if (enabled) {
-      pmMap.pm.addControls({
-        position: "bottomleft",
-        drawCircle: false,
-        drawCircleMarker: false,
-        drawMarker: false,
-        drawPolyline: false,
-        drawText: false,
-        drawPolygon: true,
-        drawRectangle: true,
-        editMode: true,
-        dragMode: false,
-        cutPolygon: false,
-        removalMode: true,
-        rotateMode: true,
-      });
-      pmMap.pm.setGlobalOptions({ continueDrawing: false });
+      pmMap.pm.setGlobalOptions?.({ continueDrawing: false });
       map.on("pm:create", handleCreate);
       map.on("pm:edit", handleEdit);
       map.on("pm:update", handleGeometryMutated);
@@ -502,7 +498,7 @@ const RegionDrawingLayer = ({
       map.on("pm:vertexremoved", handleGeometryMutated);
       map.on("pm:remove", handleRemove);
     } else {
-      pmMap.pm.removeControls();
+      disableAllRegionTools();
       clearRegionLayer();
     }
 
@@ -518,16 +514,44 @@ const RegionDrawingLayer = ({
       if (regionLayerRef.current) {
         unbindLayerMutationEvents(regionLayerRef.current);
       }
-
-      if (pmMap.pm) {
-        pmMap.pm.removeControls();
-      }
+      disableAllRegionTools();
 
       if (!enabled) {
         clearRegionLayer();
       }
     };
-  }, [enabled, map, onRegionShapeChange, applyRegionLabel, applyRegionStyles, normalizeCoordinates, syncShapeFromLayer, bindLayerMutationEvents, unbindLayerMutationEvents]);
+  }, [enabled, map, onRegionShapeChange, applyRegionLabel, applyRegionStyles, normalizeCoordinates, syncShapeFromLayer, bindLayerMutationEvents, unbindLayerMutationEvents, disableAllRegionTools, onToolComplete]);
+
+  useEffect(() => {
+    if (!enabled) {
+      disableAllRegionTools();
+      return;
+    }
+
+    const pmMap = map as L.Map & { pm?: PmMapApi };
+    if (!pmMap.pm) return;
+
+    disableAllRegionTools();
+
+    if (activeRegionTool === "draw-polygon") {
+      pmMap.pm.enableDraw?.("Polygon", {
+        continueDrawing: false,
+        allowSelfIntersection: false,
+      });
+      return;
+    }
+
+    if (activeRegionTool === "draw-rectangle") {
+      pmMap.pm.enableDraw?.("Rectangle", { continueDrawing: false });
+      return;
+    }
+
+    if (activeRegionTool === "edit-region" && regionLayerRef.current) {
+      pmMap.pm.enableGlobalEditMode?.({ allowSelfIntersection: false });
+      return;
+    }
+
+  }, [enabled, map, activeRegionTool, disableAllRegionTools]);
 
   return null;
 };
@@ -1018,10 +1042,12 @@ export default function MapComponent({
   const {
     showRegionEditor,
     hasDefinedPolygon,
+    activeRegionTool,
     regionShape,
     regionName,
     regionColor,
     setRegionShape,
+    finishRegionToolEditing,
   } = useRegionEditor();
   useEffect(() => {
     fixLeafletIcons();
@@ -1076,10 +1102,12 @@ export default function MapComponent({
         <FocusRegionView regionFocusKey={regionFocusKey} focusedRegionWaypoints={focusedRegionWaypoints} />
         <RegionDrawingLayer
           enabled={!isCreating && showRegionEditor}
+          activeRegionTool={activeRegionTool}
           regionName={regionName}
           regionColor={regionColor}
           regionShape={regionShape}
           onRegionShapeChange={setRegionShape}
+          onToolComplete={finishRegionToolEditing}
         />
         {!showRegionEditor && <RegionsLayer regions={regions ?? []} />}
         {!isCreating && showRegionEditor && hasDefinedPolygon && <StationMarkers />}
@@ -1201,10 +1229,12 @@ interface FocusRegionViewProps {
 
 interface RegionDrawingLayerProps {
   enabled: boolean;
+  activeRegionTool: ActiveRegionTool;
   regionName: string;
   regionColor: string;
   regionShape: RegionDraftShape | null;
   onRegionShapeChange: (shape: RegionDraftShape | null) => void;
+  onToolComplete: () => void;
 }
 
 interface RegionsLayerProps {

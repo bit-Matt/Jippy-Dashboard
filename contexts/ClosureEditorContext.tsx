@@ -4,6 +4,8 @@ import { createContext, useCallback, useContext, useMemo, useState, type ReactNo
 
 import type { ClosureLineObject, ClosureRegionObject } from "@/lib/management";
 
+const DEFAULT_CLOSURE_COLOR = "#fff100";
+
 type ClosureMode = "idle" | "creating-line" | "creating-region" | "editing-line" | "editing-region";
 
 interface ClosureLineDraftPoint {
@@ -74,7 +76,7 @@ export function ClosureEditorProvider({ children }: { children: ReactNode }) {
       activeLinePointId: null,
       lineDraft: {
         label: "",
-        color: "#ef4444",
+        color: DEFAULT_CLOSURE_COLOR,
         direction: "both",
         points: [],
       },
@@ -90,7 +92,7 @@ export function ClosureEditorProvider({ children }: { children: ReactNode }) {
       lineDraft: null,
       regionDraft: {
         label: "",
-        color: "#ef4444",
+        color: DEFAULT_CLOSURE_COLOR,
         points: [],
       },
     });

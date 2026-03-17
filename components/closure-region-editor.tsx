@@ -7,10 +7,30 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { $fetch } from "@/lib/http/client";
 import type { IApiResponse } from "@/lib/http/ResponseComposer";
 import type { ClosureRegionObject } from "@/lib/management";
 import { useClosureEditor } from "@/contexts/ClosureEditorContext";
+
+const CLOSURE_COLORS = [
+  { label: "Sun Yellow", value: "#fff100" },
+  { label: "Orange", value: "#ff8c00" },
+  { label: "Red", value: "#e81123" },
+  { label: "Magenta", value: "#ec008c" },
+  { label: "Purple", value: "#68217a" },
+  { label: "Navy", value: "#00188f" },
+  { label: "Sky", value: "#00bcf2" },
+  { label: "Teal", value: "#00b294" },
+  { label: "Green", value: "#009e49" },
+  { label: "Lime", value: "#bad80a" },
+];
 
 interface ClosureRegionEditorProps {
   onSaved: () => void;
@@ -35,7 +55,6 @@ export default function ClosureRegionEditor({ onSaved }: ClosureRegionEditorProp
 
   const handleSave = async () => {
     if (regionDraft.points.length < 3) {
-      // eslint-disable-next-line no-alert
       alert("Please add at least 3 points for the closure region.");
       return;
     }
@@ -74,7 +93,6 @@ export default function ClosureRegionEditor({ onSaved }: ClosureRegionEditorProp
       stopEditing();
     } catch (error) {
       console.error("Failed to save closure region", error);
-      // eslint-disable-next-line no-alert
       alert("Failed to save closure region.");
     } finally {
       setIsSaving(false);
@@ -84,7 +102,6 @@ export default function ClosureRegionEditor({ onSaved }: ClosureRegionEditorProp
   const handleDelete = async () => {
     if (mode !== "editing-region" || !activeClosureId) return;
 
-    // eslint-disable-next-line no-alert
     const shouldDelete = window.confirm("Delete this road closure? This action cannot be undone.");
     if (!shouldDelete) return;
 
@@ -95,7 +112,6 @@ export default function ClosureRegionEditor({ onSaved }: ClosureRegionEditorProp
       stopEditing();
     } catch (error) {
       console.error("Failed to delete closure region", error);
-      // eslint-disable-next-line no-alert
       alert("Failed to delete closure region.");
     } finally {
       setIsDeleting(false);
@@ -138,12 +154,25 @@ export default function ClosureRegionEditor({ onSaved }: ClosureRegionEditorProp
             </div>
             <div className="grid gap-1.5">
               <Label htmlFor="closure-region-color">Color</Label>
-              <Input
-                id="closure-region-color"
-                type="color"
-                value={regionDraft.color}
-                onChange={e => setRegionColor(e.target.value)}
-              />
+              <Select value={regionDraft.color} onValueChange={setRegionColor}>
+                <SelectTrigger id="closure-region-color" className="w-full">
+                  <SelectValue placeholder="Select closure color" />
+                </SelectTrigger>
+                <SelectContent>
+                  {CLOSURE_COLORS.map((color) => (
+                    <SelectItem key={color.value} value={color.value}>
+                      <span className="flex items-center gap-2">
+                        <span
+                          aria-hidden="true"
+                          className="h-2.5 w-2.5 rounded-full"
+                          style={{ backgroundColor: color.value }}
+                        />
+                        {color.label}
+                      </span>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
           </div>
 
