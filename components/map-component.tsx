@@ -833,7 +833,7 @@ const RegionsLayer = ({ regions }: RegionsLayerProps) => {
   );
 };
 
-const ClosureLinesLayer = ({ closures }: ClosureLinesLayerProps) => {
+const ClosureLinesLayer = ({ closures, onClosureClick }: ClosureLinesLayerProps) => {
   return (
     <>
       {closures.map(closure => {
@@ -854,6 +854,16 @@ const ClosureLinesLayer = ({ closures }: ClosureLinesLayerProps) => {
               dashArray: "6 4",
               fill: false,
             }}
+            eventHandlers={{
+              click: (event) => {
+                const originalEvent = event.originalEvent as unknown as Event | undefined;
+                if (originalEvent) {
+                  L.DomEvent.stopPropagation(originalEvent);
+                  L.DomEvent.preventDefault(originalEvent);
+                }
+                onClosureClick?.(closure);
+              },
+            }}
           >
             {closure.label && (
               <Tooltip
@@ -871,7 +881,7 @@ const ClosureLinesLayer = ({ closures }: ClosureLinesLayerProps) => {
   );
 };
 
-const ClosureRegionsLayer = ({ closures }: ClosureRegionsLayerProps) => {
+const ClosureRegionsLayer = ({ closures, onClosureClick }: ClosureRegionsLayerProps) => {
   return (
     <>
       {closures.map(closure => {
@@ -890,6 +900,16 @@ const ClosureRegionsLayer = ({ closures }: ClosureRegionsLayerProps) => {
               fillColor: closure.color,
               fillOpacity: 0.25,
               weight: 2,
+            }}
+            eventHandlers={{
+              click: (event) => {
+                const originalEvent = event.originalEvent as unknown as Event | undefined;
+                if (originalEvent) {
+                  L.DomEvent.stopPropagation(originalEvent);
+                  L.DomEvent.preventDefault(originalEvent);
+                }
+                onClosureClick?.(closure);
+              },
             }}
           >
             {closure.label && (
@@ -918,6 +938,8 @@ export default function MapComponent({
   regionFocusKey,
   closureLines,
   closureRegions,
+  onClosureLineClick,
+  onClosureRegionClick,
 }: MapProps) {
   const { isCreating, waypoints, selectedColor } = useRouteEditor();
   const [activeRouteCoordinates, setActiveRouteCoordinates] = useState<Array<[number, number]>>([]);
@@ -978,9 +1000,11 @@ export default function MapComponent({
       {/* Existing persisted closures */}
       <ClosureLinesLayer
         closures={closureLines ?? []}
+        onClosureClick={onClosureLineClick}
       />
       <ClosureRegionsLayer
         closures={closureRegions ?? []}
+        onClosureClick={onClosureRegionClick}
       />
     </MapContainer>
   );
@@ -1042,6 +1066,8 @@ export interface MapProps {
       point: [number, number];
     }>;
   }>;
+  onClosureLineClick?: (closure: NonNullable<MapProps["closureLines"]>[number]) => void;
+  onClosureRegionClick?: (closure: NonNullable<MapProps["closureRegions"]>[number]) => void;
 }
 
 interface FocusRouteViewProps {
@@ -1083,10 +1109,12 @@ interface RegionsLayerProps {
 
 interface ClosureLinesLayerProps {
   closures: NonNullable<MapProps["closureLines"]>;
+  onClosureClick?: (closure: NonNullable<MapProps["closureLines"]>[number]) => void;
 }
 
 interface ClosureRegionsLayerProps {
   closures: NonNullable<MapProps["closureRegions"]>;
+  onClosureClick?: (closure: NonNullable<MapProps["closureRegions"]>[number]) => void;
 }
 
 export interface RegionDraftShape {

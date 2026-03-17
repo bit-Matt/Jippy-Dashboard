@@ -22,6 +22,7 @@ interface ClosureRegionDraftPoint {
 interface ClosureEditorState {
   mode: ClosureMode;
   activeClosureId: string | null;
+  activeLinePointId: string | null;
   lineDraft: {
     label: string;
     color: string;
@@ -41,8 +42,11 @@ interface ClosureEditorContextValue extends ClosureEditorState {
   startEditingLine: (closure: ClosureLineObject) => void;
   startEditingRegion: (closure: ClosureRegionObject) => void;
   stopEditing: () => void;
+  setActiveLinePointId: (id: string | null) => void;
   addLinePoint: (lat: number, lng: number) => void;
   updateLinePoint: (id: string, lat: number, lng: number) => void;
+  removeLinePoint: (id: string) => void;
+  setLinePointAddress: (id: string, address: string) => void;
   setLineDirection: (direction: "one_way" | "both") => void;
   setLineLabel: (label: string) => void;
   setLineColor: (color: string) => void;
@@ -58,6 +62,7 @@ export function ClosureEditorProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<ClosureEditorState>({
     mode: "idle",
     activeClosureId: null,
+    activeLinePointId: null,
     lineDraft: null,
     regionDraft: null,
   });
@@ -66,6 +71,7 @@ export function ClosureEditorProvider({ children }: { children: ReactNode }) {
     setState({
       mode: "creating-line",
       activeClosureId: null,
+      activeLinePointId: null,
       lineDraft: {
         label: "",
         color: "#ef4444",
@@ -80,6 +86,7 @@ export function ClosureEditorProvider({ children }: { children: ReactNode }) {
     setState({
       mode: "creating-region",
       activeClosureId: null,
+      activeLinePointId: null,
       lineDraft: null,
       regionDraft: {
         label: "",
@@ -93,6 +100,7 @@ export function ClosureEditorProvider({ children }: { children: ReactNode }) {
     setState({
       mode: "editing-line",
       activeClosureId: closure.id,
+      activeLinePointId: null,
       lineDraft: {
         label: closure.label,
         color: closure.color,
@@ -112,6 +120,7 @@ export function ClosureEditorProvider({ children }: { children: ReactNode }) {
     setState({
       mode: "editing-region",
       activeClosureId: closure.id,
+      activeLinePointId: null,
       lineDraft: null,
       regionDraft: {
         label: closure.label,
@@ -129,9 +138,17 @@ export function ClosureEditorProvider({ children }: { children: ReactNode }) {
     setState({
       mode: "idle",
       activeClosureId: null,
+      activeLinePointId: null,
       lineDraft: null,
       regionDraft: null,
     });
+  }, []);
+
+  const setActiveLinePointId = useCallback((id: string | null) => {
+    setState((prev) => ({
+      ...prev,
+      activeLinePointId: id,
+    }));
   }, []);
 
   const addLinePoint = useCallback((lat: number, lng: number) => {
@@ -171,6 +188,40 @@ export function ClosureEditorProvider({ children }: { children: ReactNode }) {
           points: prev.lineDraft.points.map(p => (p.id === id
             ? { ...p, point: [lat, lng] }
             : p)),
+        },
+      };
+    });
+  }, []);
+
+  const removeLinePoint = useCallback((id: string) => {
+    setState((prev) => {
+      if (!prev.lineDraft) return prev;
+
+      const remaining = prev.lineDraft.points
+        .filter((p) => p.id !== id)
+        .sort((a, b) => a.sequence - b.sequence)
+        .map((p, index) => ({ ...p, sequence: index + 1 }));
+
+      return {
+        ...prev,
+        activeLinePointId: prev.activeLinePointId === id ? null : prev.activeLinePointId,
+        lineDraft: {
+          ...prev.lineDraft,
+          points: remaining,
+        },
+      };
+    });
+  }, []);
+
+  const setLinePointAddress = useCallback((id: string, address: string) => {
+    setState((prev) => {
+      if (!prev.lineDraft) return prev;
+
+      return {
+        ...prev,
+        lineDraft: {
+          ...prev.lineDraft,
+          points: prev.lineDraft.points.map((p) => (p.id === id ? { ...p, address } : p)),
         },
       };
     });
@@ -285,8 +336,11 @@ export function ClosureEditorProvider({ children }: { children: ReactNode }) {
       startEditingLine,
       startEditingRegion,
       stopEditing,
+      setActiveLinePointId,
       addLinePoint,
       updateLinePoint,
+      removeLinePoint,
+      setLinePointAddress,
       setLineDirection,
       setLineLabel,
       setLineColor,
@@ -302,8 +356,11 @@ export function ClosureEditorProvider({ children }: { children: ReactNode }) {
       startEditingLine,
       startEditingRegion,
       stopEditing,
+      setActiveLinePointId,
       addLinePoint,
       updateLinePoint,
+      removeLinePoint,
+      setLinePointAddress,
       setLineDirection,
       setLineLabel,
       setLineColor,

@@ -29,6 +29,8 @@ function DashboardContent() {
   const [closureLines, setClosureLines] = useState<AllResponse["closures"]["lineClosures"]>([]);
   const [closureRegions, setClosureRegions] = useState<AllResponse["closures"]["regionClosures"]>([]);
   const [selectedRegionId, setSelectedRegionId] = useState<string | null>(null);
+  const [selectedClosureId, setSelectedClosureId] = useState<string | null>(null);
+  const [selectedClosureType, setSelectedClosureType] = useState<"line" | "region" | null>(null);
   const [routeFocusKey, setRouteFocusKey] = useState<string | number | null>(null);
   const [focusedRegionWaypoints, setFocusedRegionWaypoints] = useState<Array<[number, number]> | undefined>(undefined);
   const [regionFocusKey, setRegionFocusKey] = useState<string | number | null>(null);
@@ -44,6 +46,8 @@ function DashboardContent() {
     mode: closureMode,
     startCreatingLine,
     startCreatingRegion,
+    startEditingLine,
+    startEditingRegion,
     stopEditing: stopClosureEditing,
   } = useClosureEditor();
 
@@ -99,6 +103,8 @@ function DashboardContent() {
     setFocusedRegionWaypoints(undefined);
     setRegionFocusKey(null);
     setSelectedRegionId(null);
+    setSelectedClosureId(null);
+    setSelectedClosureType(null);
     setShowSimulator(false);
   };
 
@@ -116,6 +122,8 @@ function DashboardContent() {
     }
 
     setSelectedRegionId(null);
+    setSelectedClosureId(null);
+    setSelectedClosureType(null);
     setShowSimulator(false);
   };
 
@@ -133,6 +141,8 @@ function DashboardContent() {
     setFocusedRegionWaypoints(undefined);
     setRegionFocusKey(null);
     setSelectedRegionId(null);
+    setSelectedClosureId(null);
+    setSelectedClosureType(null);
     setShowSimulator(false);
     startCreatingLine();
   };
@@ -151,8 +161,40 @@ function DashboardContent() {
     setFocusedRegionWaypoints(undefined);
     setRegionFocusKey(null);
     setSelectedRegionId(null);
+    setSelectedClosureId(null);
+    setSelectedClosureType(null);
     setShowSimulator(false);
     startCreatingRegion();
+  };
+
+  const handleOpenClosureLineForEdit = (closure: AllResponse["closures"]["lineClosures"][0]) => {
+    setShowSimulator(false);
+    closeRegionEditor();
+    setFocusedRegionWaypoints(undefined);
+    setRegionFocusKey(null);
+    setSelectedRegionId(null);
+    setRouteFocusKey(null);
+    setEditingRoute(null);
+    stopCreating();
+
+    setSelectedClosureId(closure.id);
+    setSelectedClosureType("line");
+    startEditingLine(closure);
+  };
+
+  const handleOpenClosureRegionForEdit = (closure: AllResponse["closures"]["regionClosures"][0]) => {
+    setShowSimulator(false);
+    closeRegionEditor();
+    setFocusedRegionWaypoints(undefined);
+    setRegionFocusKey(null);
+    setSelectedRegionId(null);
+    setRouteFocusKey(null);
+    setEditingRoute(null);
+    stopCreating();
+
+    setSelectedClosureId(closure.id);
+    setSelectedClosureType("region");
+    startEditingRegion(closure);
   };
 
   const handleOpenRegionForEdit = (region: AllResponse["regions"][0]) => {
@@ -162,6 +204,9 @@ function DashboardContent() {
     if (isCreating) {
       stopCreating();
     }
+    stopClosureEditing();
+    setSelectedClosureId(null);
+    setSelectedClosureType(null);
 
     const sortedRegionPoints = [...region.points]
       .sort((a, b) => a.sequence - b.sequence)
@@ -186,6 +231,9 @@ function DashboardContent() {
     setFocusedRegionWaypoints(undefined);
     setRegionFocusKey(null);
     setSelectedRegionId(null);
+    stopClosureEditing();
+    setSelectedClosureId(null);
+    setSelectedClosureType(null);
     setRouteFocusKey(`${route.id}-${Date.now()}`);
     setEditingRoute(route);
 
@@ -208,6 +256,8 @@ function DashboardContent() {
     setFocusedRegionWaypoints(undefined);
     setRegionFocusKey(null);
     setSelectedRegionId(null);
+    setSelectedClosureId(null);
+    setSelectedClosureType(null);
     setRouteFocusKey(null);
     setEditingRoute(null);
     stopCreating();
@@ -229,6 +279,8 @@ function DashboardContent() {
             regions={regions}
             closureLines={closureLines}
             closureRegions={closureRegions}
+            onClosureLineClick={handleOpenClosureLineForEdit}
+            onClosureRegionClick={handleOpenClosureRegionForEdit}
             routing={routes.flatMap((route) => {
               const goingToWaypoints = [...route.points.goingTo]
                 .sort((a, b) => a.sequence - b.sequence)
@@ -261,10 +313,16 @@ function DashboardContent() {
           <RouteListCard
             routes={routes}
             regions={regions}
+            closureLines={closureLines}
+            closureRegions={closureRegions}
             selectedRouteId={editingRoute?.id ?? null}
             selectedRegionId={selectedRegionId}
+            selectedClosureId={selectedClosureId}
+            selectedClosureType={selectedClosureType}
             onRouteSelect={handleOpenRouteForEdit}
             onRegionSelect={handleOpenRegionForEdit}
+            onClosureLineSelect={handleOpenClosureLineForEdit}
+            onClosureRegionSelect={handleOpenClosureRegionForEdit}
           />
           {showSimulator && <Simulator />}
           {isCreating && (
