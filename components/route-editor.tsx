@@ -146,8 +146,16 @@ export default function RouteEditor({ editingRoute, onSaved, onClosed }: RouteEd
         }
       }
 
-      setAddresses(newAddresses);
-      setAddressCoords(newAddressCoords);
+      const hasAddressUpdates = toGeocode.some((waypoint) => {
+        return addresses[waypoint.id] !== newAddresses[waypoint.id]
+          || addressCoords[waypoint.id] !== newAddressCoords[waypoint.id];
+      });
+
+      if (hasAddressUpdates) {
+        setAddresses(newAddresses);
+        setAddressCoords(newAddressCoords);
+      }
+
       setLoadingAddresses((prev) => {
         const updated = new Set(prev);
         toGeocode.forEach((wp) => updated.delete(wp.id));

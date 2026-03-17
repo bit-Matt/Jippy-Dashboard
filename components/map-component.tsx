@@ -1,6 +1,6 @@
 "use client";
 
-import { type ComponentProps, useCallback, useEffect, useRef } from "react";
+import { type ComponentProps, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { MapContainer, Marker, Polygon, Tooltip, useMap, useMapEvents } from "react-leaflet";
 import L from "leaflet";
 
@@ -135,7 +135,7 @@ const VectorTileLayer = () => {
   return null;
 };
 
-const RoutingMachine = ({ waypoints, color }: RoutingMachineProps) => {
+const RoutingMachine = ({ waypoints, color, onRouteCoordinatesChange }: RoutingMachineProps) => {
   const map = useMap();
 
   useEffect(() => {
@@ -165,12 +165,26 @@ const RoutingMachine = ({ waypoints, color }: RoutingMachineProps) => {
       addWaypoints: false,
       fitSelectedRoutes: false,
       showAlternatives: false,
-    }).addTo(map);
+    }).addTo(map) as unknown as L.Control & L.Evented;
+
+    const handleRoutesFound: L.LeafletEventHandlerFn = (event) => {
+      if (!onRouteCoordinatesChange) return;
+      const routeEvent = event as L.LeafletEvent & {
+        routes?: Array<{
+          coordinates?: L.LatLng[];
+        }>;
+      };
+      const coordinates = routeEvent.routes?.[0]?.coordinates ?? [];
+      onRouteCoordinatesChange(coordinates.map((point) => [point.lat, point.lng] as [number, number]));
+    };
+
+    routingControl.on("routesfound", handleRoutesFound);
 
     return () => {
+      routingControl.off("routesfound", handleRoutesFound);
       map.removeControl(routingControl);
     };
-  }, [map, waypoints, color]);
+  }, [map, waypoints, color, onRouteCoordinatesChange]);
 
   return null;
 };
@@ -473,6 +487,82 @@ const createSequenceIcon = (sequence: number, isActive: boolean) => {
   });
 };
 
+const createDirectionArrowIcon = (angle: number, color: string) => {
+  // Arrow SVG points to the right (east) by default, while bearing 0 points north.
+  // Offset by -90deg so cardinal directions line up with map movement.
+  const rotation = angle - 90;
+
+  return L.divIcon({
+    className: "",
+    html: `<div style="
+      width: 20px;
+      height: 20px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      pointer-events: none;
+      transform: rotate(${rotation}deg);
+      filter: drop-shadow(0 1px 2px rgba(0,0,0,0.35));
+    ">
+      <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
+        <path d="M2 8h8M8 4l4 4-4 4" fill="none" stroke="${color}" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+    </div>`,
+    iconSize: [20, 20],
+    iconAnchor: [10, 10],
+  });
+};
+
+const getBearingDegrees = (from: [number, number], to: [number, number]) => {
+  const [lat1, lng1] = from;
+  const [lat2, lng2] = to;
+
+  const start = L.latLng(lat1, lng1);
+  const end = L.latLng(lat2, lng2);
+
+  const y = Math.sin((end.lng - start.lng) * (Math.PI / 180)) * Math.cos(end.lat * (Math.PI / 180));
+  const x = Math.cos(start.lat * (Math.PI / 180)) * Math.sin(end.lat * (Math.PI / 180))
+    - Math.sin(start.lat * (Math.PI / 180)) * Math.cos(end.lat * (Math.PI / 180)) * Math.cos((end.lng - start.lng) * (Math.PI / 180));
+
+  return ((Math.atan2(y, x) * 180 / Math.PI) + 360) % 360;
+};
+
+const interpolatePoint = (from: [number, number], to: [number, number], t: number): [number, number] => {
+  const [lat1, lng1] = from;
+  const [lat2, lng2] = to;
+
+  return [
+    lat1 + ((lat2 - lat1) * t),
+    lng1 + ((lng2 - lng1) * t),
+  ];
+};
+
+const projectPointByBearing = (
+  point: [number, number],
+  bearingDegrees: number,
+  distanceMeters: number,
+): [number, number] => {
+  const [lat, lng] = point;
+  const radius = 6371000;
+  const angularDistance = distanceMeters / radius;
+  const bearing = bearingDegrees * (Math.PI / 180);
+
+  const lat1 = lat * (Math.PI / 180);
+  const lng1 = lng * (Math.PI / 180);
+
+  const lat2 = Math.asin(
+    Math.sin(lat1) * Math.cos(angularDistance)
+      + Math.cos(lat1) * Math.sin(angularDistance) * Math.cos(bearing),
+  );
+
+  const lng2 = lng1 + Math.atan2(
+    Math.sin(bearing) * Math.sin(angularDistance) * Math.cos(lat1),
+    Math.cos(angularDistance) - Math.sin(lat1) * Math.sin(lat2),
+  );
+
+  return [lat2 * (180 / Math.PI), lng2 * (180 / Math.PI)];
+};
+
 const isPointInsidePolygon = (polygon: Array<[number, number]>, point: [number, number]) => {
   const [lat, lng] = point;
   const x = lng;
@@ -533,6 +623,103 @@ const WaypointMarkers = () => {
           />
         );
       })}
+    </>
+  );
+};
+
+const DirectionArrows = ({ routeCoordinates }: DirectionArrowsProps) => {
+  const { waypoints, selectedColor } = useRouteEditor();
+
+  const arrows = useMemo(() => {
+    const fallbackCoordinates: Array<[number, number]> = waypoints.map((waypoint) => [waypoint.lat, waypoint.lng]);
+    const coordinates = routeCoordinates.length >= 2 ? routeCoordinates : fallbackCoordinates;
+    if (coordinates.length < 2) return [] as Array<{ key: string; lat: number; lng: number; bearing: number }>;
+
+    const spacingMeters = 55;
+    const startPaddingMeters = 35;
+    const sideOffsetMeters = 5.5;
+    const lookAheadMeters = 20;
+    const minArrowGapMeters = 18;
+    const results: Array<{ key: string; lat: number; lng: number; bearing: number }> = [];
+    const segmentLengths: number[] = [];
+
+    let totalLength = 0;
+    for (let i = 0; i < coordinates.length - 1; i += 1) {
+      const segmentLength = L.latLng(coordinates[i][0], coordinates[i][1]).distanceTo(
+        L.latLng(coordinates[i + 1][0], coordinates[i + 1][1]),
+      );
+      segmentLengths.push(segmentLength);
+      totalLength += segmentLength;
+    }
+
+    if (totalLength < startPaddingMeters * 2) {
+      return [];
+    }
+
+    const getPointAtDistance = (distanceMeters: number): [number, number] => {
+      let remaining = Math.max(0, Math.min(totalLength, distanceMeters));
+
+      for (let i = 0; i < segmentLengths.length; i += 1) {
+        const segmentLength = segmentLengths[i];
+        if (remaining <= segmentLength || i === segmentLengths.length - 1) {
+          const ratio = segmentLength <= Number.EPSILON ? 0 : remaining / segmentLength;
+          return interpolatePoint(coordinates[i], coordinates[i + 1], Math.max(0, Math.min(1, ratio)));
+        }
+        remaining -= segmentLength;
+      }
+
+      return coordinates[coordinates.length - 1];
+    };
+
+    const pushArrow = (key: string, point: [number, number], bearing: number) => {
+      const [lat, lng] = point;
+      const tooClose = results.some((existing) => {
+        const distance = L.latLng(existing.lat, existing.lng).distanceTo(L.latLng(lat, lng));
+        return distance < minArrowGapMeters;
+      });
+      if (tooClose) return;
+
+      results.push({ key, lat, lng, bearing });
+    };
+
+    let arrowDistance = startPaddingMeters;
+    let index = 0;
+    while (arrowDistance <= totalLength - startPaddingMeters) {
+      const centerPoint = getPointAtDistance(arrowDistance);
+      const lookBehindPoint = getPointAtDistance(Math.max(0, arrowDistance - lookAheadMeters));
+      const lookAheadPoint = getPointAtDistance(Math.min(totalLength, arrowDistance + lookAheadMeters));
+      const bearing = getBearingDegrees(lookBehindPoint, lookAheadPoint);
+      const sidePoint = projectPointByBearing(centerPoint, bearing + 90, sideOffsetMeters);
+      pushArrow(`route-${index}`, sidePoint, bearing);
+
+      arrowDistance += spacingMeters;
+      index += 1;
+    }
+
+    if (results.length === 0) {
+      const midDistance = totalLength / 2;
+      const centerPoint = getPointAtDistance(midDistance);
+      const lookBehindPoint = getPointAtDistance(Math.max(0, midDistance - lookAheadMeters));
+      const lookAheadPoint = getPointAtDistance(Math.min(totalLength, midDistance + lookAheadMeters));
+      const bearing = getBearingDegrees(lookBehindPoint, lookAheadPoint);
+      const sidePoint = projectPointByBearing(centerPoint, bearing + 90, sideOffsetMeters);
+      pushArrow("route-mid", sidePoint, bearing);
+    }
+
+    return results;
+  }, [waypoints, routeCoordinates]);
+
+  return (
+    <>
+      {arrows.map((arrow) => (
+        <Marker
+          key={arrow.key}
+          position={[arrow.lat, arrow.lng]}
+          icon={createDirectionArrowIcon(arrow.bearing, selectedColor)}
+          interactive={false}
+          keyboard={false}
+        />
+      ))}
     </>
   );
 };
@@ -639,6 +826,11 @@ export default function MapComponent({
   regionFocusKey,
 }: MapProps) {
   const { isCreating, waypoints, selectedColor } = useRouteEditor();
+  const [activeRouteCoordinates, setActiveRouteCoordinates] = useState<Array<[number, number]>>([]);
+  const activeRoutingWaypoints = useMemo(
+    () => waypoints.map((waypoint) => [waypoint.lat, waypoint.lng] as [number, number]),
+    [waypoints],
+  );
   const {
     showRegionEditor,
     hasDefinedPolygon,
@@ -651,6 +843,10 @@ export default function MapComponent({
   useEffect(() => {
     fixLeafletIcons();
   }, []);
+
+  const shouldRenderDirectionArrows = isCreating
+    && !showRegionEditor
+    && (activeRouteCoordinates.length >= 2 || activeRoutingWaypoints.length >= 2);
 
   return (
     <MapContainer center={[10.7302, 122.5591]} zoom={13} className="h-full w-full">
@@ -668,11 +864,13 @@ export default function MapComponent({
       {!showRegionEditor && <RegionsLayer regions={regions ?? []} />}
       {!isCreating && showRegionEditor && hasDefinedPolygon && <StationMarkers />}
       {isCreating && <WaypointMarkers />}
+      {shouldRenderDirectionArrows && <DirectionArrows routeCoordinates={activeRouteCoordinates} />}
 
-      {isCreating && waypoints.length >= 2 && (
+      {isCreating && activeRoutingWaypoints.length >= 2 && (
         <RoutingMachine
-          waypoints={waypoints.map(wp => [wp.lat, wp.lng])}
+          waypoints={activeRoutingWaypoints}
           color={selectedColor}
+          onRouteCoordinatesChange={setActiveRouteCoordinates}
         />
       )}
 
@@ -688,6 +886,11 @@ export default function MapComponent({
 export interface RoutingMachineProps {
   waypoints: Array<[number, number]>;
   color: string;
+  onRouteCoordinatesChange?: (coordinates: Array<[number, number]>) => void;
+}
+
+interface DirectionArrowsProps {
+  routeCoordinates: Array<[number, number]>;
 }
 
 export interface MapProps {
