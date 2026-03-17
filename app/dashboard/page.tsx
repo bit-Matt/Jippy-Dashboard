@@ -281,26 +281,14 @@ function DashboardContent() {
             closureRegions={closureRegions}
             onClosureLineClick={handleOpenClosureLineForEdit}
             onClosureRegionClick={handleOpenClosureRegionForEdit}
-            routing={routes.flatMap((route) => {
-              const goingToWaypoints = [...route.points.goingTo]
-                .sort((a, b) => a.sequence - b.sequence)
-                .map((point) => point.point);
-
-              const goingBackWaypoints = [...route.points.goingBack]
-                .sort((a, b) => a.sequence - b.sequence)
-                .map((point) => point.point);
-
-              return [
-                {
-                  color: route.routeColor,
-                  waypoints: goingToWaypoints,
-                },
-                {
-                  color: route.routeColor,
-                  waypoints: goingBackWaypoints,
-                },
-              ].filter((entry) => entry.waypoints.length >= 2);
-            })}
+            routing={routes.flatMap((route) => [
+              route.points.polylineGoingTo
+                ? { color: route.routeColor, polyline: route.points.polylineGoingTo }
+                : null,
+              route.points.polylineGoingBack
+                ? { color: route.routeColor, polyline: route.points.polylineGoingBack }
+                : null,
+            ].filter((entry): entry is { color: string; polyline: string } => entry !== null))}
             focusedWaypoints={editingRoute
               ? [...editingRoute.points.goingTo]
                 .sort((a, b) => a.sequence - b.sequence)

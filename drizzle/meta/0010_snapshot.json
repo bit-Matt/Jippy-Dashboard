@@ -1,5 +1,5 @@
 {
-  "id": "a7a0f4d1-63f8-40fe-8120-516287396eeb",
+  "id": "cc85a76c-feea-4e55-84b3-1ffa0ae45a02",
   "prevId": "79e84c73-e660-4979-b166-d36d93bbbb54",
   "version": "7",
   "dialect": "postgresql",
@@ -703,6 +703,20 @@
           "primaryKey": false,
           "notNull": true,
           "default": "now()"
+        },
+        "polyline_going_to": {
+          "name": "polyline_going_to",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "''"
+        },
+        "polyline_going_back": {
+          "name": "polyline_going_back",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "''"
         }
       },
       "indexes": {},

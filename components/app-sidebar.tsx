@@ -118,12 +118,14 @@ export interface AllResponse {
     routeName: string
     routeColor: string
     points: {
+      polylineGoingTo: string;
       goingTo: Array<{
         id: string | number
         sequence: number
         address: string
         point: [number, number]
       }>;
+      polylineGoingBack: string;
       goingBack: Array<{
         id: string | number
         sequence: number

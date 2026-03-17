@@ -91,6 +91,12 @@ export const routes = pgTable(
       .defaultNow()
       .$onUpdate(() => new Date())
       .notNull(),
+    polylineGoingTo: text("polyline_going_to")
+      .default("")
+      .notNull(),
+    polylineGoingBack: text("polyline_going_back")
+      .default("")
+      .notNull(),
   },
 );
 

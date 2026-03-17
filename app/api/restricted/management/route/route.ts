@@ -1,8 +1,9 @@
 import type { NextRequest } from "next/server";
 
 import { ExceptionResponseComposer, ResponseComposer, StatusCodes } from "@/lib/http";
-import * as management from "@/lib/management";
 import { tryParseJson } from "@/lib/http/RequestUtilities";
+import * as management from "@/lib/management";
+import { getRoutePolyline } from "@/lib/osm/valhalla";
 import { utils, validator } from "@/lib/validator";
 
 export async function GET() {
@@ -78,7 +79,17 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    const result = await management.addRoute(data);
+    const [polylineGoingTo, polylineGoingBack] = await Promise.all([
+      getRoutePolyline(data.points.goingTo),
+      getRoutePolyline(data.points.goingBack),
+    ]);
+
+    const result = await management.addRoute({
+      ...data,
+      polylineGoingTo,
+      polylineGoingBack,
+    });
+
     return ResponseComposer.compose(StatusCodes.Status201Created)
       .setBody(result)
       .orchestrate();
@@ -102,6 +113,6 @@ type RequestBody = {
       sequence: number;
       address: string;
       point: [number, number];
-    }>
+    }>;
   }
 }
