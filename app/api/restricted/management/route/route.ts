@@ -9,11 +9,13 @@ export async function GET() {
   try {
     const allRoutes = await management.getAllRoutes();
     const allRegions = await management.getAllRegions();
+    const allClosures = await management.getAllClosures();
 
     return ResponseComposer.compose(StatusCodes.Status200Ok)
       .setBody({
         routes: allRoutes,
         regions: allRegions,
+        closures: allClosures,
       })
       .orchestrate();
   } catch {

@@ -59,8 +59,8 @@ function DashboardContent() {
 
     setRoutes(data.data.routes);
     setRegions(data.data.regions);
-    setClosureLines(data.data.closures.lineClosures);
-    setClosureRegions(data.data.closures.regionClosures);
+    setClosureLines(data.data.closures?.lineClosures ?? []);
+    setClosureRegions(data.data.closures?.regionClosures ?? []);
   };
 
   useEffect(() => {
