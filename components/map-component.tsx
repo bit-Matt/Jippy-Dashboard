@@ -1,7 +1,7 @@
 "use client";
 
 import { type ComponentProps, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { MapContainer, Marker, Polygon, Tooltip, useMap, useMapEvents } from "react-leaflet";
+import { MapContainer, Marker, Polygon, Polyline, Tooltip, useMap, useMapEvents } from "react-leaflet";
 import L from "leaflet";
 
 import "@maplibre/maplibre-gl-leaflet";
@@ -113,6 +113,57 @@ const MapClickHandler = () => {
   });
 
   return null;
+};
+
+const POLYLINE6_PRECISION = 1_000_000;
+
+const decodePolyline6 = (encoded: string): Array<[number, number]> => {
+  const coordinates: Array<[number, number]> = [];
+  let index = 0;
+  let lat = 0;
+  let lng = 0;
+
+  while (index < encoded.length) {
+    let result = 0;
+    let shift = 0;
+    let byte: number;
+
+    do {
+      byte = encoded.charCodeAt(index++) - 63;
+      result |= (byte & 0x1f) << shift;
+      shift += 5;
+    } while (byte >= 0x20);
+
+    lat += (result & 1) ? ~(result >> 1) : (result >> 1);
+
+    result = 0;
+    shift = 0;
+
+    do {
+      byte = encoded.charCodeAt(index++) - 63;
+      result |= (byte & 0x1f) << shift;
+      shift += 5;
+    } while (byte >= 0x20);
+
+    lng += (result & 1) ? ~(result >> 1) : (result >> 1);
+
+    coordinates.push([lat / POLYLINE6_PRECISION, lng / POLYLINE6_PRECISION]);
+  }
+
+  return coordinates;
+};
+
+const SavedPolylineLayer = ({ polyline, color }: { polyline: string; color: string }) => {
+  const coordinates = useMemo(() => decodePolyline6(polyline), [polyline]);
+
+  if (coordinates.length < 2) return null;
+
+  return (
+    <Polyline
+      positions={coordinates}
+      pathOptions={{ color, weight: 4, opacity: 0.85 }}
+    />
+  );
 };
 
 const VectorTileLayer = () => {
@@ -876,7 +927,7 @@ export default function MapComponent({
 
       {routing && !isCreating
         ? routing.map((r, i) => (
-          <RoutingMachine key={i} waypoints={r.waypoints} color={r.color} />
+          <SavedPolylineLayer key={i} polyline={r.polyline} color={r.color} />
         ))
         : null}
     </MapContainer>
@@ -910,7 +961,7 @@ export interface MapProps {
       point: [number, number];
     }>;
   }>;
-  routing?: Array<ComponentProps<typeof RoutingMachine>>;
+  routing?: Array<{ polyline: string; color: string }>;
   focusedWaypoints?: Array<[number, number]>;
   focusKey?: string | number | null;
   focusedRegionWaypoints?: Array<[number, number]>;

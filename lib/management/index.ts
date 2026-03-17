@@ -15,6 +15,7 @@ export async function getAllRoutes() {
       // Build the nested { goingTo: [], goingBack: [] } structure
       points: sql<{ goingTo: PointObject[]; goingBack: PointObject[] }>`
         json_build_object(
+          'polylineGoingTo', ${routes.polylineGoingTo},
           'goingTo', COALESCE(
             json_agg(
               json_build_object(
@@ -29,6 +30,7 @@ export async function getAllRoutes() {
               ) ORDER BY ${routeSequences.sequenceNumber} ASC
             ) FILTER (WHERE ${routeSequences.sequenceType} = 'going_to'), '[]'::json
           ),
+          'polylineGoingBack', ${routes.polylineGoingBack},
           'goingBack', COALESCE(
             json_agg(
               json_build_object(
@@ -62,6 +64,8 @@ export async function addRoute(params: AddRouteParameters): Promise<RouteObject>
         routeName: params.routeName,
         routeNumber: params.routeNumber,
         routeColor: params.routeColor,
+        polylineGoingTo: params.polylineGoingTo ?? "",
+        polylineGoingBack: params.polylineGoingBack ?? "",
       })
       .returning();
     if (!route) return tx.rollback();
@@ -98,21 +102,23 @@ export async function addRoute(params: AddRouteParameters): Promise<RouteObject>
       routeName: route.routeName,
       routeColor: route.routeColor,
       points: {
+        polylineGoingTo: route.polylineGoingTo,
         goingTo: sequences
           .filter(x => x.sequenceType === "going_to")
           .map(x => ({
             id: x.id,
             address: x.address,
             sequence: x.sequenceNumber,
-            point: x.point,
+            point: [x.point[1], x.point[0]] as [number, number],
           })),
+        polylineGoingBack: route.polylineGoingBack,
         goingBack: sequences
           .filter(x => x.sequenceType === "going_back")
           .map(x => ({
             id: x.id,
             address: x.address,
             sequence: x.sequenceNumber,
-            point: x.point,
+            point: [x.point[1], x.point[0]] as [number, number],
           })),
       },
     };
@@ -149,6 +155,8 @@ export async function updateRoute(
         ...(params.routeNumber !== undefined && { routeNumber: params.routeNumber }),
         ...(params.routeName !== undefined && { routeName: params.routeName }),
         ...(params.routeColor !== undefined && { routeColor: params.routeColor }),
+        ...(params.polylineGoingTo !== undefined && { polylineGoingTo: params.polylineGoingTo }),
+        ...(params.polylineGoingBack !== undefined && { polylineGoingBack: params.polylineGoingBack }),
       };
 
       if (Object.keys(routePatch).length > 0) {
@@ -204,7 +212,7 @@ export async function updateRoute(
               id: seq.id,
               sequence: seq.sequenceNumber,
               address: seq.address,
-              point: seq.point as [number, number],
+              point: [seq.point[1], seq.point[0]] as [number, number],
             };
             if (seq.sequenceType === "going_to") goingTo.push(pointObj);
             else goingBack.push(pointObj);
@@ -222,7 +230,7 @@ export async function updateRoute(
             id: seq.id,
             sequence: seq.sequenceNumber,
             address: seq.address,
-            point: seq.point as [number, number],
+            point: [seq.point[1], seq.point[0]] as [number, number],
           };
           if (seq.sequenceType === "going_to") {
             goingTo.push(pointObj);
@@ -238,7 +246,9 @@ export async function updateRoute(
         routeName: routeData.routeName,
         routeColor: routeData.routeColor,
         points: {
+          polylineGoingTo: routeData.polylineGoingTo,
           goingTo,
+          polylineGoingBack: routeData.polylineGoingBack,
           goingBack,
         },
       } as RouteObject;
@@ -539,6 +549,8 @@ export interface AddRouteParameters {
   routeNumber: string;
   routeName: string;
   routeColor: string;
+  polylineGoingTo: string;
+  polylineGoingBack: string;
   points: {
     goingTo: Array<Omit<PointObject, "id">>;
     goingBack: Array<Omit<PointObject, "id">>;
@@ -549,6 +561,8 @@ export interface UpdateRouteParameters {
   routeNumber?: string;
   routeName?: string;
   routeColor?: string;
+  polylineGoingTo?: string;
+  polylineGoingBack?: string;
   points?: {
     goingTo: Array<Omit<PointObject, "id">>;
     goingBack: Array<Omit<PointObject, "id">>;
@@ -561,7 +575,9 @@ export interface RouteObject {
   routeName: string;
   routeColor: string;
   points: {
+    polylineGoingTo: string;
     goingTo: Array<PointObject>;
+    polylineGoingBack: string;
     goingBack: Array<PointObject>;
   }
 }

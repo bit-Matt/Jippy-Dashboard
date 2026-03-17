@@ -71,6 +71,13 @@
       "when": 1773477564762,
       "tag": "0009_common_the_renegades",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1773736274657,
+      "tag": "0010_ambiguous_night_thrasher",
+      "breakpoints": true
     }
   ]
 }

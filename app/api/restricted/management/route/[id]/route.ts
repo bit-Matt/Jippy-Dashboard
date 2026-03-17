@@ -5,6 +5,7 @@ import * as management from "@/lib/management";
 import { tryParseJson } from "@/lib/http/RequestUtilities";
 import { oneOf } from "@/lib/oneOf";
 import { FailureCodes } from "@/lib/oneOf/response-types";
+import { getRoutePolyline } from "@/lib/osm/valhalla";
 import { utils, validator } from "@/lib/validator";
 
 export async function PATCH(
@@ -79,7 +80,19 @@ export async function PATCH(
       .orchestrate();
   }
 
-  const result = await management.updateRoute(id, data);
+  const patchPayload: management.UpdateRouteParameters = { ...data };
+
+  if (data.points) {
+    const [polylineGoingTo, polylineGoingBack] = await Promise.all([
+      getRoutePolyline(data.points.goingTo),
+      getRoutePolyline(data.points.goingBack),
+    ]);
+
+    patchPayload.polylineGoingTo = polylineGoingTo;
+    patchPayload.polylineGoingBack = polylineGoingBack;
+  }
+
+  const result = await management.updateRoute(id, patchPayload);
   return oneOf(result).match(
     success => ResponseComposer.compose(StatusCodes.Status200Ok)
       .setBody(success)
