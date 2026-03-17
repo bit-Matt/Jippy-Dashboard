@@ -46,3 +46,6 @@ next-env.d.ts
 .osm-data/
 route-seed-data.json
 public/tileserver/style.json
+
+# secrets
+/secrets
