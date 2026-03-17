@@ -8,6 +8,15 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import {
+  Dialog,
+  DialogClose,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
   InputGroup,
   InputGroupAddon,
   InputGroupButton,
@@ -44,6 +53,8 @@ export default function RouteEditor({ editingRoute, onSaved, onClosed }: RouteEd
   const [routeNumber, setRouteNumber] = useState("");
   const [routeName, setRouteName] = useState("");
   const [routeDetails, setRouteDetails] = useState("");
+  const [isDetailsDialogOpen, setIsDetailsDialogOpen] = useState(false);
+  const [draftRouteDetails, setDraftRouteDetails] = useState("");
   const [draggedWaypointId, setDraggedWaypointId] = useState<number | null>(null);
   const dragPreviewRef = useRef<HTMLElement | null>(null);
   const [addresses, setAddresses] = useState<Record<number, string>>({});
@@ -295,7 +306,17 @@ export default function RouteEditor({ editingRoute, onSaved, onClosed }: RouteEd
     setDraggedWaypointId(null);
   };
 
-  const canSave = waypointCounts.goingTo >= 2 && waypointCounts.goingBack >= 2 && routeDetails.trim().length > 0;
+  const handleOpenRouteDetails = () => {
+    setDraftRouteDetails(routeDetails);
+    setIsDetailsDialogOpen(true);
+  };
+
+  const handleSaveRouteDetails = () => {
+    setRouteDetails(draftRouteDetails);
+    setIsDetailsDialogOpen(false);
+  };
+
+  const canSave = waypointCounts.goingTo >= 2 && waypointCounts.goingBack >= 2;
 
   return (
     <div className="absolute top-2 left-6 z-9999 w-1/4">
@@ -344,14 +365,20 @@ export default function RouteEditor({ editingRoute, onSaved, onClosed }: RouteEd
               </div>
             </div>
             <div className="space-y-2">
-              <Label htmlFor="route-details">Route Details</Label>
-              <Textarea
-                id="route-details"
-                placeholder="Describe the route coverage, stops, or other relevant info..."
-                value={routeDetails}
-                onChange={(e) => setRouteDetails(e.target.value)}
-                className="min-h-16 max-h-32 resize-y"
-              />
+              <Label>Route Details</Label>
+              <Button
+                type="button"
+                variant="outline"
+                className="w-full justify-start"
+                onClick={handleOpenRouteDetails}
+              >
+                Add Route Details
+              </Button>
+              <p className="text-xs text-muted-foreground">
+                {routeDetails.trim().length > 0
+                  ? `Details saved (${routeDetails.trim().length} characters).`
+                  : "No route details added yet."}
+              </p>
             </div>
           </div>
 
@@ -484,6 +511,34 @@ export default function RouteEditor({ editingRoute, onSaved, onClosed }: RouteEd
           </p>
         </CardContent>
       </Card>
+
+      <Dialog open={isDetailsDialogOpen} onOpenChange={setIsDetailsDialogOpen}>
+        <DialogContent className="sm:max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Route Details</DialogTitle>
+            <DialogDescription>
+              Add detailed route notes, service coverage information, or special instructions.
+            </DialogDescription>
+          </DialogHeader>
+          <Textarea
+            id="route-details-dialog"
+            placeholder="Describe the route coverage, stops, scheduling notes, landmarks, or other relevant details..."
+            value={draftRouteDetails}
+            onChange={(e) => setDraftRouteDetails(e.target.value)}
+            className="min-h-56 max-h-[60vh] resize-y"
+          />
+          <DialogFooter>
+            <DialogClose asChild>
+              <Button type="button" variant="outline">
+                Cancel
+              </Button>
+            </DialogClose>
+            <Button type="button" onClick={handleSaveRouteDetails}>
+              Save
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

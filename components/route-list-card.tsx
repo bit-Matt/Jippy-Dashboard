@@ -26,39 +26,37 @@ export default function RouteListCard({
     <div className="pointer-events-auto absolute top-2 right-6 z-9998 w-1/8 min-w-64 max-w-72">
       <Card className="h-[40vh] min-h-52 gap-2 py-4">
         <CardHeader className="px-4 pb-1">
-          <div className="flex items-center justify-between gap-2">
-            <CardTitle className="text-base">
-              {viewMode === "routes" ? "Routes" : viewMode === "regions" ? "Regions" : "Closures"}
-            </CardTitle>
-            <div className="bg-muted inline-flex rounded-md p-0.5">
-              <button
-                type="button"
-                onClick={() => setViewMode("routes")}
-                className={`rounded px-2 py-1 text-xs transition-colors ${
-                  viewMode === "routes" ? "bg-background text-foreground shadow-xs" : "text-muted-foreground"
-                }`}
-              >
-                Routes
-              </button>
-              <button
-                type="button"
-                onClick={() => setViewMode("regions")}
-                className={`rounded px-2 py-1 text-xs transition-colors ${
-                  viewMode === "regions" ? "bg-background text-foreground shadow-xs" : "text-muted-foreground"
-                }`}
-              >
-                Regions
-              </button>
-              <button
-                type="button"
-                onClick={() => setViewMode("closures")}
-                className={`rounded px-2 py-1 text-xs transition-colors ${
-                  viewMode === "closures" ? "bg-background text-foreground shadow-xs" : "text-muted-foreground"
-                }`}
-              >
-                Closures
-              </button>
-            </div>
+          <CardTitle className="text-base">
+            {viewMode === "routes" ? "Routes" : viewMode === "regions" ? "Regions" : "Closures"}
+          </CardTitle>
+          <div className="bg-muted mt-2 inline-flex rounded-md p-0.5">
+            <button
+              type="button"
+              onClick={() => setViewMode("routes")}
+              className={`rounded px-2 py-1 text-xs transition-colors ${
+                viewMode === "routes" ? "bg-background text-foreground shadow-xs" : "text-muted-foreground"
+              }`}
+            >
+              Routes
+            </button>
+            <button
+              type="button"
+              onClick={() => setViewMode("regions")}
+              className={`rounded px-2 py-1 text-xs transition-colors ${
+                viewMode === "regions" ? "bg-background text-foreground shadow-xs" : "text-muted-foreground"
+              }`}
+            >
+              Regions
+            </button>
+            <button
+              type="button"
+              onClick={() => setViewMode("closures")}
+              className={`rounded px-2 py-1 text-xs transition-colors ${
+                viewMode === "closures" ? "bg-background text-foreground shadow-xs" : "text-muted-foreground"
+              }`}
+            >
+              Closures
+            </button>
           </div>
         </CardHeader>
         <CardContent className="flex min-h-0 flex-1 flex-col px-4">
