@@ -217,10 +217,10 @@ function DashboardContent() {
       points: {
         goingTo: [...route.points.goingTo]
           .sort((a, b) => a.sequence - b.sequence)
-          .map((point) => ({ point: point.point })),
+          .map((point) => ({ point: point.point, address: point.address })),
         goingBack: [...route.points.goingBack]
           .sort((a, b) => a.sequence - b.sequence)
-          .map((point) => ({ point: point.point })),
+          .map((point) => ({ point: point.point, address: point.address })),
       },
     });
   };

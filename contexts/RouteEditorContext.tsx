@@ -32,8 +32,8 @@ export interface RouteEditorContextType {
   startEditing: (payload: {
     color: string;
     points: {
-      goingTo: Array<{ point: [number, number] }>;
-      goingBack: Array<{ point: [number, number] }>;
+      goingTo: Array<{ point: [number, number]; address?: string }>;
+      goingBack: Array<{ point: [number, number]; address?: string }>;
     };
   }) => void;
   stopCreating: () => void;
@@ -42,7 +42,7 @@ export interface RouteEditorContextType {
   addWaypoint: (lat: number, lng: number) => void;
   removeWaypoint: (id: number) => void;
   reorderWaypoints: (draggedId: number, targetId: number) => void;
-  updateWaypoint: (id: number, lat: number, lng: number) => void;
+  updateWaypoint: (id: number, lat: number, lng: number, address?: string) => void;
   clearWaypoints: () => void;
   clearAllWaypoints: () => void;
   setActivePointIndex: (index: number | null) => void;
@@ -100,8 +100,8 @@ export function RouteEditorProvider({
   const startEditing = useCallback((payload: {
     color: string;
     points: {
-      goingTo: Array<{ point: [number, number] }>;
-      goingBack: Array<{ point: [number, number] }>;
+      goingTo: Array<{ point: [number, number]; address?: string }>;
+      goingBack: Array<{ point: [number, number]; address?: string }>;
     };
   }) => {
     const mappedGoingTo: Waypoint[] = payload.points.goingTo.map((point, index) => ({
@@ -110,6 +110,7 @@ export function RouteEditorProvider({
       lng: point.point[1],
       color: payload.color,
       sequence: index,
+      address: point.address,
     }));
 
     const mappedGoingBack: Waypoint[] = payload.points.goingBack.map((point, index) => ({
@@ -118,6 +119,7 @@ export function RouteEditorProvider({
       lng: point.point[1],
       color: payload.color,
       sequence: index,
+      address: point.address,
     }));
 
     setIsCreating(true);
@@ -214,11 +216,11 @@ export function RouteEditorProvider({
     }));
   }, [activeDirection]);
 
-  const updateWaypoint = useCallback((id: number, lat: number, lng: number) => {
+  const updateWaypoint = useCallback((id: number, lat: number, lng: number, address?: string) => {
     setWaypointsByDirection((prev) => ({
       ...prev,
       [activeDirection]: prev[activeDirection].map((wp) => (
-        wp.id === id ? { ...wp, lat, lng } : wp
+        wp.id === id ? { ...wp, lat, lng, ...(address !== undefined && { address }) } : wp
       )),
     }));
   }, [activeDirection]);

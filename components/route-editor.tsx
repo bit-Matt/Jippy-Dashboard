@@ -57,8 +57,6 @@ export default function RouteEditor({ editingRoute, onSaved, onClosed }: RouteEd
   const [draftRouteDetails, setDraftRouteDetails] = useState("");
   const [draggedWaypointId, setDraggedWaypointId] = useState<number | null>(null);
   const dragPreviewRef = useRef<HTMLElement | null>(null);
-  const [addresses, setAddresses] = useState<Record<number, string>>({});
-  const [addressCoords, setAddressCoords] = useState<Record<number, string>>({});
   const [loadingAddresses, setLoadingAddresses] = useState<Set<number>>(new Set());
   const {
     selectedColor,
@@ -71,6 +69,7 @@ export default function RouteEditor({ editingRoute, onSaved, onClosed }: RouteEd
     setActivePointIndex,
     removeWaypoint,
     reorderWaypoints,
+    updateWaypoint,
     clearWaypoints,
     clearAllWaypoints,
     saveRoute,
@@ -83,42 +82,26 @@ export default function RouteEditor({ editingRoute, onSaved, onClosed }: RouteEd
     setRouteNumber(editingRoute.routeNumber);
     setRouteName(editingRoute.routeName);
     setRouteDetails(editingRoute.routeDetails ?? "");
-
-    const initialAddresses: Record<number, string> = {};
-    const initialAddressCoords: Record<number, string> = {};
-
-    const sortedGoingTo = [...editingRoute.points.goingTo].sort((a, b) => a.sequence - b.sequence);
-    const sortedGoingBack = [...editingRoute.points.goingBack].sort((a, b) => a.sequence - b.sequence);
-
-    sortedGoingTo.forEach((point, index) => {
-      initialAddresses[index] = point.address;
-      initialAddressCoords[index] = `${point.point[0]},${point.point[1]}`;
-    });
-
-    sortedGoingBack.forEach((point, index) => {
-      const mappedId = sortedGoingTo.length + index;
-      initialAddresses[mappedId] = point.address;
-      initialAddressCoords[mappedId] = `${point.point[0]},${point.point[1]}`;
-    });
-
-    setAddresses(initialAddresses);
-    setAddressCoords(initialAddressCoords);
   }, [editingRoute]);
 
   // Reverse geocode waypoints to get addresses
   useEffect(() => {
     const geocodeWaypoints = async () => {
-      const newAddresses: Record<number, string> = { ...addresses };
-      const newAddressCoords: Record<number, string> = { ...addressCoords };
       const toGeocode: typeof waypoints = [];
 
-      // Find waypoints that don't have addresses yet
+      // Find waypoints that don't have valid addresses yet
       waypoints.forEach((waypoint) => {
-        const waypointCoords = `${waypoint.lat},${waypoint.lng}`;
-
-        if (addressCoords[waypoint.id] !== waypointCoords && !loadingAddresses.has(waypoint.id)) {
-          toGeocode.push(waypoint);
+        // Skip if waypoint already has a valid address (and it's not "Unknown Address")
+        if (waypoint.address && waypoint.address !== "Unknown Address") {
+          return;
         }
+
+        // Skip if already loading
+        if (loadingAddresses.has(waypoint.id)) {
+          return;
+        }
+
+        toGeocode.push(waypoint);
       });
 
       if (toGeocode.length === 0) return;
@@ -139,24 +122,16 @@ export default function RouteEditor({ editingRoute, onSaved, onClosed }: RouteEd
           },
         );
 
+        let address = "Unknown location";
         if (data) {
-          newAddresses[waypoint.id] = data.display_name || "Unknown location";
-          newAddressCoords[waypoint.id] = `${waypoint.lat},${waypoint.lng}`;
+          address = data.display_name || "Unknown location";
         } else if (error) {
-          newAddresses[waypoint.id] = "Unable to fetch address";
-          newAddressCoords[waypoint.id] = `${waypoint.lat},${waypoint.lng}`;
+          address = "Unable to fetch address";
           console.error("Geocoding error:", error);
         }
-      }
 
-      const hasAddressUpdates = toGeocode.some((waypoint) => {
-        return addresses[waypoint.id] !== newAddresses[waypoint.id]
-          || addressCoords[waypoint.id] !== newAddressCoords[waypoint.id];
-      });
-
-      if (hasAddressUpdates) {
-        setAddresses(newAddresses);
-        setAddressCoords(newAddressCoords);
+        // Update waypoint with the fetched address
+        updateWaypoint(waypoint.id, waypoint.lat, waypoint.lng, address);
       }
 
       setLoadingAddresses((prev) => {
@@ -167,7 +142,6 @@ export default function RouteEditor({ editingRoute, onSaved, onClosed }: RouteEd
     };
 
     geocodeWaypoints();
-
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [waypoints]);
 
@@ -195,12 +169,12 @@ export default function RouteEditor({ editingRoute, onSaved, onClosed }: RouteEd
           points: {
             goingTo: route.goingTo.map(x => ({
               sequence: x.sequence,
-              address: addresses[x.id] ?? "Unknown Address",
+              address: x.address ?? "Unknown Address",
               point: [x.lat, x.lng] as [number, number],
             })),
             goingBack: route.goingBack.map(x => ({
               sequence: x.sequence,
-              address: addresses[x.id] ?? "Unknown Address",
+              address: x.address ?? "Unknown Address",
               point: [x.lat, x.lng] as [number, number],
             })),
           },
@@ -215,8 +189,6 @@ export default function RouteEditor({ editingRoute, onSaved, onClosed }: RouteEd
           setRouteNumber("");
           setRouteName("");
           setRouteDetails("");
-          setAddresses({});
-          setAddressCoords({});
           clearAllWaypoints();
           stopCreating();
           onSaved?.();
@@ -240,8 +212,6 @@ export default function RouteEditor({ editingRoute, onSaved, onClosed }: RouteEd
     setRouteNumber("");
     setRouteName("");
     setRouteDetails("");
-    setAddresses({});
-    setAddressCoords({});
     clearAllWaypoints();
     stopCreating();
     onClosed?.();
@@ -266,8 +236,6 @@ export default function RouteEditor({ editingRoute, onSaved, onClosed }: RouteEd
       setRouteNumber("");
       setRouteName("");
       setRouteDetails("");
-      setAddresses({});
-      setAddressCoords({});
       clearAllWaypoints();
       stopCreating();
       onSaved?.();
@@ -467,9 +435,9 @@ export default function RouteEditor({ editingRoute, onSaved, onClosed }: RouteEd
                 <InputGroup>
                   <InputGroupInput
                     readOnly
-                    value={addresses[waypoint.id] || (loadingAddresses.has(waypoint.id) ? "Loading address..." : "Click on map to add waypoint")}
+                    value={waypoint.address || (loadingAddresses.has(waypoint.id) ? "Loading address..." : "Click on map to add waypoint")}
                     placeholder="Address"
-                    title={addresses[waypoint.id]}
+                    title={waypoint.address}
                   />
                   <InputGroupAddon align="inline-end" className="pr-2">
                     <InputGroupButton aria-label={`Pin waypoint ${index + 1}`}>
@@ -497,8 +465,6 @@ export default function RouteEditor({ editingRoute, onSaved, onClosed }: RouteEd
               variant="outline"
               onClick={() => {
                 clearWaypoints();
-                setAddresses({});
-                setAddressCoords({});
               }}
               disabled={waypoints.length === 0}
             >
