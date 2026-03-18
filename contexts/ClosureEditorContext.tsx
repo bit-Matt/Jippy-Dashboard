@@ -2,20 +2,12 @@
 
 import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from "react";
 
-import type { ClosureLineObject, ClosureRegionObject } from "@/lib/management";
+import type { ClosureObject } from "@/lib/management/index";
 
-const DEFAULT_CLOSURE_COLOR = "#fff100";
+type ClosureMode = "idle" | "creating" | "editing";
+export type ActiveClosureTool = "none" | "draw-polygon" | "edit-polygon";
 
-type ClosureMode = "idle" | "creating-line" | "creating-region" | "editing-line" | "editing-region";
-
-interface ClosureLineDraftPoint {
-  id: string;
-  sequence: number;
-  address: string;
-  point: [number, number];
-}
-
-interface ClosureRegionDraftPoint {
+interface ClosureDraftPoint {
   id: string;
   sequence: number;
   point: [number, number];
@@ -24,38 +16,25 @@ interface ClosureRegionDraftPoint {
 interface ClosureEditorState {
   mode: ClosureMode;
   activeClosureId: string | null;
-  activeLinePointId: string | null;
-  lineDraft: {
-    label: string;
-    color: string;
-    direction: "one_way" | "both";
-    points: ClosureLineDraftPoint[];
-  } | null;
-  regionDraft: {
-    label: string;
-    color: string;
-    points: ClosureRegionDraftPoint[];
+  activeClosureTool: ActiveClosureTool;
+  draft: {
+    closureName: string;
+    closureDescription: string;
+    points: ClosureDraftPoint[];
   } | null;
 }
 
 interface ClosureEditorContextValue extends ClosureEditorState {
-  startCreatingLine: () => void;
-  startCreatingRegion: () => void;
-  startEditingLine: (closure: ClosureLineObject) => void;
-  startEditingRegion: (closure: ClosureRegionObject) => void;
+  hasDefinedPolygon: boolean;
+  startCreating: () => void;
+  startEditing: (closure: ClosureObject) => void;
   stopEditing: () => void;
-  setActiveLinePointId: (id: string | null) => void;
-  addLinePoint: (lat: number, lng: number) => void;
-  updateLinePoint: (id: string, lat: number, lng: number) => void;
-  removeLinePoint: (id: string) => void;
-  setLinePointAddress: (id: string, address: string) => void;
-  setLineDirection: (direction: "one_way" | "both") => void;
-  setLineLabel: (label: string) => void;
-  setLineColor: (color: string) => void;
-  addRegionPoint: (lat: number, lng: number) => void;
-  updateRegionPoint: (id: string, lat: number, lng: number) => void;
-  setRegionLabel: (label: string) => void;
-  setRegionColor: (color: string) => void;
+  setPolygonPoints: (points: Array<[number, number]>) => void;
+  clearPolygon: () => void;
+  setActiveClosureTool: (tool: ActiveClosureTool) => void;
+  finishClosureToolEditing: () => void;
+  setClosureName: (name: string) => void;
+  setClosureDescription: (description: string) => void;
 }
 
 const ClosureEditorContext = createContext<ClosureEditorContextValue | undefined>(undefined);
@@ -64,73 +43,37 @@ export function ClosureEditorProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<ClosureEditorState>({
     mode: "idle",
     activeClosureId: null,
-    activeLinePointId: null,
-    lineDraft: null,
-    regionDraft: null,
+    activeClosureTool: "none",
+    draft: null,
   });
 
-  const startCreatingLine = useCallback(() => {
+  const startCreating = useCallback(() => {
     setState({
-      mode: "creating-line",
+      mode: "creating",
       activeClosureId: null,
-      activeLinePointId: null,
-      lineDraft: {
-        label: "",
-        color: DEFAULT_CLOSURE_COLOR,
-        direction: "both",
-        points: [],
-      },
-      regionDraft: null,
-    });
-  }, []);
-
-  const startCreatingRegion = useCallback(() => {
-    setState({
-      mode: "creating-region",
-      activeClosureId: null,
-      activeLinePointId: null,
-      lineDraft: null,
-      regionDraft: {
-        label: "",
-        color: DEFAULT_CLOSURE_COLOR,
+      activeClosureTool: "draw-polygon",
+      draft: {
+        closureName: "",
+        closureDescription: "",
         points: [],
       },
     });
   }, []);
 
-  const startEditingLine = useCallback((closure: ClosureLineObject) => {
-    setState({
-      mode: "editing-line",
-      activeClosureId: closure.id,
-      activeLinePointId: null,
-      lineDraft: {
-        label: closure.label,
-        color: closure.color,
-        direction: closure.direction,
-        points: closure.points.map(p => ({
-          id: String(p.id),
-          sequence: p.sequence,
-          address: p.address,
-          point: p.point,
-        })),
-      },
-      regionDraft: null,
-    });
-  }, []);
+  const startEditing = useCallback((closure: ClosureObject) => {
+    const sortedPoints = [...closure.points].sort((a, b) => a.sequence - b.sequence);
 
-  const startEditingRegion = useCallback((closure: ClosureRegionObject) => {
     setState({
-      mode: "editing-region",
+      mode: "editing",
       activeClosureId: closure.id,
-      activeLinePointId: null,
-      lineDraft: null,
-      regionDraft: {
-        label: closure.label,
-        color: closure.color,
-        points: closure.points.map(p => ({
-          id: String(p.id),
-          sequence: p.sequence,
-          point: p.point,
+      activeClosureTool: "draw-polygon",
+      draft: {
+        closureName: closure.closureName,
+        closureDescription: closure.closureDescription,
+        points: sortedPoints.map((point, index) => ({
+          id: String(point.id ?? crypto.randomUUID()),
+          sequence: index + 1,
+          point: point.point,
         })),
       },
     });
@@ -140,191 +83,81 @@ export function ClosureEditorProvider({ children }: { children: ReactNode }) {
     setState({
       mode: "idle",
       activeClosureId: null,
-      activeLinePointId: null,
-      lineDraft: null,
-      regionDraft: null,
+      activeClosureTool: "none",
+      draft: null,
     });
   }, []);
 
-  const setActiveLinePointId = useCallback((id: string | null) => {
+  const setPolygonPoints = useCallback((points: Array<[number, number]>) => {
+    setState((prev) => {
+      if (!prev.draft) return prev;
+
+      const normalizedPoints = points.map((point, index) => ({
+        id: prev.draft?.points[index]?.id ?? crypto.randomUUID(),
+        sequence: index + 1,
+        point,
+      }));
+
+      return {
+        ...prev,
+        draft: {
+          ...prev.draft,
+          points: normalizedPoints,
+        },
+      };
+    });
+  }, []);
+
+  const clearPolygon = useCallback(() => {
+    setState((prev) => {
+      if (!prev.draft) return prev;
+
+      return {
+        ...prev,
+        activeClosureTool: "none",
+        draft: {
+          ...prev.draft,
+          points: [],
+        },
+      };
+    });
+  }, []);
+
+  const setActiveClosureTool = useCallback((tool: ActiveClosureTool) => {
     setState((prev) => ({
       ...prev,
-      activeLinePointId: id,
+      activeClosureTool: tool,
     }));
   }, []);
 
-  const addLinePoint = useCallback((lat: number, lng: number) => {
-    setState(prev => {
-      if (!prev.lineDraft) return prev;
-
-      const nextSeq = prev.lineDraft.points.length === 0
-        ? 1
-        : Math.max(...prev.lineDraft.points.map(p => p.sequence)) + 1;
-
-      return {
-        ...prev,
-        lineDraft: {
-          ...prev.lineDraft,
-          points: [
-            ...prev.lineDraft.points,
-            {
-              id: crypto.randomUUID(),
-              sequence: nextSeq,
-              address: "",
-              point: [lat, lng],
-            },
-          ],
-        },
-      };
-    });
+  const finishClosureToolEditing = useCallback(() => {
+    setState((prev) => ({
+      ...prev,
+      activeClosureTool: "none",
+    }));
   }, []);
 
-  const updateLinePoint = useCallback((id: string, lat: number, lng: number) => {
-    setState(prev => {
-      if (!prev.lineDraft) return prev;
-
-      return {
-        ...prev,
-        lineDraft: {
-          ...prev.lineDraft,
-          points: prev.lineDraft.points.map(p => (p.id === id
-            ? { ...p, point: [lat, lng] }
-            : p)),
-        },
-      };
-    });
-  }, []);
-
-  const removeLinePoint = useCallback((id: string) => {
+  const setClosureName = useCallback((closureName: string) => {
     setState((prev) => {
-      if (!prev.lineDraft) return prev;
-
-      const remaining = prev.lineDraft.points
-        .filter((p) => p.id !== id)
-        .sort((a, b) => a.sequence - b.sequence)
-        .map((p, index) => ({ ...p, sequence: index + 1 }));
+      if (!prev.draft) return prev;
 
       return {
         ...prev,
-        activeLinePointId: prev.activeLinePointId === id ? null : prev.activeLinePointId,
-        lineDraft: {
-          ...prev.lineDraft,
-          points: remaining,
+        draft: {
+          ...prev.draft,
+          closureName,
         },
       };
     });
   }, []);
 
-  const setLinePointAddress = useCallback((id: string, address: string) => {
-    setState((prev) => {
-      if (!prev.lineDraft) return prev;
-
-      return {
-        ...prev,
-        lineDraft: {
-          ...prev.lineDraft,
-          points: prev.lineDraft.points.map((p) => (p.id === id ? { ...p, address } : p)),
-        },
-      };
-    });
-  }, []);
-
-  const setLineDirection = useCallback((direction: "one_way" | "both") => {
-    setState(prev => (prev.lineDraft
+  const setClosureDescription = useCallback((closureDescription: string) => {
+    setState(prev => (prev.draft
       ? {
         ...prev,
-        lineDraft: {
-          ...prev.lineDraft,
-          direction,
-        },
-      }
-      : prev));
-  }, []);
-
-  const setLineLabel = useCallback((label: string) => {
-    setState(prev => (prev.lineDraft
-      ? {
-        ...prev,
-        lineDraft: {
-          ...prev.lineDraft,
-          label,
-        },
-      }
-      : prev));
-  }, []);
-
-  const setLineColor = useCallback((color: string) => {
-    setState(prev => (prev.lineDraft
-      ? {
-        ...prev,
-        lineDraft: {
-          ...prev.lineDraft,
-          color,
-        },
-      }
-      : prev));
-  }, []);
-
-  const addRegionPoint = useCallback((lat: number, lng: number) => {
-    setState(prev => {
-      if (!prev.regionDraft) return prev;
-
-      const nextSeq = prev.regionDraft.points.length === 0
-        ? 1
-        : Math.max(...prev.regionDraft.points.map(p => p.sequence)) + 1;
-
-      return {
-        ...prev,
-        regionDraft: {
-          ...prev.regionDraft,
-          points: [
-            ...prev.regionDraft.points,
-            {
-              id: crypto.randomUUID(),
-              sequence: nextSeq,
-              point: [lat, lng],
-            },
-          ],
-        },
-      };
-    });
-  }, []);
-
-  const updateRegionPoint = useCallback((id: string, lat: number, lng: number) => {
-    setState(prev => {
-      if (!prev.regionDraft) return prev;
-
-      return {
-        ...prev,
-        regionDraft: {
-          ...prev.regionDraft,
-          points: prev.regionDraft.points.map(p => (p.id === id
-            ? { ...p, point: [lat, lng] }
-            : p)),
-        },
-      };
-    });
-  }, []);
-
-  const setRegionLabel = useCallback((label: string) => {
-    setState(prev => (prev.regionDraft
-      ? {
-        ...prev,
-        regionDraft: {
-          ...prev.regionDraft,
-          label,
-        },
-      }
-      : prev));
-  }, []);
-
-  const setRegionColor = useCallback((color: string) => {
-    setState(prev => (prev.regionDraft
-      ? {
-        ...prev,
-        regionDraft: {
-          ...prev.regionDraft,
-          color,
+        draft: {
+          ...prev.draft,
+          closureDescription,
         },
       }
       : prev));
@@ -333,43 +166,28 @@ export function ClosureEditorProvider({ children }: { children: ReactNode }) {
   const value = useMemo<ClosureEditorContextValue>(
     () => ({
       ...state,
-      startCreatingLine,
-      startCreatingRegion,
-      startEditingLine,
-      startEditingRegion,
+      hasDefinedPolygon: (state.draft?.points.length ?? 0) >= 3,
+      startCreating,
+      startEditing,
       stopEditing,
-      setActiveLinePointId,
-      addLinePoint,
-      updateLinePoint,
-      removeLinePoint,
-      setLinePointAddress,
-      setLineDirection,
-      setLineLabel,
-      setLineColor,
-      addRegionPoint,
-      updateRegionPoint,
-      setRegionLabel,
-      setRegionColor,
+      setPolygonPoints,
+      clearPolygon,
+      setActiveClosureTool,
+      finishClosureToolEditing,
+      setClosureName,
+      setClosureDescription,
     }),
     [
       state,
-      startCreatingLine,
-      startCreatingRegion,
-      startEditingLine,
-      startEditingRegion,
+      startCreating,
+      startEditing,
       stopEditing,
-      setActiveLinePointId,
-      addLinePoint,
-      updateLinePoint,
-      removeLinePoint,
-      setLinePointAddress,
-      setLineDirection,
-      setLineLabel,
-      setLineColor,
-      addRegionPoint,
-      updateRegionPoint,
-      setRegionLabel,
-      setRegionColor,
+      setPolygonPoints,
+      clearPolygon,
+      setActiveClosureTool,
+      finishClosureToolEditing,
+      setClosureName,
+      setClosureDescription,
     ],
   );
 

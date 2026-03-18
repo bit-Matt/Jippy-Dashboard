@@ -49,3 +49,6 @@ public/tileserver/style.json
 
 # secrets
 /secrets
+
+# Sentry Config File
+.env.sentry-build-plugin

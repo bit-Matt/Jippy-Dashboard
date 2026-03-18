@@ -1,7 +1,8 @@
 import { headers } from "next/headers";
+import * as Sentry from "@sentry/nextjs";
 
 import { auth } from "@/lib/auth";
-import { ExceptionResponseComposer, ResponseComposer, StatusCodes } from "@/lib/http";
+import { ResponseComposer, StatusCodes } from "@/lib/http";
 
 export async function POST() {
   try {
@@ -12,8 +13,10 @@ export async function POST() {
     return ResponseComposer.compose<null>(StatusCodes.Status204NoContent)
       .setBody(null)
       .orchestrate();
-  } catch {
-    return ExceptionResponseComposer.compose(StatusCodes.Status500InternalServerError, [{
+  } catch (e) {
+    Sentry.captureException(e);
+
+    return ResponseComposer.composeError(StatusCodes.Status500InternalServerError, [{
       message: "Failed to sign out.",
     }]).orchestrate();
   }

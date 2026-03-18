@@ -1,36 +1,17 @@
 "use client";
 
-import { X } from "lucide-react";
+import { PenTool, Trash2, X } from "lucide-react";
 import { useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
 import { $fetch } from "@/lib/http/client";
 import type { IApiResponse } from "@/lib/http/ResponseComposer";
-import type { ClosureRegionObject } from "@/lib/management";
+import type { ClosureObject } from "@/lib/management/index";
 import { useClosureEditor } from "@/contexts/ClosureEditorContext";
-
-const CLOSURE_COLORS = [
-  { label: "Sun Yellow", value: "#fff100" },
-  { label: "Orange", value: "#ff8c00" },
-  { label: "Red", value: "#e81123" },
-  { label: "Magenta", value: "#ec008c" },
-  { label: "Purple", value: "#68217a" },
-  { label: "Navy", value: "#00188f" },
-  { label: "Sky", value: "#00bcf2" },
-  { label: "Teal", value: "#00b294" },
-  { label: "Green", value: "#009e49" },
-  { label: "Lime", value: "#bad80a" },
-];
 
 interface ClosureRegionEditorProps {
   onSaved: () => void;
@@ -40,21 +21,26 @@ export default function ClosureRegionEditor({ onSaved }: ClosureRegionEditorProp
   const {
     mode,
     activeClosureId,
-    regionDraft,
-    setRegionLabel,
-    setRegionColor,
+    activeClosureTool,
+    hasDefinedPolygon,
+    draft,
+    setActiveClosureTool,
+    clearPolygon,
+    setClosureName,
+    setClosureDescription,
+    finishClosureToolEditing,
     stopEditing,
   } = useClosureEditor();
 
   const [isSaving, setIsSaving] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
 
-  if (!regionDraft || (mode !== "creating-region" && mode !== "editing-region")) {
+  if (!draft || (mode !== "creating" && mode !== "editing")) {
     return null;
   }
 
   const handleSave = async () => {
-    if (regionDraft.points.length < 3) {
+    if (draft.points.length < 3) {
       alert("Please add at least 3 points for the closure region.");
       return;
     }
@@ -62,26 +48,25 @@ export default function ClosureRegionEditor({ onSaved }: ClosureRegionEditorProp
     setIsSaving(true);
 
     try {
-      if (mode === "creating-region") {
-        await $fetch<IApiResponse<ClosureRegionObject>>("/api/restricted/management/closure", {
+      if (mode === "creating") {
+        await $fetch<IApiResponse<ClosureObject>>("/api/restricted/management/closure", {
           method: "POST",
           body: {
-            label: regionDraft.label,
-            color: regionDraft.color,
-            type: "region",
-            points: regionDraft.points.map(p => ({
+            closureName: draft.closureName,
+            closureDescription: draft.closureDescription,
+            points: draft.points.map(p => ({
               sequence: p.sequence,
               point: p.point,
             })),
           },
         });
-      } else if (mode === "editing-region" && activeClosureId) {
-        await $fetch<IApiResponse<ClosureRegionObject>>(`/api/restricted/management/closure/${activeClosureId}`, {
+      } else if (mode === "editing" && activeClosureId) {
+        await $fetch<IApiResponse<ClosureObject>>(`/api/restricted/management/closure/${activeClosureId}`, {
           method: "PATCH",
           body: {
-            label: regionDraft.label,
-            color: regionDraft.color,
-            points: regionDraft.points.map(p => ({
+            closureName: draft.closureName,
+            closureDescription: draft.closureDescription,
+            points: draft.points.map(p => ({
               sequence: p.sequence,
               point: p.point,
             })),
@@ -100,7 +85,7 @@ export default function ClosureRegionEditor({ onSaved }: ClosureRegionEditorProp
   };
 
   const handleDelete = async () => {
-    if (mode !== "editing-region" || !activeClosureId) return;
+    if (mode !== "editing" || !activeClosureId) return;
 
     const shouldDelete = window.confirm("Delete this road closure? This action cannot be undone.");
     if (!shouldDelete) return;
@@ -123,10 +108,10 @@ export default function ClosureRegionEditor({ onSaved }: ClosureRegionEditorProp
       <Card>
         <CardHeader className="flex flex-row items-center justify-between">
           <h2 className="text-base font-semibold">
-            {mode === "creating-region" ? "Add Road Closure (Region)" : "Edit Road Closure (Region)"}
+            {mode === "creating" ? "Add Road Closure" : "Edit Road Closure"}
           </h2>
           <div className="flex items-center gap-2">
-            <Button size="sm" onClick={handleSave} disabled={isSaving || isDeleting || regionDraft.points.length < 3}>
+            <Button size="sm" onClick={handleSave} disabled={isSaving || isDeleting || draft.points.length < 3}>
               {isSaving ? "Saving..." : "Save"}
             </Button>
             <Button
@@ -144,44 +129,66 @@ export default function ClosureRegionEditor({ onSaved }: ClosureRegionEditorProp
         <CardContent className="flex max-h-[75vh] flex-col space-y-5 overflow-hidden">
           <div className="space-y-3">
             <div className="grid gap-1.5">
-              <Label htmlFor="closure-region-label">Label</Label>
+              <Label htmlFor="closure-name">Closure name</Label>
               <Input
-                id="closure-region-label"
-                value={regionDraft.label}
-                onChange={e => setRegionLabel(e.target.value)}
-                placeholder="e.g. Event closure area"
+                id="closure-name"
+                value={draft.closureName}
+                onChange={e => setClosureName(e.target.value)}
+                placeholder="e.g. Downtown reroute closure"
               />
             </div>
             <div className="grid gap-1.5">
-              <Label htmlFor="closure-region-color">Color</Label>
-              <Select value={regionDraft.color} onValueChange={setRegionColor}>
-                <SelectTrigger id="closure-region-color" className="w-full">
-                  <SelectValue placeholder="Select closure color" />
-                </SelectTrigger>
-                <SelectContent>
-                  {CLOSURE_COLORS.map((color) => (
-                    <SelectItem key={color.value} value={color.value}>
-                      <span className="flex items-center gap-2">
-                        <span
-                          aria-hidden="true"
-                          className="h-2.5 w-2.5 rounded-full"
-                          style={{ backgroundColor: color.value }}
-                        />
-                        {color.label}
-                      </span>
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <Label htmlFor="closure-description">Description</Label>
+              <Textarea
+                id="closure-description"
+                value={draft.closureDescription}
+                onChange={e => setClosureDescription(e.target.value)}
+                placeholder="Why this closure exists, expected impact, or advisory notes"
+                rows={4}
+              />
             </div>
           </div>
 
           <p className="text-xs text-muted-foreground">
-            Use the map shape editor (polygon/rectangle) to draw the closure area. Edit vertices directly on the map.
+            Use the map shape editor to draw the closure polygon and adjust vertices directly on the map.
             At least 3 points are required to save. Roads inside the region are treated as closed in both directions for vehicles, but remain walkable.
           </p>
 
-          {mode === "editing-region" && activeClosureId ? (
+          <div className="space-y-3">
+            <Label>Closure Tools</Label>
+            <div className="grid grid-cols-3 gap-2">
+              <Button
+                type="button"
+                variant={activeClosureTool === "draw-polygon" ? "secondary" : "outline"}
+                onClick={() => setActiveClosureTool("draw-polygon")}
+                aria-label="Draw Polygon"
+                title="Draw Polygon"
+              >
+                <PenTool className="h-4 w-4" />
+              </Button>
+              <Button
+                type="button"
+                variant="destructive"
+                disabled={!hasDefinedPolygon}
+                onClick={clearPolygon}
+                aria-label="Erase Polygon"
+                title="Erase Polygon"
+              >
+                <Trash2 className="h-4 w-4" />
+              </Button>
+              <Button
+                type="button"
+                variant="default"
+                onClick={finishClosureToolEditing}
+                aria-label="Finish Editing"
+                title="Finish Editing"
+              >
+                Done
+              </Button>
+            </div>
+          </div>
+
+          {mode === "editing" && activeClosureId ? (
             <Button
               className="w-full"
               variant="destructive"

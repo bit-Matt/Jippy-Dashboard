@@ -21,6 +21,15 @@ async function main() {
     process.exit(0);
   }
 
+  const sentryToken = await utils.env.ask(
+    "Your Sentry Auth Token",
+    "runtime.sentry.auth.token",
+  );
+  if (utils.str.isEmpty(sentryToken)) {
+    console.error("Sentry Auth Token is required!");
+    process.exit(1);
+  }
+
   // Token generation for authentication
   const token = utils.token.generatePassword(32, "!#%&()*+,/:;<=>?@[]^`{|}");
   utils.env.write("runtime.better.auth.secret", token);

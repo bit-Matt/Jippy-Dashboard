@@ -8,7 +8,6 @@ import RegionEditor from "@/components/region-editor";
 import RouteListCard from "@/components/route-list-card";
 import RouteEditor from "@/components/route-editor";
 import Simulator from "@/components/simulator";
-import ClosureLineEditor from "@/components/closure-line-editor";
 import ClosureRegionEditor from "@/components/closure-region-editor";
 import {
   SidebarInset,
@@ -28,11 +27,9 @@ function DashboardContent() {
   const [routes, setRoutes] = useState<AllResponse["routes"]>([]);
   const [regions, setRegions] = useState<AllResponse["regions"]>([]);
   const [editingRoute, setEditingRoute] = useState<AllResponse["routes"][0] | null>(null);
-  const [closureLines, setClosureLines] = useState<AllResponse["closures"]["lineClosures"]>([]);
-  const [closureRegions, setClosureRegions] = useState<AllResponse["closures"]["regionClosures"]>([]);
+  const [closures, setClosures] = useState<AllResponse["closures"]>([]);
   const [selectedRegionId, setSelectedRegionId] = useState<string | null>(null);
   const [selectedClosureId, setSelectedClosureId] = useState<string | null>(null);
-  const [selectedClosureType, setSelectedClosureType] = useState<"line" | "region" | null>(null);
   const [routeFocusKey, setRouteFocusKey] = useState<string | number | null>(null);
   const [focusedRegionWaypoints, setFocusedRegionWaypoints] = useState<Array<[number, number]> | undefined>(undefined);
   const [regionFocusKey, setRegionFocusKey] = useState<string | number | null>(null);
@@ -45,10 +42,8 @@ function DashboardContent() {
     closeRegionEditor,
   } = useRegionEditor();
   const {
-    startCreatingLine,
-    startCreatingRegion,
-    startEditingLine,
-    startEditingRegion,
+    startCreating: startCreatingClosure,
+    startEditing: startEditingClosure,
     stopEditing: stopClosureEditing,
   } = useClosureEditor();
 
@@ -82,8 +77,7 @@ function DashboardContent() {
 
     setRoutes(data.data.routes);
     setRegions(data.data.regions);
-    setClosureLines(data.data.closures?.lineClosures ?? []);
-    setClosureRegions(data.data.closures?.regionClosures ?? []);
+    setClosures(data.data.closures ?? []);
     setIsFetchingRoutes(false);
   };
 
@@ -126,7 +120,6 @@ function DashboardContent() {
     setRegionFocusKey(null);
     setSelectedRegionId(null);
     setSelectedClosureId(null);
-    setSelectedClosureType(null);
     setShowSimulator(false);
   };
 
@@ -145,28 +138,7 @@ function DashboardContent() {
 
     setSelectedRegionId(null);
     setSelectedClosureId(null);
-    setSelectedClosureType(null);
     setShowSimulator(false);
-  };
-
-  const handleShowClosureLine = () => {
-    if (isCreating) {
-      stopCreating();
-      setEditingRoute(null);
-      setRouteFocusKey(null);
-    }
-
-    if (showRegionEditor) {
-      closeRegionEditor();
-    }
-
-    setFocusedRegionWaypoints(undefined);
-    setRegionFocusKey(null);
-    setSelectedRegionId(null);
-    setSelectedClosureId(null);
-    setSelectedClosureType(null);
-    setShowSimulator(false);
-    startCreatingLine();
   };
 
   const handleShowClosureRegion = () => {
@@ -184,12 +156,11 @@ function DashboardContent() {
     setRegionFocusKey(null);
     setSelectedRegionId(null);
     setSelectedClosureId(null);
-    setSelectedClosureType(null);
     setShowSimulator(false);
-    startCreatingRegion();
+    startCreatingClosure();
   };
 
-  const handleOpenClosureLineForEdit = (closure: AllResponse["closures"]["lineClosures"][0]) => {
+  const handleOpenClosureForEdit = (closure: AllResponse["closures"][0]) => {
     setShowSimulator(false);
     closeRegionEditor();
     setFocusedRegionWaypoints(undefined);
@@ -200,23 +171,7 @@ function DashboardContent() {
     stopCreating();
 
     setSelectedClosureId(closure.id);
-    setSelectedClosureType("line");
-    startEditingLine(closure);
-  };
-
-  const handleOpenClosureRegionForEdit = (closure: AllResponse["closures"]["regionClosures"][0]) => {
-    setShowSimulator(false);
-    closeRegionEditor();
-    setFocusedRegionWaypoints(undefined);
-    setRegionFocusKey(null);
-    setSelectedRegionId(null);
-    setRouteFocusKey(null);
-    setEditingRoute(null);
-    stopCreating();
-
-    setSelectedClosureId(closure.id);
-    setSelectedClosureType("region");
-    startEditingRegion(closure);
+    startEditingClosure(closure);
   };
 
   const handleOpenRegionForEdit = (region: AllResponse["regions"][0]) => {
@@ -228,7 +183,6 @@ function DashboardContent() {
     }
     stopClosureEditing();
     setSelectedClosureId(null);
-    setSelectedClosureType(null);
 
     const sortedRegionPoints = [...region.points]
       .sort((a, b) => a.sequence - b.sequence)
@@ -255,7 +209,6 @@ function DashboardContent() {
     setSelectedRegionId(null);
     stopClosureEditing();
     setSelectedClosureId(null);
-    setSelectedClosureType(null);
     setRouteFocusKey(`${route.id}-${Date.now()}`);
     setEditingRoute(route);
 
@@ -272,37 +225,19 @@ function DashboardContent() {
     });
   };
 
-  const handleShowSimulator = () => {
-    setShowSimulator(!showSimulator);
-    closeRegionEditor();
-    setFocusedRegionWaypoints(undefined);
-    setRegionFocusKey(null);
-    setSelectedRegionId(null);
-    setSelectedClosureId(null);
-    setSelectedClosureType(null);
-    setRouteFocusKey(null);
-    setEditingRoute(null);
-    stopCreating();
-    stopClosureEditing();
-  };
-
   return (
     <SidebarProvider>
       <AppSidebar
         onAddRouteClick={handleShowRoutes}
         onAddRegionClick={handleShowRegions}
-        onSimulationClick={handleShowSimulator}
-        onAddClosureLineClick={handleShowClosureLine}
         onAddClosureRegionClick={handleShowClosureRegion}
       />
       <SidebarInset>
         <div className="relative z-0 flex flex-1 flex-col gap-4 overflow-hidden mt-4 p-4 pt-0">
           <MapComponent
             regions={regions}
-            closureLines={closureLines}
-            closureRegions={closureRegions}
-            onClosureLineClick={handleOpenClosureLineForEdit}
-            onClosureRegionClick={handleOpenClosureRegionForEdit}
+            closures={closures}
+            onClosureClick={handleOpenClosureForEdit}
             isRoutesLoading={isRoutesLoading}
             onRoutesReadyChange={setAreRouteLayersReady}
             routing={persistedRouting}
@@ -318,17 +253,14 @@ function DashboardContent() {
           <RouteListCard
             routes={routes}
             regions={regions}
-            closureLines={closureLines}
-            closureRegions={closureRegions}
+            closures={closures}
             isRoutesLoading={isRoutesLoading}
             selectedRouteId={editingRoute?.id ?? null}
             selectedRegionId={selectedRegionId}
             selectedClosureId={selectedClosureId}
-            selectedClosureType={selectedClosureType}
             onRouteSelect={handleOpenRouteForEdit}
             onRegionSelect={handleOpenRegionForEdit}
-            onClosureLineSelect={handleOpenClosureLineForEdit}
-            onClosureRegionSelect={handleOpenClosureRegionForEdit}
+            onClosureSelect={handleOpenClosureForEdit}
           />
           {showSimulator && <Simulator />}
           {isCreating && (
@@ -341,7 +273,6 @@ function DashboardContent() {
           {!isCreating && showRegionEditor && (
             <RegionEditor />
           )}
-          <ClosureLineEditor onSaved={fetchRoutes} />
           <ClosureRegionEditor onSaved={fetchRoutes} />
         </div>
       </SidebarInset>

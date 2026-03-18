@@ -1,16 +1,19 @@
 import type { NextRequest } from "next/server";
 
-import { ExceptionResponseComposer, ResponseComposer, StatusCodes } from "@/lib/http";
-import { tryParseJson } from "@/lib/http/RequestUtilities";
-import * as management from "@/lib/management";
+import * as closure from "@/lib/management/closure-manager";
 import { getRoutePolyline } from "@/lib/osm/valhalla";
+import { oneOf, unwrap } from "@/lib/one-of";
+import { ResponseComposer, StatusCodes } from "@/lib/http";
+import * as region from "@/lib/management/region-manager";
+import * as route from "@/lib/management/route-manager";
+import { tryParseJson } from "@/lib/http/RequestUtilities";
 import { utils, validator } from "@/lib/validator";
 
 export async function GET() {
   try {
-    const allRoutes = await management.getAllRoutes();
-    const allRegions = await management.getAllRegions();
-    const allClosures = await management.getAllClosures();
+    const allRoutes = await unwrap(route.getAllRoutes());
+    const allRegions = await unwrap(region.getAllRegions());
+    const allClosures = await unwrap(closure.getAllClosures());
 
     return ResponseComposer.compose(StatusCodes.Status200Ok)
       .setBody({
@@ -20,7 +23,7 @@ export async function GET() {
       })
       .orchestrate();
   } catch {
-    return ExceptionResponseComposer.compose(StatusCodes.Status500InternalServerError, [{
+    return ResponseComposer.composeError(StatusCodes.Status500InternalServerError, [{
       message: "Unknown error occurred.",
     }]).orchestrate();
   }
@@ -31,7 +34,7 @@ export async function POST(req: NextRequest) {
 
   // Body is unparseable.
   if (!data) {
-    return ExceptionResponseComposer.compose(StatusCodes.Status400BadRequest, [{ message: "Invalid Payload." }])
+    return ResponseComposer.composeError(StatusCodes.Status400BadRequest, [{ message: "Invalid Payload." }])
       .orchestrate();
   }
 
@@ -75,29 +78,25 @@ export async function POST(req: NextRequest) {
     allowUnvalidatedProperties: false,
   });
   if (!validation.ok) {
-    return ExceptionResponseComposer.compose(StatusCodes.Status400BadRequest, [validation.errors!])
+    return ResponseComposer.composeError(StatusCodes.Status400BadRequest, [validation.errors!])
       .orchestrate();
   }
 
-  try {
-    const [polylineGoingTo, polylineGoingBack] = await Promise.all([
-      getRoutePolyline(data.points.goingTo),
-      getRoutePolyline(data.points.goingBack),
-    ]);
+  const [polylineGoingTo, polylineGoingBack] = await Promise.all([
+    getRoutePolyline(data.points.goingTo),
+    getRoutePolyline(data.points.goingBack),
+  ]);
 
-    const result = await management.addRoute({
-      ...data,
-      polylineGoingTo,
-      polylineGoingBack,
-    });
+  const result = await route.addRoute({
+    ...data,
+    polylineGoingTo,
+    polylineGoingBack,
+  });
 
-    return ResponseComposer.compose(StatusCodes.Status201Created)
-      .setBody(result)
-      .orchestrate();
-  } catch {
-    return ExceptionResponseComposer.compose(StatusCodes.Status500InternalServerError, [{ message: "Internal Server Error." }])
-      .orchestrate();
-  }
+  return oneOf(result).match(
+    s => ResponseComposer.compose(StatusCodes.Status201Created).setBody(s).orchestrate(),
+    e => ResponseComposer.composeFromFailure(e).orchestrate(),
+  );
 }
 
 type RequestBody = {

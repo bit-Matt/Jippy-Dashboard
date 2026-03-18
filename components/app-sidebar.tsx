@@ -1,5 +1,5 @@
 import { type ComponentProps } from "react";
-import { Command, Map, Pin, SquareDashed, TriangleAlert } from "lucide-react";
+import { Command, Map, SquareDashed, TriangleAlert } from "lucide-react";
 
 import { NavMain } from "@/components/nav-main";
 import { NavUser } from "@/components/nav-user";
@@ -16,8 +16,6 @@ import {
 export function AppSidebar({
   onAddRouteClick,
   onAddRegionClick,
-  onSimulationClick,
-  onAddClosureLineClick,
   onAddClosureRegionClick,
   ...props
 }: SidebarProps) {
@@ -39,6 +37,7 @@ export function AppSidebar({
       {
         title: "Region Management",
         url: "#",
+        isActive: true,
         icon: SquareDashed,
         items: [
           {
@@ -51,25 +50,15 @@ export function AppSidebar({
       {
         title: "Road Closure",
         url: "#",
+        isActive: true,
         icon: TriangleAlert,
         items: [
           {
-            title: "Add closure (line)",
-            url: "#",
-            onClick: onAddClosureLineClick,
-          },
-          {
-            title: "Add closure (region)",
+            title: "Add closure",
             url: "#",
             onClick: onAddClosureRegionClick,
           },
         ],
-      },
-      {
-        title: "Simulation",
-        url: "#",
-        icon: Pin,
-        onClick: onSimulationClick,
       },
     ],
   };
@@ -107,7 +96,6 @@ interface SidebarProps extends ComponentProps<typeof Sidebar> {
   onAddRouteClick?: () => void
   onAddRegionClick?: () => void
   onSimulationClick?: () => void
-  onAddClosureLineClick?: () => void
   onAddClosureRegionClick?: () => void
 }
 
@@ -151,30 +139,14 @@ export interface AllResponse {
       point: [number, number];
     }>;
   }>;
-  closures: {
-    lineClosures: Array<{
+  closures: Array<{
+    id: string;
+    closureName: string;
+    closureDescription: string;
+    points: Array<{
       id: string;
-      type: "line";
-      label: string;
-      color: string;
-      direction: "one_way" | "both";
-      points: Array<{
-        id: string;
-        sequence: number;
-        address: string;
-        point: [number, number];
-      }>;
+      sequence: number;
+      point: [number, number];
     }>;
-    regionClosures: Array<{
-      id: string;
-      type: "region";
-      label: string;
-      color: string;
-      points: Array<{
-        id: string;
-        sequence: number;
-        point: [number, number];
-      }>;
-    }>;
-  }
+  }>;
 }

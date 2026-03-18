@@ -92,26 +92,11 @@ const MapClickHandler = () => {
     isAddingStation,
     addStation,
   } = useRegionEditor();
-  const {
-    mode: closureMode,
-    addLinePoint,
-    addRegionPoint,
-  } = useClosureEditor();
 
   useMapEvents({
     click: (e) => {
       if (isCreating) {
         addWaypoint(e.latlng.lat, e.latlng.lng);
-        return;
-      }
-
-      if (closureMode === "creating-line" || closureMode === "editing-line") {
-        addLinePoint(e.latlng.lat, e.latlng.lng);
-        return;
-      }
-
-      if (closureMode === "creating-region" || closureMode === "editing-region") {
-        addRegionPoint(e.latlng.lat, e.latlng.lng);
         return;
       }
 
@@ -553,6 +538,14 @@ const RegionDrawingLayer = ({
 
   }, [enabled, map, activeRegionTool, disableAllRegionTools]);
 
+  useEffect(() => () => {
+    if (!regionLayerRef.current) return;
+
+    unbindLayerMutationEvents(regionLayerRef.current);
+    map.removeLayer(regionLayerRef.current);
+    regionLayerRef.current = null;
+  }, [map, unbindLayerMutationEvents]);
+
   return null;
 };
 
@@ -921,54 +914,6 @@ const RegionsLayer = ({ regions }: RegionsLayerProps) => {
   );
 };
 
-const ClosureLinesLayer = ({ closures, onClosureClick }: ClosureLinesLayerProps) => {
-  return (
-    <>
-      {closures.map(closure => {
-        const sortedPoints = [...closure.points]
-          .sort((a, b) => a.sequence - b.sequence)
-          .map(p => p.point);
-
-        if (sortedPoints.length < 2) return null;
-
-        return (
-          <Polygon
-            // Polygon with no fill effectively behaves like a polyline here
-            key={closure.id}
-            positions={sortedPoints}
-            pathOptions={{
-              color: closure.color,
-              weight: 4,
-              dashArray: "6 4",
-              fill: false,
-            }}
-            eventHandlers={{
-              click: (event) => {
-                const originalEvent = event.originalEvent as unknown as Event | undefined;
-                if (originalEvent) {
-                  L.DomEvent.stopPropagation(originalEvent);
-                  L.DomEvent.preventDefault(originalEvent);
-                }
-                onClosureClick?.(closure);
-              },
-            }}
-          >
-            {closure.label && (
-              <Tooltip
-                permanent={false}
-                direction="top"
-                opacity={0.9}
-              >
-                {closure.label} ({closure.direction === "one_way" ? "one-way" : "both ways"})
-              </Tooltip>
-            )}
-          </Polygon>
-        );
-      })}
-    </>
-  );
-};
-
 const ClosureRegionsLayer = ({ closures, onClosureClick }: ClosureRegionsLayerProps) => {
   return (
     <>
@@ -984,8 +929,8 @@ const ClosureRegionsLayer = ({ closures, onClosureClick }: ClosureRegionsLayerPr
             key={closure.id}
             positions={sortedPoints}
             pathOptions={{
-              color: closure.color,
-              fillColor: closure.color,
+              color: "#e81123",
+              fillColor: "#e81123",
               fillOpacity: 0.25,
               weight: 2,
             }}
@@ -1000,14 +945,14 @@ const ClosureRegionsLayer = ({ closures, onClosureClick }: ClosureRegionsLayerPr
               },
             }}
           >
-            {closure.label && (
+            {closure.closureName && (
               <Tooltip
                 permanent
                 direction="center"
                 opacity={1}
                 className="region-name-label"
               >
-                {closure.label}
+                {closure.closureName}
               </Tooltip>
             )}
           </Polygon>
@@ -1024,10 +969,8 @@ export default function MapComponent({
   focusKey,
   focusedRegionWaypoints,
   regionFocusKey,
-  closureLines,
-  closureRegions,
-  onClosureLineClick,
-  onClosureRegionClick,
+  closures,
+  onClosureClick,
   isRoutesLoading = false,
   onRoutesReadyChange,
 }: MapProps) {
@@ -1040,6 +983,13 @@ export default function MapComponent({
     [waypoints],
   );
   const {
+    mode: closureMode,
+    draft: closureDraft,
+    activeClosureTool,
+    setPolygonPoints,
+    finishClosureToolEditing,
+  } = useClosureEditor();
+  const {
     showRegionEditor,
     hasDefinedPolygon,
     activeRegionTool,
@@ -1049,6 +999,7 @@ export default function MapComponent({
     setRegionShape,
     finishRegionToolEditing,
   } = useRegionEditor();
+
   useEffect(() => {
     fixLeafletIcons();
   }, []);
@@ -1088,9 +1039,23 @@ export default function MapComponent({
 
   const shouldRenderDirectionArrows = isCreating
     && !showRegionEditor
-    && (activeRouteCoordinates.length >= 2 || activeRoutingWaypoints.length >= 2);
+    && activeRoutingWaypoints.length >= 2;
 
   const showRouteLoadingOverlay = isRoutesLoading || isPreparingRoutes;
+  const isClosureEditing = closureMode === "creating" || closureMode === "editing";
+  const closurePolygon: RegionDraftShape | null = (closureDraft?.points.length ?? 0) >= 3
+    ? {
+      type: "Polygon",
+      coordinates: closureDraft!.points
+        .sort((a, b) => a.sequence - b.sequence)
+        .map((point) => point.point),
+    }
+    : null;
+  const mappedClosureTool: ActiveRegionTool = activeClosureTool === "draw-polygon"
+    ? "draw-polygon"
+    : activeClosureTool === "edit-polygon"
+      ? "edit-region"
+      : "none";
 
   return (
     <div className="relative h-full w-full">
@@ -1100,16 +1065,31 @@ export default function MapComponent({
         <MapClickHandler />
         <FocusRouteView focusKey={focusKey} focusedWaypoints={focusedWaypoints} />
         <FocusRegionView regionFocusKey={regionFocusKey} focusedRegionWaypoints={focusedRegionWaypoints} />
-        <RegionDrawingLayer
-          enabled={!isCreating && showRegionEditor}
-          activeRegionTool={activeRegionTool}
-          regionName={regionName}
-          regionColor={regionColor}
-          regionShape={regionShape}
-          onRegionShapeChange={setRegionShape}
-          onToolComplete={finishRegionToolEditing}
-        />
-        {!showRegionEditor && <RegionsLayer regions={regions ?? []} />}
+        {!isCreating && showRegionEditor ? (
+          <RegionDrawingLayer
+            enabled={true}
+            activeRegionTool={activeRegionTool}
+            regionName={regionName}
+            regionColor={regionColor}
+            regionShape={regionShape}
+            onRegionShapeChange={setRegionShape}
+            onToolComplete={finishRegionToolEditing}
+          />
+        ) : null}
+        {!isCreating && !showRegionEditor && isClosureEditing ? (
+          <RegionDrawingLayer
+            enabled={true}
+            activeRegionTool={mappedClosureTool}
+            regionName={closureDraft?.closureName ?? ""}
+            regionColor="#e81123"
+            regionShape={closurePolygon}
+            onRegionShapeChange={(shape) => {
+              setPolygonPoints(shape?.coordinates ?? []);
+            }}
+            onToolComplete={finishClosureToolEditing}
+          />
+        ) : null}
+        {!isCreating && !showRegionEditor && !isClosureEditing && <RegionsLayer regions={regions ?? []} />}
         {!isCreating && showRegionEditor && hasDefinedPolygon && <StationMarkers />}
         {isCreating && <WaypointMarkers />}
         {shouldRenderDirectionArrows && <DirectionArrows routeCoordinates={activeRouteCoordinates} />}
@@ -1122,7 +1102,7 @@ export default function MapComponent({
           />
         )}
 
-        {!isCreating && !showRouteLoadingOverlay
+        {!isCreating && !showRegionEditor && !isClosureEditing && !showRouteLoadingOverlay
           ? preparedRouting.map((route, index) => (
             <Polyline
               key={`${route.color}-${index}`}
@@ -1132,15 +1112,12 @@ export default function MapComponent({
           ))
           : null}
 
-        {/* Existing persisted closures */}
-        <ClosureLinesLayer
-          closures={closureLines ?? []}
-          onClosureClick={onClosureLineClick}
-        />
-        <ClosureRegionsLayer
-          closures={closureRegions ?? []}
-          onClosureClick={onClosureRegionClick}
-        />
+        {!showRegionEditor && !isClosureEditing ? (
+          <ClosureRegionsLayer
+            closures={closures ?? []}
+            onClosureClick={onClosureClick}
+          />
+        ) : null}
       </MapContainer>
 
       {showRouteLoadingOverlay && (
@@ -1187,32 +1164,17 @@ export interface MapProps {
   focusKey?: string | number | null;
   focusedRegionWaypoints?: Array<[number, number]>;
   regionFocusKey?: string | number | null;
-  closureLines?: Array<{
+  closures?: Array<{
     id: string;
-    type: "line";
-    label: string;
-    color: string;
-    direction: "one_way" | "both";
-    points: Array<{
-      id: string;
-      sequence: number;
-      address: string;
-      point: [number, number];
-    }>;
-  }>;
-  closureRegions?: Array<{
-    id: string;
-    type: "region";
-    label: string;
-    color: string;
+    closureName: string;
+    closureDescription: string;
     points: Array<{
       id: string;
       sequence: number;
       point: [number, number];
     }>;
   }>;
-  onClosureLineClick?: (closure: NonNullable<MapProps["closureLines"]>[number]) => void;
-  onClosureRegionClick?: (closure: NonNullable<MapProps["closureRegions"]>[number]) => void;
+  onClosureClick?: (closure: NonNullable<MapProps["closures"]>[number]) => void;
   isRoutesLoading?: boolean;
   onRoutesReadyChange?: (isReady: boolean) => void;
 }
@@ -1256,14 +1218,9 @@ interface RegionsLayerProps {
   }>;
 }
 
-interface ClosureLinesLayerProps {
-  closures: NonNullable<MapProps["closureLines"]>;
-  onClosureClick?: (closure: NonNullable<MapProps["closureLines"]>[number]) => void;
-}
-
 interface ClosureRegionsLayerProps {
-  closures: NonNullable<MapProps["closureRegions"]>;
-  onClosureClick?: (closure: NonNullable<MapProps["closureRegions"]>[number]) => void;
+  closures: NonNullable<MapProps["closures"]>;
+  onClosureClick?: (closure: NonNullable<MapProps["closures"]>[number]) => void;
 }
 
 export interface RegionDraftShape {

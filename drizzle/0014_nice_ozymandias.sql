@@ -1,0 +1,1 @@
+ALTER TABLE "regionMarkers" DROP COLUMN "string";

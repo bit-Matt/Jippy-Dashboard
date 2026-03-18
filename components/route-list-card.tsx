@@ -8,17 +8,14 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 export default function RouteListCard({
   routes,
   regions,
-  closureLines,
-  closureRegions,
+  closures,
   isRoutesLoading,
   selectedRouteId,
   selectedRegionId,
   selectedClosureId,
-  selectedClosureType,
   onRouteSelect,
   onRegionSelect,
-  onClosureLineSelect,
-  onClosureRegionSelect,
+  onClosureSelect,
 }: RouteListCardProps) {
   const [viewMode, setViewMode] = useState<"routes" | "regions" | "closures">("routes");
 
@@ -131,42 +128,21 @@ export default function RouteListCard({
                   ))
                 )
               ) : (
-                (closureLines.length + closureRegions.length) === 0 ? (
+                closures.length === 0 ? (
                   <p className="text-muted-foreground text-sm text-center">No closures available</p>
                 ) : (
-                  [
-                    ...closureLines.map((closure) => ({
-                      id: closure.id,
-                      type: "line" as const,
-                      label: closure.label,
-                      color: closure.color,
-                      direction: closure.direction,
-                      onClick: () => onClosureLineSelect(closure),
-                    })),
-                    ...closureRegions.map((closure) => ({
-                      id: closure.id,
-                      type: "region" as const,
-                      label: closure.label,
-                      color: closure.color,
-                      onClick: () => onClosureRegionSelect(closure),
-                    })),
-                  ]
+                  closures
                     .toSorted((a, b) => {
-                      if (a.type !== b.type) return a.type.localeCompare(b.type);
-                      return (a.label || "").localeCompare(b.label || "");
+                      return (a.closureName || "").localeCompare(b.closureName || "");
                     })
                     .map((closure) => {
-                      const isSelected = selectedClosureId === closure.id && selectedClosureType === closure.type;
-                      const typeLabel = closure.type === "line" ? "Line" : "Region";
-                      const secondary = closure.type === "line"
-                        ? `${typeLabel} • ${closure.direction === "one_way" ? "one-way" : "both ways"}`
-                        : typeLabel;
+                      const isSelected = selectedClosureId === closure.id;
 
                       return (
                         <button
-                          key={`${closure.type}-${closure.id}`}
+                          key={closure.id}
                           type="button"
-                          onClick={closure.onClick}
+                          onClick={() => onClosureSelect(closure)}
                           className={`hover:bg-accent hover:text-accent-foreground flex w-full items-start gap-2 rounded-md border px-3 py-2 text-left text-sm transition-colors ${
                             isSelected ? "border-primary bg-accent" : "border-border"
                           }`}
@@ -174,12 +150,11 @@ export default function RouteListCard({
                           <span
                             aria-hidden="true"
                             className="mt-1 h-2.5 w-2.5 shrink-0 rounded-full"
-                            style={{ backgroundColor: closure.color }}
+                            style={{ backgroundColor: "#e81123" }}
                           />
                           <span className="min-w-0 flex-1">
-                            <span className="block truncate">{closure.label?.trim() ? closure.label : "(untitled)"}</span>
-                            <span className="text-muted-foreground block truncate text-xs">
-                              {secondary}
+                            <span className="block truncate">
+                              {closure.closureName?.trim() ? closure.closureName : "(untitled)"}
                             </span>
                           </span>
                         </button>
@@ -197,15 +172,12 @@ export default function RouteListCard({
 interface RouteListCardProps {
   routes: AllResponse["routes"];
   regions: AllResponse["regions"];
-  closureLines: NonNullable<AllResponse["closures"]>["lineClosures"];
-  closureRegions: NonNullable<AllResponse["closures"]>["regionClosures"];
+  closures: AllResponse["closures"];
   isRoutesLoading: boolean;
   selectedRouteId: string | null;
   selectedRegionId: string | null;
   selectedClosureId: string | null;
-  selectedClosureType: "line" | "region" | null;
   onRouteSelect: (route: AllResponse["routes"][0]) => void;
   onRegionSelect: (region: AllResponse["regions"][0]) => void;
-  onClosureLineSelect: (closure: NonNullable<AllResponse["closures"]>["lineClosures"][0]) => void;
-  onClosureRegionSelect: (closure: NonNullable<AllResponse["closures"]>["regionClosures"][0]) => void;
+  onClosureSelect: (closure: AllResponse["closures"][0]) => void;
 }

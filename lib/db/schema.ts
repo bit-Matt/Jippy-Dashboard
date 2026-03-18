@@ -104,7 +104,7 @@ export const routes = pgTable(
 export const sequenceType = pgEnum("route_sequence_type", ["going_to", "going_back"]);
 
 export const routeSequences = pgTable(
-  "routeSequences",
+  "route_sequences",
   {
     id: text("id")
       .primaryKey()
@@ -133,7 +133,7 @@ export const routeSequences = pgTable(
 );
 
 export const region = pgTable(
-  "regionMarkers",
+  "region_markers",
   {
     id: text("id")
       .primaryKey()
@@ -154,7 +154,7 @@ export const region = pgTable(
 );
 
 export const regionSequences = pgTable(
-  "regionMarkerSequences",
+  "region_marker_sequences",
   {
     id: text("id")
       .primaryKey()
@@ -177,7 +177,7 @@ export const regionSequences = pgTable(
 );
 
 export const regionStations = pgTable(
-  "regionStations",
+  "region_stations",
   {
     id: text("id")
       .primaryKey()
@@ -201,6 +201,38 @@ export const regionStations = pgTable(
   ],
 );
 
+export const roadClosures = pgTable("road_closure", {
+  id: text("id")
+    .primaryKey()
+    .$default(() => uuidv7()),
+  name: text("name").notNull(),
+  description: text("description").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at")
+    .defaultNow()
+    .$onUpdate(() => new Date())
+    .notNull(),
+});
+
+export const roadClosureRegions = pgTable("road_closure_regions", {
+  id: text("id")
+    .primaryKey()
+    .$default(() => uuidv7()),
+  roadClosureId: text("road_closure_id")
+    .notNull()
+    .references(() => roadClosures.id, { onDelete: "cascade" }),
+  sequenceNumber: integer("sequence_number").notNull(),
+  point: geometry("point", { type: "point", mode: "tuple", srid: 4326 }).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at")
+    .defaultNow()
+    .$onUpdate(() => new Date())
+    .notNull(),
+}, (t) => [
+  index("spatial_index_road_closure_region").using("gist", t.point),
+  index("road_closure_region_ref_idx").on(t.roadClosureId),
+]);
+
 export const userRelations = relations(user, ({ many }) => ({
   sessions: many(session),
   accounts: many(account),
@@ -210,57 +242,6 @@ export const sessionRelations = relations(session, ({ one }) => ({
   user: one(user, {
     fields: [session.userId],
     references: [user.id],
-  }),
-}));
-
-export const closureDirection = pgEnum("closure_direction", ["one_way", "both"]);
-
-export const roadClosures = pgTable(
-  "roadClosures",
-  {
-    id: text("id")
-      .primaryKey()
-      .$default(() => uuidv7()),
-    label: text("label"),
-    color: text("color").default("#ef4444").notNull(),
-    type: text("type").notNull(), // "line" | "region"
-    direction: closureDirection("direction"),
-    createdAt: timestamp("created_at").defaultNow().notNull(),
-    updatedAt: timestamp("updated_at")
-      .defaultNow()
-      .$onUpdate(() => new Date())
-      .notNull(),
-  },
-);
-
-export const roadClosureSequences = pgTable(
-  "roadClosureSequences",
-  {
-    id: text("id")
-      .primaryKey()
-      .$default(() => uuidv7()),
-    closureId: text("closure_id")
-      .notNull()
-      .references(() => roadClosures.id, { onDelete: "cascade" }),
-    sequenceNumber: integer("sequence_number").notNull(),
-    address: text("address"),
-    point: geometry("point", { type: "point", mode: "tuple", srid: 4326 }).notNull(),
-    createdAt: timestamp("created_at").defaultNow().notNull(),
-    updatedAt: timestamp("updated_at")
-      .defaultNow()
-      .$onUpdate(() => new Date())
-      .notNull(),
-  },
-  (t) => [
-    index("spatial_index_road_closure").using("gist", t.point),
-    index("road_closure_seq_idx").on(t.closureId, t.sequenceNumber),
-  ],
-);
-
-export const roadClosureRelations = relations(roadClosureSequences, ({ one }) => ({
-  closure: one(roadClosures, {
-    fields: [roadClosureSequences.closureId],
-    references: [roadClosures.id],
   }),
 }));
 
@@ -289,5 +270,12 @@ export const regionStationRelations = relations(regionStations, ({ one }) => ({
   region: one(region, {
     fields: [regionStations.regionId],
     references: [region.id],
+  }),
+}));
+
+export const roadClosureRegionsRelations = relations(roadClosureRegions, ({ one }) => ({
+  roadClosures: one(roadClosures, {
+    fields: [roadClosureRegions.roadClosureId],
+    references: [roadClosures.id],
   }),
 }));

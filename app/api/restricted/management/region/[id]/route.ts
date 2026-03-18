@@ -1,10 +1,9 @@
 import type { NextRequest } from "next/server";
 
-import { ExceptionResponseComposer, ResponseComposer, StatusCodes } from "@/lib/http";
-import * as management from "@/lib/management";
+import * as region from "@/lib/management/region-manager";
+import { ResponseComposer, StatusCodes } from "@/lib/http";
 import { tryParseJson } from "@/lib/http/RequestUtilities";
-import { oneOf } from "@/lib/oneOf";
-import { FailureCodes } from "@/lib/oneOf/response-types";
+import { oneOf } from "@/lib/one-of";
 import { utils, validator } from "@/lib/validator";
 
 export async function PATCH(
@@ -14,13 +13,13 @@ export async function PATCH(
   const { id } = await params;
 
   if (!utils.isUuid(id)) {
-    return ExceptionResponseComposer.compose(StatusCodes.Status400BadRequest, [{ message: "Invalid route ID" }])
+    return ResponseComposer.composeError(StatusCodes.Status400BadRequest, [{ message: "Invalid route ID" }])
       .orchestrate();
   }
 
   const data = await tryParseJson<PatchRequestBody>(request);
   if (!data) {
-    return ExceptionResponseComposer.compose(StatusCodes.Status400BadRequest, [{ message: "Invalid payload." }])
+    return ResponseComposer.composeError(StatusCodes.Status400BadRequest, [{ message: "Invalid payload." }])
       .orchestrate();
   }
 
@@ -31,7 +30,7 @@ export async function PATCH(
     || data.points !== undefined
     || data.stations !== undefined;
   if (!hasAnyPatchField) {
-    return ExceptionResponseComposer.compose(StatusCodes.Status400BadRequest, [{ message: "No update fields provided." }])
+    return ResponseComposer.composeError(StatusCodes.Status400BadRequest, [{ message: "No update fields provided." }])
       .orchestrate();
   }
 
@@ -89,24 +88,16 @@ export async function PATCH(
     allowUnvalidatedProperties: false,
   });
   if (!validation.ok) {
-    return ExceptionResponseComposer.compose(StatusCodes.Status400BadRequest, [validation.errors!])
+    return ResponseComposer.composeError(StatusCodes.Status400BadRequest, [validation.errors!])
       .orchestrate();
   }
 
-  const result = await management.updateRegion(id, data);
+  const result = await region.updateRegion(id, data);
   return oneOf(result).match(
     success => ResponseComposer.compose(StatusCodes.Status200Ok)
       .setBody(success)
       .orchestrate(),
-    e => {
-      if (e.type === FailureCodes.ResourceNotFound) {
-        return ExceptionResponseComposer.compose(StatusCodes.Status404NotFound, [{ message: "Route not found" }])
-          .orchestrate();
-      }
-
-      return ExceptionResponseComposer.compose(StatusCodes.Status500InternalServerError, [{ message: "Failed to update route" }])
-        .orchestrate();
-    },
+    e => ResponseComposer.composeFromFailure(e).orchestrate(),
   );
 }
 
@@ -118,24 +109,16 @@ export async function DELETE(
 
   // Invalid ID format.
   if (!utils.isUuid(id)) {
-    return ExceptionResponseComposer.compose(StatusCodes.Status400BadRequest, [{ message: "Invalid route ID" }])
+    return ResponseComposer.composeError(StatusCodes.Status400BadRequest, [{ message: "Invalid route ID" }])
       .orchestrate();
   }
 
-  const result = await management.removeRegion(id);
+  const result = await region.removeRegion(id);
   return oneOf(result).match(
     () => ResponseComposer.compose(StatusCodes.Status200Ok)
       .setBody({ ok: true })
       .orchestrate(),
-    e => {
-      if (e.type === FailureCodes.ResourceNotFound) {
-        return ExceptionResponseComposer.compose(StatusCodes.Status404NotFound, [{ message: "Route not found" }])
-          .orchestrate();
-      }
-
-      return ExceptionResponseComposer.compose(StatusCodes.Status500InternalServerError, [{ message: "Failed to delete route" }])
-        .orchestrate();
-    },
+    e => ResponseComposer.composeFromFailure(e).orchestrate(),
   );
 }
 
