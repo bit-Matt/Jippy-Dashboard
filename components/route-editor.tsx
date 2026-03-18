@@ -49,6 +49,44 @@ const ROUTE_COLORS = [
   { label: "Lime", value: "#bad80a" },
 ];
 
+const getErrorMessage = (error: unknown, fallbackMessage: string) => {
+  if (error instanceof Error && error.message) {
+    return error.message;
+  }
+
+  if (typeof error === "string" && error.trim().length > 0) {
+    return error;
+  }
+
+  if (error && typeof error === "object") {
+    const errorRecord = error as {
+      message?: unknown;
+      title?: unknown;
+      details?: { message?: unknown } | unknown;
+    };
+
+    if (typeof errorRecord.message === "string" && errorRecord.message.trim().length > 0) {
+      return errorRecord.message;
+    }
+
+    if (
+      errorRecord.details &&
+      typeof errorRecord.details === "object" &&
+      "message" in errorRecord.details &&
+      typeof errorRecord.details.message === "string" &&
+      errorRecord.details.message.trim().length > 0
+    ) {
+      return errorRecord.details.message;
+    }
+
+    if (typeof errorRecord.title === "string" && errorRecord.title.trim().length > 0) {
+      return errorRecord.title;
+    }
+  }
+
+  return fallbackMessage;
+};
+
 export default function RouteEditor({ editingRoute, onSaved, onClosed }: RouteEditorProps) {
   const [routeNumber, setRouteNumber] = useState("");
   const [routeName, setRouteName] = useState("");
@@ -145,21 +183,28 @@ export default function RouteEditor({ editingRoute, onSaved, onClosed }: RouteEd
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [waypoints]);
 
-  const handleSaveRoute = () => {
+  const handleSaveRoute = async () => {
     if (!routeNumber.trim() || !routeName.trim()) {
       console.warn("Route number and name are required");
       return;
     }
 
     const route = saveRoute();
-    if (route) {
-      const endpoint = editingRoute
-        ? `/api/restricted/management/route/${editingRoute.id}`
-        : "/api/restricted/management/route";
+    if (!route) {
+      return;
+    }
 
-      const method = editingRoute ? "PATCH" : "POST";
+    const endpoint = editingRoute
+      ? `/api/restricted/management/route/${editingRoute.id}`
+      : "/api/restricted/management/route";
 
-      $fetch(endpoint, {
+    const method = editingRoute ? "PATCH" : "POST";
+    const fallbackMessage = editingRoute
+      ? "Failed to update route."
+      : "Failed to create route.";
+
+    try {
+      const { error } = await $fetch(endpoint, {
         method,
         body: {
           routeNumber: routeNumber,
@@ -179,24 +224,24 @@ export default function RouteEditor({ editingRoute, onSaved, onClosed }: RouteEd
             })),
           },
         },
-      })
-        .then(({ error }) => {
-          if (error) {
-            console.error("Error saving route:", error);
-            return;
-          }
+      });
 
-          setRouteNumber("");
-          setRouteName("");
-          setRouteDetails("");
-          clearAllWaypoints();
-          stopCreating();
-          onSaved?.();
-          onClosed?.();
-        })
-        .catch(e => {
-          console.error("Error saving route:", e);
-        });
+      if (error) {
+        console.error("Error saving route:", error);
+        alert(getErrorMessage(error, fallbackMessage));
+        return;
+      }
+
+      setRouteNumber("");
+      setRouteName("");
+      setRouteDetails("");
+      clearAllWaypoints();
+      stopCreating();
+      onSaved?.();
+      onClosed?.();
+    } catch (error) {
+      console.error("Error saving route:", error);
+      alert(getErrorMessage(error, fallbackMessage));
     }
   };
 

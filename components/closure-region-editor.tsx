@@ -17,6 +17,44 @@ interface ClosureRegionEditorProps {
   onSaved: () => void;
 }
 
+const getErrorMessage = (error: unknown, fallbackMessage: string) => {
+  if (error instanceof Error && error.message) {
+    return error.message;
+  }
+
+  if (typeof error === "string" && error.trim().length > 0) {
+    return error;
+  }
+
+  if (error && typeof error === "object") {
+    const errorRecord = error as {
+      message?: unknown;
+      title?: unknown;
+      details?: { message?: unknown } | unknown;
+    };
+
+    if (typeof errorRecord.message === "string" && errorRecord.message.trim().length > 0) {
+      return errorRecord.message;
+    }
+
+    if (
+      errorRecord.details &&
+      typeof errorRecord.details === "object" &&
+      "message" in errorRecord.details &&
+      typeof errorRecord.details.message === "string" &&
+      errorRecord.details.message.trim().length > 0
+    ) {
+      return errorRecord.details.message;
+    }
+
+    if (typeof errorRecord.title === "string" && errorRecord.title.trim().length > 0) {
+      return errorRecord.title;
+    }
+  }
+
+  return fallbackMessage;
+};
+
 export default function ClosureRegionEditor({ onSaved }: ClosureRegionEditorProps) {
   const {
     mode,
@@ -48,8 +86,12 @@ export default function ClosureRegionEditor({ onSaved }: ClosureRegionEditorProp
     setIsSaving(true);
 
     try {
+      const fallbackMessage = mode === "editing"
+        ? "Failed to update closure region."
+        : "Failed to create closure region.";
+
       if (mode === "creating") {
-        await $fetch<IApiResponse<ClosureObject>>("/api/restricted/management/closure", {
+        const { error } = await $fetch<IApiResponse<ClosureObject>>("/api/restricted/management/closure", {
           method: "POST",
           body: {
             closureName: draft.closureName,
@@ -60,8 +102,14 @@ export default function ClosureRegionEditor({ onSaved }: ClosureRegionEditorProp
             })),
           },
         });
+
+        if (error) {
+          console.error("Failed to save closure region", error);
+          alert(getErrorMessage(error, fallbackMessage));
+          return;
+        }
       } else if (mode === "editing" && activeClosureId) {
-        await $fetch<IApiResponse<ClosureObject>>(`/api/restricted/management/closure/${activeClosureId}`, {
+        const { error } = await $fetch<IApiResponse<ClosureObject>>(`/api/restricted/management/closure/${activeClosureId}`, {
           method: "PATCH",
           body: {
             closureName: draft.closureName,
@@ -72,13 +120,22 @@ export default function ClosureRegionEditor({ onSaved }: ClosureRegionEditorProp
             })),
           },
         });
+
+        if (error) {
+          console.error("Failed to save closure region", error);
+          alert(getErrorMessage(error, fallbackMessage));
+          return;
+        }
       }
 
       onSaved();
       stopEditing();
     } catch (error) {
       console.error("Failed to save closure region", error);
-      alert("Failed to save closure region.");
+      alert(getErrorMessage(
+        error,
+        mode === "editing" ? "Failed to update closure region." : "Failed to create closure region.",
+      ));
     } finally {
       setIsSaving(false);
     }

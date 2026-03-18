@@ -35,6 +35,44 @@ export interface RegionStationDraft {
 
 export type ActiveRegionTool = "none" | "draw-polygon" | "draw-rectangle" | "edit-region";
 
+const getErrorMessage = (error: unknown, fallbackMessage: string) => {
+  if (error instanceof Error && error.message) {
+    return error.message;
+  }
+
+  if (typeof error === "string" && error.trim().length > 0) {
+    return error;
+  }
+
+  if (error && typeof error === "object") {
+    const errorRecord = error as {
+      message?: unknown;
+      title?: unknown;
+      details?: { message?: unknown } | unknown;
+    };
+
+    if (typeof errorRecord.message === "string" && errorRecord.message.trim().length > 0) {
+      return errorRecord.message;
+    }
+
+    if (
+      errorRecord.details &&
+      typeof errorRecord.details === "object" &&
+      "message" in errorRecord.details &&
+      typeof errorRecord.details.message === "string" &&
+      errorRecord.details.message.trim().length > 0
+    ) {
+      return errorRecord.details.message;
+    }
+
+    if (typeof errorRecord.title === "string" && errorRecord.title.trim().length > 0) {
+      return errorRecord.title;
+    }
+  }
+
+  return fallbackMessage;
+};
+
 interface RegionEditorContextType {
   showRegionEditor: boolean;
   editingRegionId: string | null;
@@ -242,18 +280,24 @@ export function RegionEditorProvider({ children }: { children: React.ReactNode }
       : "/api/restricted/management/region";
     const method = editingRegionId ? "PATCH" : "POST";
 
-    const { error } = await $fetch(endpoint, {
-      method,
-      body: payload,
-    });
+      try {
+        const { error } = await $fetch(endpoint, {
+          method,
+          body: payload,
+        });
 
-    if (error) {
-      console.error("Failed to save region:", error);
-      return;
+        if (error) {
+          console.error("Failed to save region:", error);
+          alert(getErrorMessage(error, editingRegionId ? "Failed to update region." : "Failed to create region."));
+          return;
+        }
+
+        bumpMutationVersion();
+        closeRegionEditor();
+      } catch (error) {
+        console.error("Failed to save region:", error);
+        alert(getErrorMessage(error, editingRegionId ? "Failed to update region." : "Failed to create region."));
     }
-
-    bumpMutationVersion();
-    closeRegionEditor();
   };
 
   const deleteRegionTemplate = async () => {
