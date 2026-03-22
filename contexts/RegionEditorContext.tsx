@@ -280,23 +280,23 @@ export function RegionEditorProvider({ children }: { children: React.ReactNode }
       : "/api/restricted/management/region";
     const method = editingRegionId ? "PATCH" : "POST";
 
-      try {
-        const { error } = await $fetch(endpoint, {
-          method,
-          body: payload,
-        });
+    try {
+      const { error } = await $fetch(endpoint, {
+        method,
+        body: payload,
+      });
 
-        if (error) {
-          console.error("Failed to save region:", error);
-          alert(getErrorMessage(error, editingRegionId ? "Failed to update region." : "Failed to create region."));
-          return;
-        }
-
-        bumpMutationVersion();
-        closeRegionEditor();
-      } catch (error) {
+      if (error) {
         console.error("Failed to save region:", error);
         alert(getErrorMessage(error, editingRegionId ? "Failed to update region." : "Failed to create region."));
+        return;
+      }
+
+      bumpMutationVersion();
+      closeRegionEditor();
+    } catch (error) {
+      console.error("Failed to save region:", error);
+      alert(getErrorMessage(error, editingRegionId ? "Failed to update region." : "Failed to create region."));
     }
   };
 
