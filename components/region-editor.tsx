@@ -1,22 +1,34 @@
 "use client";
 
-import { Check, Trash2, X } from "lucide-react";
+import { Check, PenTool, Pencil, Square, Trash2, X } from "lucide-react";
 import { useEffect, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { useRegionEditor } from "@/contexts/RegionEditorContext";
-import { $fetch } from "@/lib/http/client";
-import type { IApiResponse } from "@/lib/http/ResponseComposer";
-import type { NominatimReverseResponse } from "@/lib/osm/nominatim";
 
-const COLORS = [
-  "#fff100", "#ff8c00", "#e81123",
-  "#ec008c", "#68217a", "#00188f",
-  "#00bcf2", "#00b294", "#009e49",
-  "#bad80a",
+import * as nominatim from "@/lib/osm/nominatim";
+
+const REGION_COLORS = [
+  { label: "Sun Yellow", value: "#fff100" },
+  { label: "Orange", value: "#ff8c00" },
+  { label: "Red", value: "#e81123" },
+  { label: "Magenta", value: "#ec008c" },
+  { label: "Purple", value: "#68217a" },
+  { label: "Navy", value: "#00188f" },
+  { label: "Sky", value: "#00bcf2" },
+  { label: "Teal", value: "#00b294" },
+  { label: "Green", value: "#009e49" },
+  { label: "Lime", value: "#bad80a" },
 ];
 
 export default function RegionEditor() {
@@ -31,10 +43,13 @@ export default function RegionEditor() {
     stations,
     activeStationId,
     isAddingStation,
+    activeRegionTool,
     hasDefinedPolygon,
     setRegionName,
     setRegionColor,
     setActiveStationId,
+    setActiveRegionTool,
+    finishRegionToolEditing,
     startAddingStation,
     stopAddingStation,
     removeStation,
@@ -84,21 +99,17 @@ export default function RegionEditor() {
       const nextCoords: Record<number, string> = { ...stationAddressCoords };
 
       for (const station of toGeocode) {
-        const { data, error } = await $fetch<IApiResponse<NominatimReverseResponse>>(
-          "/api/restricted/osm/nominatim/reverse",
+        const { data, error } = await nominatim.reverse(
           {
-            method: "GET",
-            query: {
-              lat: station.lat,
-              lon: station.lng,
-              zoom: 18,
-            },
+            lat: station.lat,
+            lon: station.lng,
+            zoom: 18,
           },
         );
 
-        nextAddresses[station.id] = error || !data?.data?.display_name
+        nextAddresses[station.id] = error || !data?.display_name
           ? "Unable to fetch address"
-          : data.data.display_name;
+          : data.display_name;
         nextCoords[station.id] = `${station.lat},${station.lng}`;
       }
 
@@ -168,23 +179,25 @@ export default function RegionEditor() {
 
           <div className="space-y-2">
             <Label>Region Color</Label>
-            <div className="flex flex-wrap gap-2">
-              {COLORS.map((color) => (
-                <button
-                  key={color}
-                  onClick={() => setRegionColor(color)}
-                  className="relative h-10 w-10 rounded-full border-2 transition-transform hover:scale-105"
-                  style={{
-                    backgroundColor: color,
-                    borderColor: regionColor === color ? "#111827" : "#e5e7eb",
-                  }}
-                >
-                  {regionColor === color && (
-                    <Check className="absolute inset-0 m-auto h-5 w-5 text-white drop-shadow-lg" />
-                  )}
-                </button>
-              ))}
-            </div>
+            <Select value={regionColor} onValueChange={setRegionColor}>
+              <SelectTrigger className="w-full">
+                <SelectValue placeholder="Select region color" />
+              </SelectTrigger>
+              <SelectContent>
+                {REGION_COLORS.map((color) => (
+                  <SelectItem key={color.value} value={color.value}>
+                    <span className="flex items-center gap-2">
+                      <span
+                        aria-hidden="true"
+                        className="h-2.5 w-2.5 rounded-full"
+                        style={{ backgroundColor: color.value }}
+                      />
+                      {color.label}
+                    </span>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
 
           <div className="space-y-3">
@@ -236,6 +249,49 @@ export default function RegionEditor() {
             </div>
           </div>
 
+          <div className="space-y-3">
+            <Label>Region Tools</Label>
+            <div className="grid grid-cols-4 gap-2">
+              <Button
+                type="button"
+                variant={activeRegionTool === "draw-polygon" ? "secondary" : "outline"}
+                onClick={() => setActiveRegionTool("draw-polygon")}
+                aria-label="Draw Polygon"
+                title="Draw Polygon"
+              >
+                <PenTool className="h-4 w-4" />
+              </Button>
+              <Button
+                type="button"
+                variant={activeRegionTool === "draw-rectangle" ? "secondary" : "outline"}
+                onClick={() => setActiveRegionTool("draw-rectangle")}
+                aria-label="Draw Rectangle"
+                title="Draw Rectangle"
+              >
+                <Square className="h-4 w-4" />
+              </Button>
+              <Button
+                type="button"
+                variant={activeRegionTool === "edit-region" ? "secondary" : "outline"}
+                disabled={!hasDefinedPolygon}
+                onClick={() => setActiveRegionTool("edit-region")}
+                aria-label="Edit Region"
+                title="Edit Region"
+              >
+                <Pencil className="h-4 w-4" />
+              </Button>
+              <Button
+                type="button"
+                variant="default"
+                onClick={finishRegionToolEditing}
+                aria-label="Finish Editing"
+                title="Finish Editing"
+              >
+                <Check className="h-4 w-4" />
+              </Button>
+            </div>
+          </div>
+
           {editingRegionId ? (
             <Button
               className="w-full"
@@ -245,10 +301,6 @@ export default function RegionEditor() {
               Delete Region
             </Button>
           ) : null}
-
-          <p className="text-xs text-muted-foreground">
-            Draw a polygon or rectangle on the map to enable save. Region name is shown on the map near the center after shape creation.
-          </p>
         </CardContent>
       </Card>
     </div>

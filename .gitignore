@@ -45,3 +45,10 @@ next-env.d.ts
 .pbf
 .osm-data/
 route-seed-data.json
+public/tileserver/style.json
+
+# secrets
+/secrets
+
+# Sentry Config File
+.env.sentry-build-plugin

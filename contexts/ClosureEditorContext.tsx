@@ -1,0 +1,208 @@
+"use client";
+
+import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from "react";
+
+import type { ClosureObject } from "@/lib/management/index";
+
+type ClosureMode = "idle" | "creating" | "editing";
+export type ActiveClosureTool = "none" | "draw-polygon" | "edit-polygon";
+
+interface ClosureDraftPoint {
+  id: string;
+  sequence: number;
+  point: [number, number];
+}
+
+interface ClosureEditorState {
+  mode: ClosureMode;
+  activeClosureId: string | null;
+  activeClosureTool: ActiveClosureTool;
+  draft: {
+    closureName: string;
+    closureDescription: string;
+    points: ClosureDraftPoint[];
+  } | null;
+}
+
+interface ClosureEditorContextValue extends ClosureEditorState {
+  hasDefinedPolygon: boolean;
+  startCreating: () => void;
+  startEditing: (closure: ClosureObject) => void;
+  stopEditing: () => void;
+  setPolygonPoints: (points: Array<[number, number]>) => void;
+  clearPolygon: () => void;
+  setActiveClosureTool: (tool: ActiveClosureTool) => void;
+  finishClosureToolEditing: () => void;
+  setClosureName: (name: string) => void;
+  setClosureDescription: (description: string) => void;
+}
+
+const ClosureEditorContext = createContext<ClosureEditorContextValue | undefined>(undefined);
+
+export function ClosureEditorProvider({ children }: { children: ReactNode }) {
+  const [state, setState] = useState<ClosureEditorState>({
+    mode: "idle",
+    activeClosureId: null,
+    activeClosureTool: "none",
+    draft: null,
+  });
+
+  const startCreating = useCallback(() => {
+    setState({
+      mode: "creating",
+      activeClosureId: null,
+      activeClosureTool: "draw-polygon",
+      draft: {
+        closureName: "",
+        closureDescription: "",
+        points: [],
+      },
+    });
+  }, []);
+
+  const startEditing = useCallback((closure: ClosureObject) => {
+    const sortedPoints = [...closure.points].sort((a, b) => a.sequence - b.sequence);
+
+    setState({
+      mode: "editing",
+      activeClosureId: closure.id,
+      activeClosureTool: "draw-polygon",
+      draft: {
+        closureName: closure.closureName,
+        closureDescription: closure.closureDescription,
+        points: sortedPoints.map((point, index) => ({
+          id: String(point.id ?? crypto.randomUUID()),
+          sequence: index + 1,
+          point: point.point,
+        })),
+      },
+    });
+  }, []);
+
+  const stopEditing = useCallback(() => {
+    setState({
+      mode: "idle",
+      activeClosureId: null,
+      activeClosureTool: "none",
+      draft: null,
+    });
+  }, []);
+
+  const setPolygonPoints = useCallback((points: Array<[number, number]>) => {
+    setState((prev) => {
+      if (!prev.draft) return prev;
+
+      const normalizedPoints = points.map((point, index) => ({
+        id: prev.draft?.points[index]?.id ?? crypto.randomUUID(),
+        sequence: index + 1,
+        point,
+      }));
+
+      return {
+        ...prev,
+        draft: {
+          ...prev.draft,
+          points: normalizedPoints,
+        },
+      };
+    });
+  }, []);
+
+  const clearPolygon = useCallback(() => {
+    setState((prev) => {
+      if (!prev.draft) return prev;
+
+      return {
+        ...prev,
+        activeClosureTool: "none",
+        draft: {
+          ...prev.draft,
+          points: [],
+        },
+      };
+    });
+  }, []);
+
+  const setActiveClosureTool = useCallback((tool: ActiveClosureTool) => {
+    setState((prev) => ({
+      ...prev,
+      activeClosureTool: tool,
+    }));
+  }, []);
+
+  const finishClosureToolEditing = useCallback(() => {
+    setState((prev) => ({
+      ...prev,
+      activeClosureTool: "none",
+    }));
+  }, []);
+
+  const setClosureName = useCallback((closureName: string) => {
+    setState((prev) => {
+      if (!prev.draft) return prev;
+
+      return {
+        ...prev,
+        draft: {
+          ...prev.draft,
+          closureName,
+        },
+      };
+    });
+  }, []);
+
+  const setClosureDescription = useCallback((closureDescription: string) => {
+    setState(prev => (prev.draft
+      ? {
+        ...prev,
+        draft: {
+          ...prev.draft,
+          closureDescription,
+        },
+      }
+      : prev));
+  }, []);
+
+  const value = useMemo<ClosureEditorContextValue>(
+    () => ({
+      ...state,
+      hasDefinedPolygon: (state.draft?.points.length ?? 0) >= 3,
+      startCreating,
+      startEditing,
+      stopEditing,
+      setPolygonPoints,
+      clearPolygon,
+      setActiveClosureTool,
+      finishClosureToolEditing,
+      setClosureName,
+      setClosureDescription,
+    }),
+    [
+      state,
+      startCreating,
+      startEditing,
+      stopEditing,
+      setPolygonPoints,
+      clearPolygon,
+      setActiveClosureTool,
+      finishClosureToolEditing,
+      setClosureName,
+      setClosureDescription,
+    ],
+  );
+
+  return (
+    <ClosureEditorContext.Provider value={value}>
+      {children}
+    </ClosureEditorContext.Provider>
+  );
+}
+
+export function useClosureEditor() {
+  const ctx = useContext(ClosureEditorContext);
+  if (!ctx) {
+    throw new Error("useClosureEditor must be used within a ClosureEditorProvider");
+  }
+  return ctx;
+}
+

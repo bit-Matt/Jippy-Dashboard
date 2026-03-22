@@ -4,7 +4,7 @@ import { eq } from "drizzle-orm";
 
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { Failure, FailureCodes, Success } from "@/lib/oneOf/response-types";
+import { ErrorCodes, Failure, Result, Success } from "@/lib/one-of/types";
 import type { ServerActionResult } from "@/lib/types";
 import { user } from "@/lib/db/schema";
 import { validator } from "@/lib/validator";
@@ -33,7 +33,7 @@ export async function isAlreadyConfigured(): Promise<boolean> {
  * @return {Promise<Success|Failure>} A promise that resolves to a Success object containing the user details
  *                                    if found, or a Failure object indicating the error.
  */
-export async function getUser(id: string): Promise<Success<{ email: string, fullName: string }> | Failure<string>> {
+export async function getUser(id: string): Promise<Result<{ email: string, fullName: string }>> {
   try {
     const [result] = await db
       .select({
@@ -44,12 +44,12 @@ export async function getUser(id: string): Promise<Success<{ email: string, full
       .where(eq(user.id, id))
       .limit(1);
     if (!result) {
-      return new Failure(FailureCodes.UserNotFound, "User not found!");
+      return new Failure(ErrorCodes.ResourceNotFound, "User not found!");
     }
 
     return new Success(result);
   } catch {
-    return new Failure(FailureCodes.Fatal, "Internal exception.");
+    return new Failure(ErrorCodes.Fatal, "Internal exception.");
   }
 }
 

@@ -2,8 +2,7 @@
 
 import { createContext, useContext, useCallback, useState } from "react";
 import { $fetch } from "@/lib/http/client";
-import type { IApiResponse } from "@/lib/http/ResponseComposer";
-import type { NominatimReverseResponse } from "@/lib/osm/nominatim";
+import * as nominatim from "@/lib/osm/nominatim";
 
 export interface RegionDraftShape {
   type: "Polygon" | "Rectangle";
@@ -34,6 +33,46 @@ export interface RegionStationDraft {
   address?: string;
 }
 
+export type ActiveRegionTool = "none" | "draw-polygon" | "draw-rectangle" | "edit-region";
+
+const getErrorMessage = (error: unknown, fallbackMessage: string) => {
+  if (error instanceof Error && error.message) {
+    return error.message;
+  }
+
+  if (typeof error === "string" && error.trim().length > 0) {
+    return error;
+  }
+
+  if (error && typeof error === "object") {
+    const errorRecord = error as {
+      message?: unknown;
+      title?: unknown;
+      details?: { message?: unknown } | unknown;
+    };
+
+    if (typeof errorRecord.message === "string" && errorRecord.message.trim().length > 0) {
+      return errorRecord.message;
+    }
+
+    if (
+      errorRecord.details &&
+      typeof errorRecord.details === "object" &&
+      "message" in errorRecord.details &&
+      typeof errorRecord.details.message === "string" &&
+      errorRecord.details.message.trim().length > 0
+    ) {
+      return errorRecord.details.message;
+    }
+
+    if (typeof errorRecord.title === "string" && errorRecord.title.trim().length > 0) {
+      return errorRecord.title;
+    }
+  }
+
+  return fallbackMessage;
+};
+
 interface RegionEditorContextType {
   showRegionEditor: boolean;
   editingRegionId: string | null;
@@ -43,6 +82,7 @@ interface RegionEditorContextType {
   stations: RegionStationDraft[];
   activeStationId: number | null;
   isAddingStation: boolean;
+  activeRegionTool: ActiveRegionTool;
   hasDefinedPolygon: boolean;
   mutationVersion: number;
 
@@ -53,6 +93,8 @@ interface RegionEditorContextType {
   setRegionColor: (color: string) => void;
   setRegionShape: (shape: RegionDraftShape | null) => void;
   setActiveStationId: (id: number | null) => void;
+  setActiveRegionTool: (tool: ActiveRegionTool) => void;
+  finishRegionToolEditing: () => void;
   startAddingStation: () => void;
   stopAddingStation: () => void;
   addStation: (lat: number, lng: number) => void;
@@ -74,6 +116,7 @@ export function RegionEditorProvider({ children }: { children: React.ReactNode }
   const [activeStationId, setActiveStationId] = useState<number | null>(null);
   const [stationCounter, setStationCounter] = useState(0);
   const [isAddingStation, setIsAddingStation] = useState(false);
+  const [activeRegionTool, setActiveRegionToolState] = useState<ActiveRegionTool>("none");
   const [mutationVersion, setMutationVersion] = useState(0);
 
   const bumpMutationVersion = () => {
@@ -90,6 +133,7 @@ export function RegionEditorProvider({ children }: { children: React.ReactNode }
     setActiveStationId(null);
     setStationCounter(0);
     setIsAddingStation(false);
+    setActiveRegionToolState("none");
   };
 
   const openRegionEditorForEdit = (region: RegionSummary) => {
@@ -117,6 +161,7 @@ export function RegionEditorProvider({ children }: { children: React.ReactNode }
     setActiveStationId(mappedStations.length > 0 ? mappedStations[0].id : null);
     setStationCounter(mappedStations.length);
     setIsAddingStation(false);
+    setActiveRegionToolState("none");
   };
 
   const closeRegionEditor = () => {
@@ -127,6 +172,7 @@ export function RegionEditorProvider({ children }: { children: React.ReactNode }
     setActiveStationId(null);
     setStationCounter(0);
     setIsAddingStation(false);
+    setActiveRegionToolState("none");
   };
 
   const handleSetRegionShape = useCallback((shape: RegionDraftShape | null) => {
@@ -137,12 +183,23 @@ export function RegionEditorProvider({ children }: { children: React.ReactNode }
       setActiveStationId(null);
       setStationCounter(0);
       setIsAddingStation(false);
+      setActiveRegionToolState("none");
     }
+  }, []);
+
+  const setActiveRegionTool = useCallback((tool: ActiveRegionTool) => {
+    setActiveRegionToolState(tool);
+    setIsAddingStation(false);
+  }, []);
+
+  const finishRegionToolEditing = useCallback(() => {
+    setActiveRegionToolState("none");
   }, []);
 
   const startAddingStation = useCallback(() => {
     if (!regionShape) return;
     setIsAddingStation(true);
+    setActiveRegionToolState("none");
   }, [regionShape]);
 
   const stopAddingStation = useCallback(() => {
@@ -188,21 +245,17 @@ export function RegionEditorProvider({ children }: { children: React.ReactNode }
           };
         }
 
-        const { data, error } = await $fetch<IApiResponse<NominatimReverseResponse>>(
-          "/api/restricted/osm/nominatim/reverse",
+        const { data, error } = await nominatim.reverse(
           {
-            method: "GET",
-            query: {
-              lat: station.lat,
-              lon: station.lng,
-              zoom: 18,
-            },
+            lat: station.lat,
+            lon: station.lng,
+            zoom: 18,
           },
         );
 
-        const address = error || !data?.data?.display_name
+        const address = error || !data?.display_name
           ? "Unknown Address"
-          : data.data.display_name;
+          : data.display_name;
 
         return {
           address,
@@ -227,18 +280,24 @@ export function RegionEditorProvider({ children }: { children: React.ReactNode }
       : "/api/restricted/management/region";
     const method = editingRegionId ? "PATCH" : "POST";
 
-    const { error } = await $fetch(endpoint, {
-      method,
-      body: payload,
-    });
+      try {
+        const { error } = await $fetch(endpoint, {
+          method,
+          body: payload,
+        });
 
-    if (error) {
-      console.error("Failed to save region:", error);
-      return;
+        if (error) {
+          console.error("Failed to save region:", error);
+          alert(getErrorMessage(error, editingRegionId ? "Failed to update region." : "Failed to create region."));
+          return;
+        }
+
+        bumpMutationVersion();
+        closeRegionEditor();
+      } catch (error) {
+        console.error("Failed to save region:", error);
+        alert(getErrorMessage(error, editingRegionId ? "Failed to update region." : "Failed to create region."));
     }
-
-    bumpMutationVersion();
-    closeRegionEditor();
   };
 
   const deleteRegionTemplate = async () => {
@@ -269,6 +328,7 @@ export function RegionEditorProvider({ children }: { children: React.ReactNode }
     stations,
     activeStationId,
     isAddingStation,
+    activeRegionTool,
     hasDefinedPolygon: regionShape !== null,
     mutationVersion,
     openRegionEditor,
@@ -278,6 +338,8 @@ export function RegionEditorProvider({ children }: { children: React.ReactNode }
     setRegionColor,
     setRegionShape: handleSetRegionShape,
     setActiveStationId,
+    setActiveRegionTool,
+    finishRegionToolEditing,
     startAddingStation,
     stopAddingStation,
     addStation,

@@ -1,19 +1,26 @@
-import { ExceptionResponseComposer, ResponseComposer, StatusCodes } from "@/lib/http";
-import * as management from "@/lib/management";
+import * as closure from "@/lib/management/closure-manager";
+import { ResponseComposer, StatusCodes } from "@/lib/http";
+import * as region from "@/lib/management/region-manager";
+import * as route from "@/lib/management/route-manager";
+import { unwrap } from "@/lib/one-of";
 
 export async function GET() {
   try {
-    const allRoutes = await management.getAllRoutes();
-    const allRegions = await management.getAllRegions();
+    const [allRoutes, allRegions, allClosures] = await Promise.all([
+      unwrap(route.getAllRoutes()),
+      unwrap(region.getAllRegions()),
+      unwrap(closure.getAllClosures()),
+    ]);
 
     return ResponseComposer.compose(StatusCodes.Status200Ok)
       .setBody({
         routes: allRoutes,
         regions: allRegions,
+        closures: allClosures,
       })
       .orchestrate();
   } catch {
-    return ExceptionResponseComposer.compose(StatusCodes.Status500InternalServerError, [{
+    return ResponseComposer.composeError(StatusCodes.Status500InternalServerError, [{
       message: "Unknown error occurred.",
     }]).orchestrate();
   }

@@ -1,8 +1,8 @@
 import { NextRequest } from "next/server";
+import * as Sentry from "@sentry/nextjs";
 
 import { auth } from "@/lib/auth";
 import {
-  ExceptionResponseComposer,
   ResponseComposer,
   StatusCodes,
   utils as httpUtils,
@@ -12,7 +12,7 @@ import { validator } from "@/lib/validator";
 export async function POST(req: NextRequest) {
   const body = await httpUtils.tryParseJson<SignInRequest>(req);
   if (!body) {
-    return ExceptionResponseComposer.compose(StatusCodes.Status400BadRequest, [{ message: "Invalid Payload." }])
+    return ResponseComposer.composeError(StatusCodes.Status400BadRequest, [{ message: "Invalid Payload." }])
       .orchestrate();
   }
 
@@ -26,7 +26,7 @@ export async function POST(req: NextRequest) {
     allowUnvalidatedProperties: false,
   });
   if (!validation.ok) {
-    return ExceptionResponseComposer.compose(StatusCodes.Status400BadRequest, [validation.errors!])
+    return ResponseComposer.composeError(StatusCodes.Status400BadRequest, [validation.errors!])
       .orchestrate();
   }
 
@@ -43,8 +43,9 @@ export async function POST(req: NextRequest) {
       .setBody(null)
       .orchestrate();
   } catch (e) {
-    console.error(e);
-    return ExceptionResponseComposer.compose(StatusCodes.Status400BadRequest, [{ message: "Invalid Credentials." }])
+    Sentry.captureException(e);
+
+    return ResponseComposer.composeError(StatusCodes.Status400BadRequest, [{ message: "Invalid Credentials." }])
       .orchestrate();
   }
 }

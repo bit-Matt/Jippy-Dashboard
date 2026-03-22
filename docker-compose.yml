@@ -21,6 +21,13 @@ services:
     shm_size: 1gb
 
   # Open Street Maps
+  tileserver:
+    image: maptiler/tileserver-gl
+    ports:
+      - "6703:8080"
+    volumes:
+      - ./.osm-data/tileserver/map.mbtiles:/data/map.mbtiles
+    command: ["--mbtiles", "map.mbtiles"]
   geocoder:
     image: mediagis/nominatim:5.2
     depends_on:

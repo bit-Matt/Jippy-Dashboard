@@ -1,5 +1,5 @@
 import { type ComponentProps } from "react";
-import { Command, Map, Pin, SquareDashed } from "lucide-react";
+import { Command, Map, SquareDashed, TriangleAlert } from "lucide-react";
 
 import { NavMain } from "@/components/nav-main";
 import { NavUser } from "@/components/nav-user";
@@ -13,7 +13,12 @@ import {
   SidebarMenuItem,
 } from "@/components/ui/sidebar";
 
-export function AppSidebar({ onAddRouteClick, onAddRegionClick, onSimulationClick, ...props }: SidebarProps) {
+export function AppSidebar({
+  onAddRouteClick,
+  onAddRegionClick,
+  onAddClosureRegionClick,
+  ...props
+}: SidebarProps) {
   const data = {
     navMain: [
       {
@@ -32,6 +37,7 @@ export function AppSidebar({ onAddRouteClick, onAddRegionClick, onSimulationClic
       {
         title: "Region Management",
         url: "#",
+        isActive: true,
         icon: SquareDashed,
         items: [
           {
@@ -42,10 +48,17 @@ export function AppSidebar({ onAddRouteClick, onAddRegionClick, onSimulationClic
         ],
       },
       {
-        title: "Simulation",
+        title: "Road Closure",
         url: "#",
-        icon: Pin,
-        onClick: onSimulationClick,
+        isActive: true,
+        icon: TriangleAlert,
+        items: [
+          {
+            title: "Add closure",
+            url: "#",
+            onClick: onAddClosureRegionClick,
+          },
+        ],
       },
     ],
   };
@@ -83,6 +96,7 @@ interface SidebarProps extends ComponentProps<typeof Sidebar> {
   onAddRouteClick?: () => void
   onAddRegionClick?: () => void
   onSimulationClick?: () => void
+  onAddClosureRegionClick?: () => void
 }
 
 export interface AllResponse {
@@ -91,12 +105,23 @@ export interface AllResponse {
     routeNumber: string
     routeName: string
     routeColor: string
-    points: Array<{
-      id: string | number
-      sequence: number
-      address: string
-      point: [number, number]
-    }>
+    routeDetails: string
+    points: {
+      polylineGoingTo: string;
+      goingTo: Array<{
+        id: string | number
+        sequence: number
+        address: string
+        point: [number, number]
+      }>;
+      polylineGoingBack: string;
+      goingBack: Array<{
+        id: string | number
+        sequence: number
+        address: string
+        point: [number, number]
+      }>;
+    }
   }>;
   regions: Array<{
     id: string;
@@ -113,5 +138,15 @@ export interface AllResponse {
       address: string;
       point: [number, number];
     }>;
-  }>
+  }>;
+  closures: Array<{
+    id: string;
+    closureName: string;
+    closureDescription: string;
+    points: Array<{
+      id: string;
+      sequence: number;
+      point: [number, number];
+    }>;
+  }>;
 }

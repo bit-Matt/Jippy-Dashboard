@@ -1,17 +1,16 @@
 import { headers } from "next/headers";
 
 import { auth } from "@/lib/auth";
-import { ExceptionResponseComposer, ResponseComposer, StatusCodes } from "@/lib/http";
+import { ResponseComposer, StatusCodes } from "@/lib/http";
 import { getUser } from "@/lib/accounts";
-import { oneOf } from "@/lib/oneOf";
-import { FailureCodes } from "@/lib/oneOf/response-types";
+import { oneOf } from "@/lib/one-of";
 
 export async function GET() {
   const session = await auth.api.getSession({
     headers: await headers(),
   });
   if (!session) {
-    return ExceptionResponseComposer.compose(StatusCodes.Status401Unauthorized, [{ message: "Unauthorized." }])
+    return ResponseComposer.composeError(StatusCodes.Status401Unauthorized, [{ message: "Unauthorized." }])
       .orchestrate();
   }
 
@@ -22,15 +21,6 @@ export async function GET() {
         .setBody(success)
         .orchestrate();
     },
-    err => {
-      if (err.type === FailureCodes.Fatal) {
-        return ExceptionResponseComposer.compose(StatusCodes.Status500InternalServerError, [{ message: "Internal error." }])
-          .orchestrate();
-      }
-
-      // Make it not obvious that the user cannot be found.
-      return ExceptionResponseComposer.compose(StatusCodes.Status401Unauthorized, [{ message: "Unauthorized." }])
-        .orchestrate();
-    },
+    err => ResponseComposer.composeFromFailure(err).orchestrate(),
   );
 }

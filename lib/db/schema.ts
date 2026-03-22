@@ -86,16 +86,25 @@ export const routes = pgTable(
     routeNumber: text("route_number").notNull(),
     routeName: text("route_name").notNull(),
     routeColor: text("route_color").notNull().default("#FFF000"),
+    routeDetails: text("route_details").default("").notNull(),
     createdAt: timestamp("created_at").defaultNow().notNull(),
     updatedAt: timestamp("updated_at")
       .defaultNow()
       .$onUpdate(() => new Date())
       .notNull(),
+    polylineGoingTo: text("polyline_going_to")
+      .default("")
+      .notNull(),
+    polylineGoingBack: text("polyline_going_back")
+      .default("")
+      .notNull(),
   },
 );
 
+export const sequenceType = pgEnum("route_sequence_type", ["going_to", "going_back"]);
+
 export const routeSequences = pgTable(
-  "routeSequences",
+  "route_sequences",
   {
     id: text("id")
       .primaryKey()
@@ -103,6 +112,9 @@ export const routeSequences = pgTable(
     routeId: text("route_id")
       .notNull()
       .references(() => routes.id, { onDelete: "cascade" }),
+    sequenceType: sequenceType("sequence_type")
+      .default("going_to")
+      .notNull(),
     sequenceNumber: integer("sequence_number").notNull(),
     address: text("address")
       .default("Unknown Address")
@@ -121,7 +133,7 @@ export const routeSequences = pgTable(
 );
 
 export const region = pgTable(
-  "regionMarkers",
+  "region_markers",
   {
     id: text("id")
       .primaryKey()
@@ -142,7 +154,7 @@ export const region = pgTable(
 );
 
 export const regionSequences = pgTable(
-  "regionMarkerSequences",
+  "region_marker_sequences",
   {
     id: text("id")
       .primaryKey()
@@ -165,7 +177,7 @@ export const regionSequences = pgTable(
 );
 
 export const regionStations = pgTable(
-  "regionStations",
+  "region_stations",
   {
     id: text("id")
       .primaryKey()
@@ -188,6 +200,38 @@ export const regionStations = pgTable(
     index("region_station_ref_idx").on(t.regionId),
   ],
 );
+
+export const roadClosures = pgTable("road_closure", {
+  id: text("id")
+    .primaryKey()
+    .$default(() => uuidv7()),
+  name: text("name").notNull(),
+  description: text("description").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at")
+    .defaultNow()
+    .$onUpdate(() => new Date())
+    .notNull(),
+});
+
+export const roadClosureRegions = pgTable("road_closure_regions", {
+  id: text("id")
+    .primaryKey()
+    .$default(() => uuidv7()),
+  roadClosureId: text("road_closure_id")
+    .notNull()
+    .references(() => roadClosures.id, { onDelete: "cascade" }),
+  sequenceNumber: integer("sequence_number").notNull(),
+  point: geometry("point", { type: "point", mode: "tuple", srid: 4326 }).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at")
+    .defaultNow()
+    .$onUpdate(() => new Date())
+    .notNull(),
+}, (t) => [
+  index("spatial_index_road_closure_region").using("gist", t.point),
+  index("road_closure_region_ref_idx").on(t.roadClosureId),
+]);
 
 export const userRelations = relations(user, ({ many }) => ({
   sessions: many(session),
@@ -226,5 +270,12 @@ export const regionStationRelations = relations(regionStations, ({ one }) => ({
   region: one(region, {
     fields: [regionStations.regionId],
     references: [region.id],
+  }),
+}));
+
+export const roadClosureRegionsRelations = relations(roadClosureRegions, ({ one }) => ({
+  roadClosures: one(roadClosures, {
+    fields: [roadClosureRegions.roadClosureId],
+    references: [roadClosures.id],
   }),
 }));

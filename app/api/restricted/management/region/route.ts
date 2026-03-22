@@ -1,7 +1,8 @@
 import type { NextRequest } from "next/server";
 
-import { ExceptionResponseComposer, ResponseComposer, StatusCodes } from "@/lib/http";
-import * as management from "@/lib/management";
+import { oneOf } from "@/lib/one-of";
+import * as region from "@/lib/management/region-manager";
+import { ResponseComposer, StatusCodes } from "@/lib/http";
 import { tryParseJson } from "@/lib/http/RequestUtilities";
 import { utils, validator } from "@/lib/validator";
 
@@ -10,7 +11,7 @@ export async function POST(req: NextRequest) {
 
   // Body is unparseable.
   if (!data) {
-    return ExceptionResponseComposer.compose(StatusCodes.Status400BadRequest, [{ message: "Invalid Payload." }])
+    return ResponseComposer.composeError(StatusCodes.Status400BadRequest, [{ message: "Invalid Payload." }])
       .orchestrate();
   }
 
@@ -69,19 +70,16 @@ export async function POST(req: NextRequest) {
     allowUnvalidatedProperties: false,
   });
   if (!validation.ok) {
-    return ExceptionResponseComposer.compose(StatusCodes.Status400BadRequest, [validation.errors!])
+    return ResponseComposer
+      .composeError(StatusCodes.Status400BadRequest, validation.errors!)
       .orchestrate();
   }
 
-  try {
-    const result = await management.createRegion(data);
-    return ResponseComposer.compose(StatusCodes.Status201Created)
-      .setBody(result)
-      .orchestrate();
-  } catch {
-    return ExceptionResponseComposer.compose(StatusCodes.Status500InternalServerError, [{ message: "Internal Server Error." }])
-      .orchestrate();
-  }
+  const result = await region.createRegion(data);
+  return oneOf(result).match(
+    s => ResponseComposer.compose(StatusCodes.Status201Created).setBody(s).orchestrate(),
+    e => ResponseComposer.composeFromFailure(e).orchestrate(),
+  );
 }
 
 type RequestBody = {

@@ -1,139 +1,161 @@
-"use server";
+type RoutePoint = {
+  sequence: number;
+  point: [number, number];
+};
 
-import { Failure, FailureCodes, Success } from "@/lib/oneOf/response-types";
+type ValhallaLeg = {
+  shape?: string;
+};
 
-const { VALHALLA_URL } = process.env;
+type ValhallaRouteResponse = {
+  trip?: {
+    legs?: ValhallaLeg[];
+  };
+};
 
-export async function status(): Promise<Failure<ValhallaRouteResponseFailure> | Success<ValhallaStatus>> {
-  try {
-    const url = new URL("/status", VALHALLA_URL ?? "http://localhost:6702");
+const POLYLINE_PRECISION = 1_000_000;
 
-    const request = await fetch(url, { method: "GET" });
-    const json = await request.json() as ValhallaStatus;
-
-    return new Success(json);
-  } catch {
-    return new Failure(FailureCodes.ProxyFatal, {
-      error_code: 1,
-      error: "Failed to Proxy",
-      status_code: 500,
-      status: "Internal Server Error",
-    } satisfies ValhallaRouteResponseFailure);
+export async function getRoutePolyline(points: RoutePoint[]): Promise<string> {
+  if (points.length < 2) {
+    throw new Error("At least 2 points are required to build a route polyline.");
   }
-}
 
-/**
- * Sends a routing request to the Valhalla server using the provided payload.
- *
- * This function constructs a URL with the payload as a JSON string in the search parameters,
- * performs a GET request, and processes the response. If the request succeeds, it returns
- * a Success object with the routing data. If it fails or an error occurs, it returns a
- * Failure object with appropriate error details.
- *
- * @param {ValhallaRouterPayload} payload - The routing payload containing locations (lat/lon pairs) for the route calculation.
- * @returns {Promise<Failure<ValhallaRouteResponseFailure> | Success<ValhallaRouterResponse>>}
- * A promise resolving to a Success with the Valhalla route response on success, or a Failure with error details on failure.
- */
-export async function route(payload: ValhallaRouterPayload): Promise<Failure<ValhallaRouteResponseFailure> | Success<ValhallaRouterResponse>> {
-  try {
-    const url = new URL("/route", VALHALLA_URL ?? "http://localhost:6702");
+  const valhallaUrl = process.env.NEXT_PUBLIC_VALHALLA_URL;
+  if (!valhallaUrl) {
+    throw new Error("NEXT_PUBLIC_VALHALLA_URL is not configured.");
+  }
 
-    const params = {
-      locations: payload.locations,
+  const sortedPoints = [...points].sort((a, b) => a.sequence - b.sequence);
+  const serviceUrl = new URL("/route", valhallaUrl);
+  const response = await fetch(serviceUrl.toString(), {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+    },
+    body: JSON.stringify({
       costing: "auto",
-      costing_options: {
-        auto: {
-          country_crossing_penalty: 2000.0,
-        },
-      },
-      units: "kilometers",
-    };
-    url.searchParams.set("json", JSON.stringify(params));
+      directions_type: "none",
+      locations: sortedPoints.map((x) => ({
+        lat: x.point[0],
+        lon: x.point[1],
+        type: "break",
+      })),
+    }),
+    cache: "no-store",
+  });
 
-    const request = await fetch(url, { method: "GET" });
-    const json = await request.json();
+  if (!response.ok) {
+    throw new Error(`Valhalla request failed with status ${response.status}.`);
+  }
 
-    if (!request.ok) {
-      return new Failure(FailureCodes.ProxyFatal, json as ValhallaRouterResponse);
+  const payload = (await response.json()) as ValhallaRouteResponse;
+  const legs = payload.trip?.legs ?? [];
+  if (legs.length === 0) {
+    throw new Error("Valhalla response has no route legs.");
+  }
+
+  const mergedCoordinates: Array<[number, number]> = [];
+
+  for (const leg of legs) {
+    if (!leg.shape) {
+      throw new Error("Valhalla response leg is missing encoded shape.");
     }
 
-    return new Success(json as ValhallaRouterResponse);
-  } catch {
-    return new Failure(FailureCodes.ProxyFatal, {
-      error_code: 1,
-      error: "Failed to Proxy",
-      status_code: 500,
-      status: "Internal Server Error",
-    } satisfies ValhallaRouteResponseFailure);
+    const coordinates = decodePolyline(leg.shape);
+    if (coordinates.length === 0) {
+      continue;
+    }
+
+    if (mergedCoordinates.length === 0) {
+      mergedCoordinates.push(...coordinates);
+      continue;
+    }
+
+    mergedCoordinates.push(...coordinates.slice(1));
   }
-}
 
-export interface ValhallaRouterPayload {
-  locations: Array<{ lat: number, lon: number }>;
-}
-
-interface ValhallaRouteResponseFailure {
-  error_code: number;
-  error: string;
-  status_code: number;
-  status: string;
-}
-
-export interface ValhallaRouterResponse {
-  trip: {
-    locations: Array<{
-      type: string;
-      lat: number;
-      lon: number;
-      side_of_street: string;
-      original_index: number;
-    }>;
-    legs: Array<{
-      maneuvers: Array<{
-        type: number;
-        instruction: string;
-        verbal_succinct_transition_instruction: string;
-        verbal_pre_transition_instruction: string;
-        verbal_post_transition_instruction: string;
-        street_names?: Array<string>;
-        bearing_after: number;
-        time: number;
-        length: number;
-        cost: number;
-        begin_shape_index: number;
-        end_shape_index: number;
-        sign?: object;
-        verbal_multi_cue: boolean;
-        travel_mode: string;
-        travel_type: string;
-      }>;
-      summary: ValhallaRouteSummary;
-      shape: string;
-    }>;
-    summary: ValhallaRouteSummary;
-    status_message: string;
-    status: number;
-    units: string;
-    language: string;
+  if (mergedCoordinates.length < 2) {
+    throw new Error("Valhalla returned insufficient route coordinates.");
   }
+
+  return encodePolyline(mergedCoordinates);
 }
 
-interface ValhallaStatus {
-  version: string;
-  tileset_last_modified: string;
-  available_actions: Array<string>;
+function decodePolyline(encoded: string): Array<[number, number]> {
+  const coordinates: Array<[number, number]> = [];
+  let index = 0;
+  let lat = 0;
+  let lng = 0;
+
+  while (index < encoded.length) {
+    const latResult = decodeSingleValue(encoded, index);
+    lat += latResult.value;
+    index = latResult.nextIndex;
+
+    const lngResult = decodeSingleValue(encoded, index);
+    lng += lngResult.value;
+    index = lngResult.nextIndex;
+
+    coordinates.push([lat / POLYLINE_PRECISION, lng / POLYLINE_PRECISION]);
+  }
+
+  return coordinates;
 }
 
-interface ValhallaRouteSummary {
-  has_time_restrictions: boolean;
-  has_toll: boolean;
-  has_highway: boolean;
-  has_ferry: boolean;
-  min_lat: number;
-  min_lon: number;
-  max_lat: number;
-  max_lon: number;
-  time: number;
-  length: number;
-  cost: number;
+function decodeSingleValue(encoded: string, startIndex: number): { value: number; nextIndex: number } {
+  let result = 0;
+  let shift = 0;
+  let index = startIndex;
+
+  while (true) {
+    const byte = encoded.charCodeAt(index++) - 63;
+    result |= (byte & 0x1f) << shift;
+    shift += 5;
+
+    if (byte < 0x20) {
+      break;
+    }
+  }
+
+  return {
+    value: (result & 1) ? ~(result >> 1) : (result >> 1),
+    nextIndex: index,
+  };
+}
+
+function encodePolyline(coordinates: Array<[number, number]>): string {
+  let result = "";
+  let previousLat = 0;
+  let previousLng = 0;
+
+  for (const [lat, lng] of coordinates) {
+    const currentLat = Math.round(lat * POLYLINE_PRECISION);
+    const currentLng = Math.round(lng * POLYLINE_PRECISION);
+
+    result += encodeSignedValue(currentLat - previousLat);
+    result += encodeSignedValue(currentLng - previousLng);
+
+    previousLat = currentLat;
+    previousLng = currentLng;
+  }
+
+  return result;
+}
+
+function encodeSignedValue(value: number): string {
+  const shifted = value < 0 ? ~(value << 1) : (value << 1);
+  return encodeUnsignedValue(shifted);
+}
+
+function encodeUnsignedValue(value: number): string {
+  let remaining = value;
+  let encoded = "";
+
+  while (remaining >= 0x20) {
+    encoded += String.fromCharCode((0x20 | (remaining & 0x1f)) + 63);
+    remaining >>= 5;
+  }
+
+  encoded += String.fromCharCode(remaining + 63);
+  return encoded;
 }

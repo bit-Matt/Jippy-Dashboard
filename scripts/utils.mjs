@@ -2,9 +2,10 @@ import fs from "node:fs";
 import fsp from "node:fs/promises";
 import child_process from "node:child_process";
 import crypto from "node:crypto";
-import * as readline from "node:readline/promises";
+import os from "node:os";
 import path from "node:path";
 import * as pg from "pg";
+import * as readline from "node:readline/promises";
 import {stdin, stdout} from "node:process";
 
 const __dirname = import.meta.dirname;
@@ -120,6 +121,41 @@ export const process = {
         }
       });
     });
+  },
+};
+
+export const fsUtils = {
+  createRecursiveDirectories(root, subPaths) {
+    const paths = subPaths.map(subPath => path.join(root, subPath));
+    for (const path of paths) {
+      // No need for existing directories.
+      if (fs.existsSync(path)) {
+        continue;
+      }
+
+      // Create directory.
+      fs.mkdirSync(path, { recursive: true });
+    }
+  },
+  removeDir(loc) {
+    fs.rmSync(loc, { recursive: true });
+  },
+  async unpackWith7z(args) {
+    const platform = os.platform();
+    const arch = platform === "darwin" ? "any" : `${os.arch()}`;
+    const exe = platform === "win32" ? "7z.exe" : "7zz";
+
+    const exePath = path.join(__dirname, "7z", `${platform}-${arch}`, exe);
+    if (!fs.existsSync(exePath)) {
+      console.error("No such platform prefix exists for unpacking: %s", `${platform}-${arch}/${exe}`);
+      process.exit(1);
+    }
+
+    if (platform !== "win32") {
+      fs.chmodSync(exePath, 0o755);
+    }
+
+    await process.spawnAsync(exePath, args);
   },
 };
 
@@ -267,32 +303,114 @@ export const db = {
     await client.end();
   },
 
-  /**
-   * Prepares the environment for running Nominatim by ensuring the presence of PBF data.
-   *
-   * This function checks for the existence of a PBF (Protocolbuffer Binary Format) file
-   * in the `.osm-data` directory. If the file does not exist, it creates the directory (if necessary)
-   * and downloads the required PBF data from the specified Geofabrik URL.
-   *
-   * @async
-   * @returns {Promise<void>} Resolves when the PBF data is present or downloaded successfully.
-   *
-   * @throws {Error} Throws an error if the download or directory creation fails.
-   */
-  preNominatimConfigure: async () => {
-    const pbfPath = path.join(__dirname, "../.osm-data/philippines-latest.osm.pbf");
-    if (fs.existsSync(pbfPath)) return;
+  preDockerConfigure: async () => {
+    const root = path.join(__dirname, "../.osm-data");
+    const subPaths = [
+      "nominatim",
+      "tileserver",
+      "tileserver/coastline",
+      "tileserver/landcover/ne_10m_urban_areas",
+      "valhalla",
+    ];
+    fsUtils.createRecursiveDirectories(root, subPaths);
 
-    const pbfFolder = path.join(__dirname, "../.osm-data");
-    if (!fs.existsSync(pbfFolder)) fs.mkdirSync(pbfFolder);
+    const ne10m = path.join(root, "ne_10m_urban_areas.zip");
+    const ne10mExtractPath = path.join(root, "tileserver/landcover/ne_10m_urban_areas");
+    if (!fs.existsSync(ne10m)) {
+      const url = "https://naturalearth.s3.amazonaws.com/10m_cultural/ne_10m_urban_areas.zip";
 
-    console.log("Downloading PBF Data from: https://download.geofabrik.de/asia/philippines-latest.osm.pbf");
-    await process.spawnAsync("curl", [
-      "-L",
-      "-o",
-      pbfPath,
-      "https://download.geofabrik.de/asia/philippines-latest.osm.pbf",
+      // Download
+      console.log("Downloading ne_10m_urban_areas.zip");
+      await process.spawnAsync("curl", [
+        "-L",
+        "-o", ne10m,
+        url,
+      ]);
+    }
+
+    // Remove extraction folder
+    if (fs.existsSync(ne10mExtractPath)) {
+      fsUtils.removeDir(ne10mExtractPath);
+      fs.mkdirSync(ne10mExtractPath, { recursive: true });
+    }
+
+    // Extract
+    await fsUtils.unpackWith7z([
+      "x",
+      ne10m,
+      `-o${ne10mExtractPath}`,
     ]);
+
+    const coastline = path.join(root, "water-polygons-split-4326.zip");
+    const coastlineExtractPath = path.join(root, "tileserver/coastline");
+    if (!fs.existsSync(coastline)) {
+      const url = "https://osmdata.openstreetmap.de/download/water-polygons-split-4326.zip";
+
+      // Download
+      console.log("Downloading water-polygons-split-4326.zip");
+      await process.spawnAsync("curl", [
+        "-L",
+        "-o", coastline,
+        url,
+      ]);
+    }
+
+    // Remove extraction folder
+    if (fs.existsSync(coastlineExtractPath)) {
+      fsUtils.removeDir(coastlineExtractPath);
+      fs.mkdirSync(coastlineExtractPath, { recursive: true });
+    }
+
+    // Extract
+    console.log("Extracting water-polygons-split-4326.zip to tileserver/coastline...");
+    await fsUtils.unpackWith7z([
+      "e",
+      coastline,
+      `-o${coastlineExtractPath}`,
+      "-y",
+    ]);
+
+    const pbfPath = path.join(root, "philippines-latest.osm.pbf");
+    if (!fs.existsSync(pbfPath)) {
+      const url = "https://download.geofabrik.de/asia/philippines-latest.osm.pbf";
+
+      console.log("Downloading PBF Data from: %s", url);
+      await process.spawnAsync("curl", [
+        "-L",
+        "-o", pbfPath,
+        url,
+      ]);
+    } else {
+      console.log("philippines-latest.osm.pbf is already downloaded. Skipping...");
+    }
+
+    const configJsonPath = path.join(root, "./tileserver/config-openmaptiles.json");
+    if (!fs.existsSync(configJsonPath)) {
+      const url = "https://raw.githubusercontent.com/systemed/tilemaker/refs/heads/master/resources/config-openmaptiles.json";
+
+      console.log("Downloading config-openmaptiles.json...: %s", url);
+      await process.spawnAsync("curl", [
+        "-L",
+        "-o", configJsonPath,
+        url,
+      ]);
+    } else {
+      console.log("config-openmaptiles.json is already downloaded. Skipping...");
+    }
+
+    const luaScriptPath = path.join(root, "./tileserver/process-openmaptiles.lua");
+    if (!fs.existsSync(luaScriptPath)) {
+      const url = "https://raw.githubusercontent.com/systemed/tilemaker/refs/heads/master/resources/process-openmaptiles.lua";
+
+      console.log("Downloading process-openmaptiles.lua...: %s", url);
+      await process.spawnAsync("curl", [
+        "-L",
+        "-o", luaScriptPath,
+        url,
+      ]);
+    } else {
+      console.log("process-openmaptiles.lua is already downloaded. Skipping...");
+    }
   },
 };
 
@@ -312,17 +430,17 @@ export const csv = {
   read: async (location) => {
     const file = await fsp.readFile(location, "utf-8");
     const [header, ...data] = file.split(/\r?\n/).map((row) => row.split(","));
- 
+
     const output = [];
     for (const item of data) {
       const result = {};
       for (let i = 0; i < header.length; i++) {
         result[header[i]] = item[i];
       }
- 
+
       output.push(result);
     }
- 
+
     return output;
   },
 };

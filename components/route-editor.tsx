@@ -1,11 +1,21 @@
 "use client";
 
-import { Check, MapPin, Trash2, X } from "lucide-react";
+import { MapPin, Trash2, X } from "lucide-react";
 import { useState, useEffect, useRef, type DragEvent } from "react";
 
 import { Card, CardContent, CardHeader} from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import {
+  Dialog,
+  DialogClose,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import {
   InputGroup,
   InputGroupAddon,
@@ -13,47 +23,93 @@ import {
   InputGroupInput,
 } from "@/components/ui/input-group";
 import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 import { $fetch } from "@/lib/http/client";
-import { nominatim } from "@/lib/osm/client/nominatim";
+import * as nominatim from "@/lib/osm/nominatim";
 import type { AllResponse } from "@/components/app-sidebar";
 import { useRouteEditor } from "@/contexts/RouteEditorContext";
 
-const COLORS = [
-  "#fff100", "#ff8c00", "#e81123",
-  "#ec008c", "#68217a", "#00188f",
-  "#00bcf2", "#00b294", "#009e49",
-  "#bad80a",
+const ROUTE_COLORS = [
+  { label: "Sun Yellow", value: "#fff100" },
+  { label: "Orange", value: "#ff8c00" },
+  { label: "Red", value: "#e81123" },
+  { label: "Magenta", value: "#ec008c" },
+  { label: "Purple", value: "#68217a" },
+  { label: "Navy", value: "#00188f" },
+  { label: "Sky", value: "#00bcf2" },
+  { label: "Teal", value: "#00b294" },
+  { label: "Green", value: "#009e49" },
+  { label: "Lime", value: "#bad80a" },
 ];
 
-const ROUTE_DISTRICTS = [
-  "Arevalo (Villa de Arevalo)",
-  "City Proper",
-  "Jaro",
-  "La Paz",
-  "Lapuz",
-  "Mandurriao",
-  "Molo",
-];
+const getErrorMessage = (error: unknown, fallbackMessage: string) => {
+  if (error instanceof Error && error.message) {
+    return error.message;
+  }
+
+  if (typeof error === "string" && error.trim().length > 0) {
+    return error;
+  }
+
+  if (error && typeof error === "object") {
+    const errorRecord = error as {
+      message?: unknown;
+      title?: unknown;
+      details?: { message?: unknown } | unknown;
+    };
+
+    if (typeof errorRecord.message === "string" && errorRecord.message.trim().length > 0) {
+      return errorRecord.message;
+    }
+
+    if (
+      errorRecord.details &&
+      typeof errorRecord.details === "object" &&
+      "message" in errorRecord.details &&
+      typeof errorRecord.details.message === "string" &&
+      errorRecord.details.message.trim().length > 0
+    ) {
+      return errorRecord.details.message;
+    }
+
+    if (typeof errorRecord.title === "string" && errorRecord.title.trim().length > 0) {
+      return errorRecord.title;
+    }
+  }
+
+  return fallbackMessage;
+};
 
 export default function RouteEditor({ editingRoute, onSaved, onClosed }: RouteEditorProps) {
   const [routeNumber, setRouteNumber] = useState("");
   const [routeName, setRouteName] = useState("");
-  const [routeDistrict, setRouteDistrict] = useState("");
+  const [routeDetails, setRouteDetails] = useState("");
+  const [isDetailsDialogOpen, setIsDetailsDialogOpen] = useState(false);
+  const [draftRouteDetails, setDraftRouteDetails] = useState("");
   const [draggedWaypointId, setDraggedWaypointId] = useState<number | null>(null);
   const dragPreviewRef = useRef<HTMLElement | null>(null);
-  const [addresses, setAddresses] = useState<Record<number, string>>({});
-  const [addressCoords, setAddressCoords] = useState<Record<number, string>>({});
   const [loadingAddresses, setLoadingAddresses] = useState<Set<number>>(new Set());
   const {
     selectedColor,
+    activeDirection,
+    waypointCounts,
     setSelectedColor,
+    setActiveDirection,
     waypoints,
     activePointIndex,
     setActivePointIndex,
     removeWaypoint,
     reorderWaypoints,
+    updateWaypoint,
     clearWaypoints,
+    clearAllWaypoints,
     saveRoute,
     stopCreating,
   } = useRouteEditor();
@@ -63,35 +119,27 @@ export default function RouteEditor({ editingRoute, onSaved, onClosed }: RouteEd
 
     setRouteNumber(editingRoute.routeNumber);
     setRouteName(editingRoute.routeName);
-
-    const initialAddresses: Record<number, string> = {};
-    const initialAddressCoords: Record<number, string> = {};
-
-    [...editingRoute.points]
-      .sort((a, b) => a.sequence - b.sequence)
-      .forEach((point, index) => {
-        initialAddresses[index] = point.address;
-        initialAddressCoords[index] = `${point.point[0]},${point.point[1]}`;
-      });
-
-    setAddresses(initialAddresses);
-    setAddressCoords(initialAddressCoords);
+    setRouteDetails(editingRoute.routeDetails ?? "");
   }, [editingRoute]);
 
   // Reverse geocode waypoints to get addresses
   useEffect(() => {
     const geocodeWaypoints = async () => {
-      const newAddresses: Record<number, string> = { ...addresses };
-      const newAddressCoords: Record<number, string> = { ...addressCoords };
       const toGeocode: typeof waypoints = [];
 
-      // Find waypoints that don't have addresses yet
+      // Find waypoints that don't have valid addresses yet
       waypoints.forEach((waypoint) => {
-        const waypointCoords = `${waypoint.lat},${waypoint.lng}`;
-
-        if (addressCoords[waypoint.id] !== waypointCoords && !loadingAddresses.has(waypoint.id)) {
-          toGeocode.push(waypoint);
+        // Skip if waypoint already has a valid address (and it's not "Unknown Address")
+        if (waypoint.address && waypoint.address !== "Unknown Address") {
+          return;
         }
+
+        // Skip if already loading
+        if (loadingAddresses.has(waypoint.id)) {
+          return;
+        }
+
+        toGeocode.push(waypoint);
       });
 
       if (toGeocode.length === 0) return;
@@ -110,21 +158,20 @@ export default function RouteEditor({ editingRoute, onSaved, onClosed }: RouteEd
             lon: waypoint.lng,
             zoom: 18,
           },
-          { restricted: false },
         );
 
-        if (data && data.data) {
-          newAddresses[waypoint.id] = data.data.display_name || "Unknown location";
-          newAddressCoords[waypoint.id] = `${waypoint.lat},${waypoint.lng}`;
+        let address = "Unknown location";
+        if (data) {
+          address = data.display_name || "Unknown location";
         } else if (error) {
-          newAddresses[waypoint.id] = "Unable to fetch address";
-          newAddressCoords[waypoint.id] = `${waypoint.lat},${waypoint.lng}`;
+          address = "Unable to fetch address";
           console.error("Geocoding error:", error);
         }
+
+        // Update waypoint with the fetched address
+        updateWaypoint(waypoint.id, waypoint.lat, waypoint.lng, address);
       }
 
-      setAddresses(newAddresses);
-      setAddressCoords(newAddressCoords);
       setLoadingAddresses((prev) => {
         const updated = new Set(prev);
         toGeocode.forEach((wp) => updated.delete(wp.id));
@@ -133,61 +180,73 @@ export default function RouteEditor({ editingRoute, onSaved, onClosed }: RouteEd
     };
 
     geocodeWaypoints();
-
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [waypoints]);
 
-  const handleSaveRoute = () => {
+  const handleSaveRoute = async () => {
     if (!routeNumber.trim() || !routeName.trim()) {
       console.warn("Route number and name are required");
       return;
     }
 
     const route = saveRoute();
-    if (route) {
-      const endpoint = editingRoute
-        ? `/api/restricted/management/route/${editingRoute.id}`
-        : "/api/restricted/management/route";
+    if (!route) {
+      return;
+    }
 
-      const method = editingRoute ? "PATCH" : "POST";
+    const endpoint = editingRoute
+      ? `/api/restricted/management/route/${editingRoute.id}`
+      : "/api/restricted/management/route";
 
-      $fetch(endpoint, {
+    const method = editingRoute ? "PATCH" : "POST";
+    const fallbackMessage = editingRoute
+      ? "Failed to update route."
+      : "Failed to create route.";
+
+    try {
+      const { error } = await $fetch(endpoint, {
         method,
         body: {
           routeNumber: routeNumber,
           routeName: routeName,
           routeColor: selectedColor,
-          points: route.map(x => ({
-            sequence: x.sequence,
-            address: addresses[x.id] ?? "Unknown Address",
-            point: [x.lat, x.lng],
-          })),
+          routeDetails: routeDetails,
+          points: {
+            goingTo: route.goingTo.map(x => ({
+              sequence: x.sequence,
+              address: x.address ?? "Unknown Address",
+              point: [x.lat, x.lng] as [number, number],
+            })),
+            goingBack: route.goingBack.map(x => ({
+              sequence: x.sequence,
+              address: x.address ?? "Unknown Address",
+              point: [x.lat, x.lng] as [number, number],
+            })),
+          },
         },
-      })
-        .then(({ error }) => {
-          if (error) {
-            console.error("Error saving route:", error);
-            return;
-          }
+      });
 
-          setRouteNumber("");
-          setRouteName("");
-          setRouteDistrict("");
-          setAddresses({});
-          setAddressCoords({});
-          clearWaypoints();
-          stopCreating();
-          onSaved?.();
-          onClosed?.();
-        })
-        .catch(e => {
-          console.error("Error saving route:", e);
-        });
+      if (error) {
+        console.error("Error saving route:", error);
+        alert(getErrorMessage(error, fallbackMessage));
+        return;
+      }
+
+      setRouteNumber("");
+      setRouteName("");
+      setRouteDetails("");
+      clearAllWaypoints();
+      stopCreating();
+      onSaved?.();
+      onClosed?.();
+    } catch (error) {
+      console.error("Error saving route:", error);
+      alert(getErrorMessage(error, fallbackMessage));
     }
   };
 
   const handleCloseEditor = () => {
-    if (waypoints.length > 0) {
+    if ((waypointCounts.goingTo + waypointCounts.goingBack) > 0) {
       const shouldDiscard = window.confirm(
         "You have waypoint items in this editor. Discard and close?",
       );
@@ -197,10 +256,8 @@ export default function RouteEditor({ editingRoute, onSaved, onClosed }: RouteEd
 
     setRouteNumber("");
     setRouteName("");
-    setRouteDistrict("");
-    setAddresses({});
-    setAddressCoords({});
-    clearWaypoints();
+    setRouteDetails("");
+    clearAllWaypoints();
     stopCreating();
     onClosed?.();
   };
@@ -223,10 +280,8 @@ export default function RouteEditor({ editingRoute, onSaved, onClosed }: RouteEd
 
       setRouteNumber("");
       setRouteName("");
-      setRouteDistrict("");
-      setAddresses({});
-      setAddressCoords({});
-      clearWaypoints();
+      setRouteDetails("");
+      clearAllWaypoints();
       stopCreating();
       onSaved?.();
       onClosed?.();
@@ -264,6 +319,18 @@ export default function RouteEditor({ editingRoute, onSaved, onClosed }: RouteEd
     setDraggedWaypointId(null);
   };
 
+  const handleOpenRouteDetails = () => {
+    setDraftRouteDetails(routeDetails);
+    setIsDetailsDialogOpen(true);
+  };
+
+  const handleSaveRouteDetails = () => {
+    setRouteDetails(draftRouteDetails);
+    setIsDetailsDialogOpen(false);
+  };
+
+  const canSave = waypointCounts.goingTo >= 2 && waypointCounts.goingBack >= 2;
+
   return (
     <div className="absolute top-2 left-6 z-9999 w-1/4">
       <Card>
@@ -273,7 +340,7 @@ export default function RouteEditor({ editingRoute, onSaved, onClosed }: RouteEd
             <Button
               size="sm"
               onClick={handleSaveRoute}
-              disabled={waypoints.length < 2 || !routeNumber.trim() || !routeName.trim()}
+              disabled={!canSave || !routeNumber.trim() || !routeName.trim()}
             >
               Save
             </Button>
@@ -311,41 +378,67 @@ export default function RouteEditor({ editingRoute, onSaved, onClosed }: RouteEd
               </div>
             </div>
             <div className="space-y-2">
-              <Label htmlFor="route-district">Route District</Label>
-              <select
-                id="route-district"
-                value={routeDistrict}
-                onChange={(e) => setRouteDistrict(e.target.value)}
-                className="border-input bg-background ring-offset-background placeholder:text-muted-foreground focus-visible:ring-ring flex h-9 w-full rounded-md border px-3 py-1 text-sm shadow-xs focus-visible:ring-1 focus-visible:outline-hidden disabled:cursor-not-allowed disabled:opacity-50"
+              <Label>Route Details</Label>
+              <Button
+                type="button"
+                variant="outline"
+                className="w-full justify-start"
+                onClick={handleOpenRouteDetails}
               >
-                <option value="">Select district</option>
-                {ROUTE_DISTRICTS.map((district) => (
-                  <option key={district} value={district}>
-                    {district}
-                  </option>
-                ))}
-              </select>
+                Add Route Details
+              </Button>
+              <p className="text-xs text-muted-foreground">
+                {routeDetails.trim().length > 0
+                  ? `Details saved (${routeDetails.trim().length} characters).`
+                  : "No route details added yet."}
+              </p>
             </div>
           </div>
 
           <div className="space-y-2">
             <Label>Route Color</Label>
-            <div className="flex flex-wrap gap-2">
-              {COLORS.map((color) => (
-                <button
-                  key={color}
-                  onClick={() => setSelectedColor(color)}
-                  className="relative h-10 w-10 rounded-full border-2 transition-transform hover:scale-105"
-                  style={{
-                    backgroundColor: color,
-                    borderColor: selectedColor === color ? "#111827" : "#e5e7eb",
-                  }}
-                >
-                  {selectedColor === color && (
-                    <Check className="absolute inset-0 m-auto h-5 w-5 text-white drop-shadow-lg" />
-                  )}
-                </button>
-              ))}
+            <Select value={selectedColor} onValueChange={setSelectedColor}>
+              <SelectTrigger className="w-full">
+                <SelectValue placeholder="Select route color" />
+              </SelectTrigger>
+              <SelectContent>
+                {ROUTE_COLORS.map((color) => (
+                  <SelectItem key={color.value} value={color.value}>
+                    <span className="flex items-center gap-2">
+                      <span
+                        aria-hidden="true"
+                        className="h-2.5 w-2.5 rounded-full"
+                        style={{ backgroundColor: color.value }}
+                      />
+                      {color.label}
+                    </span>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="space-y-2">
+            <Label>Direction</Label>
+            <div className="bg-muted inline-flex rounded-md p-0.5 w-full">
+              <button
+                type="button"
+                onClick={() => setActiveDirection("goingTo")}
+                className={`grow rounded px-2 py-1 text-xs transition-colors ${
+                  activeDirection === "goingTo" ? "bg-background text-foreground shadow-xs" : "text-muted-foreground"
+                }`}
+              >
+                Going To City ({waypointCounts.goingTo})
+              </button>
+              <button
+                type="button"
+                onClick={() => setActiveDirection("goingBack")}
+                className={`grow rounded px-2 py-1 text-xs transition-colors ${
+                  activeDirection === "goingBack" ? "bg-background text-foreground shadow-xs" : "text-muted-foreground"
+                }`}
+              >
+                Going Back ({waypointCounts.goingBack})
+              </button>
             </div>
           </div>
 
@@ -371,7 +464,7 @@ export default function RouteEditor({ editingRoute, onSaved, onClosed }: RouteEd
               >
                 <div className="flex items-center justify-between">
                   <span className="text-sm font-medium">
-                    Waypoint {index + 1}
+                    {activeDirection === "goingTo" ? "Going To" : "Going Back"} Waypoint {index + 1}
                   </span>
                   <Button
                     size="sm"
@@ -387,9 +480,9 @@ export default function RouteEditor({ editingRoute, onSaved, onClosed }: RouteEd
                 <InputGroup>
                   <InputGroupInput
                     readOnly
-                    value={addresses[waypoint.id] || (loadingAddresses.has(waypoint.id) ? "Loading address..." : "Click on map to add waypoint")}
+                    value={waypoint.address || (loadingAddresses.has(waypoint.id) ? "Loading address..." : "Click on map to add waypoint")}
                     placeholder="Address"
-                    title={addresses[waypoint.id]}
+                    title={waypoint.address}
                   />
                   <InputGroupAddon align="inline-end" className="pr-2">
                     <InputGroupButton aria-label={`Pin waypoint ${index + 1}`}>
@@ -417,20 +510,46 @@ export default function RouteEditor({ editingRoute, onSaved, onClosed }: RouteEd
               variant="outline"
               onClick={() => {
                 clearWaypoints();
-                setAddresses({});
-                setAddressCoords({});
               }}
               disabled={waypoints.length === 0}
             >
-              Clear Waypoints
+              Clear Active Direction
             </Button>
           )}
 
           <p className="text-xs text-muted-foreground">
-            Click map to add points. Drag waypoint cards up or down to reorder sequence. Points are locked after placement; click a waypoint card to enable dragging that point on the map. You need at least 2 waypoints to save.
+            Use the direction tabs to edit each path independently. New map clicks are added to the active direction. Each direction needs at least 2 waypoints to save.
           </p>
         </CardContent>
       </Card>
+
+      <Dialog open={isDetailsDialogOpen} onOpenChange={setIsDetailsDialogOpen}>
+        <DialogContent className="sm:max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Route Details</DialogTitle>
+            <DialogDescription>
+              Add detailed route notes, service coverage information, or special instructions.
+            </DialogDescription>
+          </DialogHeader>
+          <Textarea
+            id="route-details-dialog"
+            placeholder="Describe the route coverage, stops, scheduling notes, landmarks, or other relevant details..."
+            value={draftRouteDetails}
+            onChange={(e) => setDraftRouteDetails(e.target.value)}
+            className="min-h-56 max-h-[60vh] resize-y"
+          />
+          <DialogFooter>
+            <DialogClose asChild>
+              <Button type="button" variant="outline">
+                Cancel
+              </Button>
+            </DialogClose>
+            <Button type="button" onClick={handleSaveRouteDetails}>
+              Save
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
