@@ -446,13 +446,6 @@ export const csv = {
 };
 
 /**
- * Docker configuration
- *
- * @type {Map<string, string>}
- */
-const DOCKER_CONFIG = new Map();
-
-/**
  * Runtime configuration
  *
  * @type {Map<any, any>}
@@ -492,17 +485,14 @@ export const env = {
    * @param {string} value - The value to be stored for the specified configuration key.
    */
   write: (key, value) => {
-    const [context, ...rest] = key.split(".");
-
-    if (context === "docker") {
-      const configKey = rest.join("_").toUpperCase();
-      DOCKER_CONFIG.set(configKey, value);
-
-      return;
-    }
+    const [...rest] = key.split(".");
 
     const runtimeKey = rest.join("_").toUpperCase();
     RUNTIME_CONFIG.set(runtimeKey, value);
+  },
+
+  get: (key) => {
+    return RUNTIME_CONFIG.get(key);
   },
 
   /**
@@ -518,13 +508,29 @@ export const env = {
       config += `${key}="${value}"\n`;
     });
 
-    config += "\n";
-
-    DOCKER_CONFIG.forEach((value, key) => {
-      config += `${key}="${value}"\n`;
-    });
-
     await fs.promises.writeFile(path, config, "utf-8");
+  },
+
+  load: () => {
+    const envPath = path.join(__dirname, "../.env");
+    if (!fs.existsSync(envPath)) {
+      return false;
+    }
+
+    const envFile = fs.readFileSync(envPath, "utf-8");
+    const lines = envFile.split(/\r?\n/);
+
+    for (const line of lines) {
+      if (line.trim().startsWith("#") || !line.includes("=")) {
+        continue; // Skip comments and invalid lines
+      }
+
+      const [key, ...rest] = line.split("=");
+      const value = rest.join("=").replace(/^"(.*)"$/, "$1"); // Remove surrounding quotes if present
+      RUNTIME_CONFIG.set(key.trim().replaceAll("_", ".").toLowerCase(), value.trim());
+    }
+
+    return true;
   },
 };
 
