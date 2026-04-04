@@ -5,6 +5,7 @@ import { type InputEvent, type SubmitEvent, useState } from "react";
 import useSWR from "swr";
 
 import { $fetch, type BetterFetchResponse } from "@/lib/http/client";
+import { AppSidebar } from "@/components/app-sidebar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -30,6 +31,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Spinner } from "@/components/ui/spinner";
+import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
 import Typography from "@/components/typography";
 
 export default function Invitations() {
@@ -61,32 +63,37 @@ export default function Invitations() {
   };
 
   return (
-    <div className="p-4 pt-0 w-full">
-      <Typography variant="h3" className="mb-4">Invitations</Typography>
+    <SidebarProvider>
+      <AppSidebar />
+      <SidebarInset>
+        <div className="p-4 pt-0 w-full">
+          <Typography variant="h3" className="mb-4">Invitations</Typography>
 
-      <InvitationForm handleInvite={handleInvite} />
+          <InvitationForm handleInvite={handleInvite} />
 
-      <Table>
-        <TableCaption>{
-          isLoading ? "Loading..." : (error || data?.error) ? "Hmm. That didn't work. Try again later." : "That's all!"
-        }</TableCaption>
-        <TableHeader>
-          <TableRow>
-            <TableHead className="w-55">Email</TableHead>
-            <TableHead>Office Position</TableHead>
-            <TableHead>Status</TableHead>
-            <TableHead className="text-right">Action</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {
-            (data?.data?.data || []).map((invitation) => (
-              <Row key={invitation.id} data={invitation} onRevoke={onRevokeHandler} />
-            ))
-          }
-        </TableBody>
-      </Table>
-    </div>
+          <Table>
+            <TableCaption>{
+              isLoading ? "Loading..." : (error || data?.error) ? "Hmm. That didn't work. Try again later." : "That's all!"
+            }</TableCaption>
+            <TableHeader>
+              <TableRow>
+                <TableHead className="w-55">Email</TableHead>
+                <TableHead>Role</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead className="text-right">Action</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {
+                (data?.data?.data || []).map((invitation) => (
+                  <Row key={invitation.id} data={invitation} onRevoke={onRevokeHandler} />
+                ))
+              }
+            </TableBody>
+          </Table>
+        </div>
+      </SidebarInset>
+    </SidebarProvider>
   );
 }
 
@@ -216,7 +223,7 @@ function InvitationForm({ handleInvite }: { handleInvite: (invitation: Invitatio
         <DialogHeader>
           <DialogTitle>Invite a Collaborator</DialogTitle>
           <DialogDescription>
-            Enter the email address of the member you want to invite and the office you want to assign them to.
+            Enter the email address of the member you want to invite as collaborator.
           </DialogDescription>
         </DialogHeader>
         <form onSubmit={handleSubmit}>

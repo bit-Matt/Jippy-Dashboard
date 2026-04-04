@@ -2,6 +2,7 @@
 
 import { MapPin, Trash2, X } from "lucide-react";
 import { useState, useEffect, useRef, type DragEvent } from "react";
+import useSWR from "swr";
 
 import { Card, CardContent, CardHeader} from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -88,8 +89,9 @@ const getErrorMessage = (error: unknown, fallbackMessage: string) => {
   return fallbackMessage;
 };
 
-export default function RouteEditor({ editingRoute, onSaved, onClosed }: RouteEditorProps) {
+export default function RouteEditor({ editingRoute, snapshotParentRouteId, onSaved, onClosed }: RouteEditorProps) {
   const [snapshotName, setSnapshotName] = useState("v1");
+  const [snapshotState, setSnapshotState] = useState<"wip" | "for_approval" | "ready">("wip");
   const [routeNumber, setRouteNumber] = useState("");
   const [routeName, setRouteName] = useState("");
   const [routeDetails, setRouteDetails] = useState("");
@@ -98,6 +100,7 @@ export default function RouteEditor({ editingRoute, onSaved, onClosed }: RouteEd
   const [draggedWaypointId, setDraggedWaypointId] = useState<number | null>(null);
   const dragPreviewRef = useRef<HTMLElement | null>(null);
   const [loadingAddresses, setLoadingAddresses] = useState<Set<number>>(new Set());
+  const { data: me } = useSWR<MeResponse>("/api/me", $fetch);
   const {
     selectedColor,
     activeDirection,
@@ -119,10 +122,15 @@ export default function RouteEditor({ editingRoute, onSaved, onClosed }: RouteEd
   useEffect(() => {
     if (!editingRoute) {
       setSnapshotName("v1");
+      setSnapshotState("wip");
+      setRouteNumber("");
+      setRouteName("");
+      setRouteDetails("");
       return;
     }
 
     setSnapshotName(editingRoute.snapshotName ?? "Draft");
+    setSnapshotState((editingRoute.snapshotState as "wip" | "for_approval" | "ready") ?? "wip");
     setRouteNumber(editingRoute.routeNumber);
     setRouteName(editingRoute.routeName);
     setRouteDetails(editingRoute.routeDetails ?? "");
@@ -201,20 +209,26 @@ export default function RouteEditor({ editingRoute, onSaved, onClosed }: RouteEd
     }
 
     const isSnapshotEdit = !!editingRoute?.id && !!editingRoute?.activeSnapshotId;
+    const isSnapshotCreate = !isSnapshotEdit && !!snapshotParentRouteId;
     const endpoint = isSnapshotEdit
       ? `/api/restricted/management/route/${editingRoute.id}/${editingRoute.activeSnapshotId}`
-      : "/api/restricted/management/route";
+      : isSnapshotCreate
+        ? `/api/restricted/management/route/${snapshotParentRouteId}`
+        : "/api/restricted/management/route";
 
     const method = isSnapshotEdit ? "PATCH" : "POST";
     const fallbackMessage = isSnapshotEdit
       ? "Failed to update route snapshot."
-      : "Failed to create route.";
+      : isSnapshotCreate
+        ? "Failed to create route snapshot."
+        : "Failed to create route.";
 
     try {
       const { error } = await $fetch(endpoint, {
         method,
         body: {
           snapshotName,
+          snapshotState,
           routeNumber: routeNumber,
           routeName: routeName,
           routeColor: selectedColor,
@@ -243,6 +257,7 @@ export default function RouteEditor({ editingRoute, onSaved, onClosed }: RouteEd
       setRouteNumber("");
       setRouteName("");
       setSnapshotName("v1");
+      setSnapshotState("wip");
       setRouteDetails("");
       clearAllWaypoints();
       stopCreating();
@@ -266,39 +281,11 @@ export default function RouteEditor({ editingRoute, onSaved, onClosed }: RouteEd
     setRouteNumber("");
     setRouteName("");
     setSnapshotName("v1");
+    setSnapshotState("wip");
     setRouteDetails("");
     clearAllWaypoints();
     stopCreating();
     onClosed?.();
-  };
-
-  const handleDeleteRoute = async () => {
-    if (!editingRoute?.id) return;
-
-    const shouldDelete = window.confirm("Are you sure you want to delete this route?");
-    if (!shouldDelete) return;
-
-    try {
-      const { error } = await $fetch(`/api/restricted/management/route/${editingRoute.id}`, {
-        method: "DELETE",
-      });
-
-      if (error) {
-        console.error("Error deleting route:", error);
-        return;
-      }
-
-      setRouteNumber("");
-      setRouteName("");
-      setSnapshotName("v1");
-      setRouteDetails("");
-      clearAllWaypoints();
-      stopCreating();
-      onSaved?.();
-      onClosed?.();
-    } catch (e) {
-      console.error("Error deleting route:", e);
-    }
   };
 
   const handleWaypointDragStart = (
@@ -341,6 +328,7 @@ export default function RouteEditor({ editingRoute, onSaved, onClosed }: RouteEd
   };
 
   const canSave = waypointCounts.goingTo >= 2 && waypointCounts.goingBack >= 2;
+  const isAdministrator = me?.data?.data?.role === "administrator_user";
 
   return (
     <div className="absolute top-2 left-6 z-9999 w-1/4">
@@ -383,6 +371,21 @@ export default function RouteEditor({ editingRoute, onSaved, onClosed }: RouteEd
                   onChange={(e) => setSnapshotName(e.target.value)}
                 />
               </div>
+              <div className="grow shrink-0 space-y-2">
+                <Label>Snapshot State</Label>
+                <Select value={snapshotState} onValueChange={(value) => setSnapshotState(value as "wip" | "for_approval" | "ready")}>
+                  <SelectTrigger className="w-full">
+                    <SelectValue placeholder="Select state" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="wip">WIP</SelectItem>
+                    <SelectItem value="for_approval">For Approval</SelectItem>
+                    {isAdministrator ? <SelectItem value="ready">Ready</SelectItem> : null}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <div className="flex items-end gap-3">
               <div className="w-20 shrink-0 space-y-2">
                 <Label htmlFor="route-number">Route No.</Label>
                 <Input
@@ -519,28 +522,16 @@ export default function RouteEditor({ editingRoute, onSaved, onClosed }: RouteEd
             ))}
           </div>
 
-          {editingRoute ? (
-            <Button
-              className="w-full"
-              variant="destructive"
-              onClick={() => {
-                void handleDeleteRoute();
-              }}
-            >
-              Delete Route
-            </Button>
-          ) : (
-            <Button
-              className="w-full"
-              variant="outline"
-              onClick={() => {
-                clearWaypoints();
-              }}
-              disabled={waypoints.length === 0}
-            >
-              Clear Active Direction
-            </Button>
-          )}
+          <Button
+            className="w-full"
+            variant="outline"
+            onClick={() => {
+              clearWaypoints();
+            }}
+            disabled={waypoints.length === 0}
+          >
+            Clear Active Direction
+          </Button>
 
           <p className="text-xs text-muted-foreground">
             Use the direction tabs to edit each path independently. New map clicks are added to the active direction. Each direction needs at least 2 waypoints to save.
@@ -581,6 +572,17 @@ export default function RouteEditor({ editingRoute, onSaved, onClosed }: RouteEd
 
 interface RouteEditorProps {
   editingRoute?: AllResponse["routes"][0] | null
+  snapshotParentRouteId?: string | null
   onSaved?: () => void
   onClosed?: () => void
+}
+
+type MeResponse = {
+  data: {
+    ok: boolean;
+    data: {
+      role: string;
+    };
+  };
+  error?: unknown;
 }

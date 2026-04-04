@@ -385,6 +385,14 @@ const RegionDrawingLayer = ({
     }
   }, [activeTool, map, disableAllRegionTools]);
 
+  useEffect(() => () => {
+    if (!regionLayerRef.current) return;
+
+    unbindLayerMutationEvents(regionLayerRef.current);
+    map.removeLayer(regionLayerRef.current);
+    regionLayerRef.current = null;
+  }, [map, unbindLayerMutationEvents]);
+
   return null;
 };
 

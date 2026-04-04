@@ -6,11 +6,18 @@ import { tryParseJson } from "@/lib/http/RequestUtilities";
 import { oneOf } from "@/lib/one-of";
 import { getRoutePolyline } from "@/lib/osm/valhalla";
 import { utils, validator } from "@/lib/validator";
+import { session, SessionCode } from "@/lib/auth";
 
 export async function POST(
   request: NextRequest,
   { params }: RouteContext<"/api/restricted/management/route/[id]">,
 ) {
+  const currentSession = await session.verify();
+  if (currentSession.code !== SessionCode.Ok) {
+    return ResponseComposer.composeFromSessionValidation(currentSession)
+      .orchestrate();
+  }
+
   const { id } = await params;
 
   if (!utils.isUuid(id)) {
@@ -28,6 +35,14 @@ export async function POST(
   const validation = await validator.validate<RequestBody>(data, {
     properties: {
       snapshotName: { type: "string", formatter: "non-empty-string" },
+      snapshotState: {
+        type: "string",
+        formatterFn: async (value) => {
+          if (value === undefined) return { ok: true };
+          if (["wip", "for_approval", "ready"].includes(value)) return { ok: true };
+          return { ok: false, error: "Invalid snapshot state." };
+        },
+      },
       routeNumber: { type: "string", formatter: "non-empty-string" },
       routeName: { type: "string", formatter: "non-empty-string" },
       routeColor: { type: "string", formatter: "hex-color" },
@@ -66,6 +81,11 @@ export async function POST(
   });
   if (!validation.ok) {
     return ResponseComposer.composeError(StatusCodes.Status400BadRequest, [validation.errors!])
+      .orchestrate();
+  }
+
+  if (data.snapshotState === "ready" && currentSession.user?.role !== "administrator_user") {
+    return ResponseComposer.composeError(StatusCodes.Status403Forbidden, [{ message: "Insufficient permissions to set ready state." }])
       .orchestrate();
   }
 
@@ -152,6 +172,7 @@ type SwitchPatchBody = {
 
 type RequestBody = {
   snapshotName: string;
+  snapshotState?: "wip" | "for_approval" | "ready";
   routeNumber: string;
   routeName: string;
   routeColor: string;

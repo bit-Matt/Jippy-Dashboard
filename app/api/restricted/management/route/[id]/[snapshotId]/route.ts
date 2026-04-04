@@ -6,6 +6,7 @@ import * as route from "@/lib/management/route-manager";
 import { tryParseJson } from "@/lib/http/RequestUtilities";
 import { oneOf } from "@/lib/one-of";
 import { utils, validator } from "@/lib/validator";
+import { session, SessionCode } from "@/lib/auth";
 
 export async function GET(
   request: NextRequest,
@@ -57,6 +58,12 @@ export async function PATCH(
   request: NextRequest,
   { params }: RouteContext<"/api/restricted/management/route/[id]/[snapshotId]">,
 ) {
+  const currentSession = await session.verify();
+  if (currentSession.code !== SessionCode.Ok) {
+    return ResponseComposer.composeFromSessionValidation(currentSession)
+      .orchestrate();
+  }
+
   const { id, snapshotId } = await params;
 
   if (!utils.isUuid(id)) {
@@ -77,6 +84,7 @@ export async function PATCH(
 
   const hasAnyPatchField =
     data.snapshotName !== undefined
+    || data.snapshotState !== undefined
     || data.routeNumber !== undefined
     || data.routeName !== undefined
     || data.routeColor !== undefined
@@ -90,6 +98,14 @@ export async function PATCH(
   const validation = await validator.validate<PatchRequestBody>(data, {
     properties: {
       snapshotName: { type: "string", formatter: "non-empty-string" },
+      snapshotState: {
+        type: "string",
+        formatterFn: async (value) => {
+          if (value === undefined) return { ok: true };
+          if (["wip", "for_approval", "ready"].includes(value)) return { ok: true };
+          return { ok: false, error: "Invalid snapshot state." };
+        },
+      },
       routeNumber: { type: "string", formatter: "non-empty-string" },
       routeName: { type: "string", formatter: "non-empty-string" },
       routeColor: { type: "string", formatter: "hex-color" },
@@ -134,6 +150,11 @@ export async function PATCH(
       .orchestrate();
   }
 
+  if (data.snapshotState === "ready" && currentSession.user?.role !== "administrator_user") {
+    return ResponseComposer.composeError(StatusCodes.Status403Forbidden, [{ message: "Insufficient permissions to set ready state." }])
+      .orchestrate();
+  }
+
   const patchPayload: route.UpdateRouteParameters = { ...data };
 
   if (data.points) {
@@ -155,8 +176,40 @@ export async function PATCH(
   );
 }
 
+export async function DELETE(
+  request: NextRequest,
+  { params }: RouteContext<"/api/restricted/management/route/[id]/[snapshotId]">,
+) {
+  const currentSession = await session.verify();
+  if (currentSession.code !== SessionCode.Ok) {
+    return ResponseComposer.composeFromSessionValidation(currentSession)
+      .orchestrate();
+  }
+
+  const { id, snapshotId } = await params;
+
+  if (!utils.isUuid(id)) {
+    return ResponseComposer.composeError(StatusCodes.Status404NotFound, [{ message: "No route found with the given ID." }])
+      .orchestrate();
+  }
+
+  if (!utils.isUuid(snapshotId)) {
+    return ResponseComposer.composeError(StatusCodes.Status404NotFound, [{ message: "No snapshot found with the given ID." }])
+      .orchestrate();
+  }
+
+  const result = await route.deleteSnapshot(id, snapshotId);
+  return oneOf(result).match(
+    success => ResponseComposer.compose(StatusCodes.Status200Ok)
+      .setBody(success)
+      .orchestrate(),
+    e => ResponseComposer.composeFromFailure(e).orchestrate(),
+  );
+}
+
 type PatchRequestBody = {
   snapshotName?: string;
+  snapshotState?: "wip" | "for_approval" | "ready";
   routeNumber?: string;
   routeName?: string;
   routeColor?: string;

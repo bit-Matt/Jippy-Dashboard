@@ -41,7 +41,7 @@ export async function getAllRegions(): Promise<Result<RegionObject[]>> {
           ), '[]'::json
         )
         FROM ${regionSequences}
-        WHERE ${regionSnapshots.regionId} = "region_snapshots"."id")`,
+        WHERE ${regionSequences.regionSnapshotId} = ${regionSnapshots.id})`,
 
         stations: sql<StationObject[]>`(
         SELECT COALESCE(
@@ -57,13 +57,13 @@ export async function getAllRegions(): Promise<Result<RegionObject[]>> {
           ), '[]'::json
         )
         FROM ${regionStations}
-        WHERE ${regionSnapshots.regionId} = "region_snapshots"."id")`,
+        WHERE ${regionStations.regionSnapshotId} = ${regionSnapshots.id})`,
       })
       .from(region)
       .leftJoin(regionSnapshots, eq(region.activeSnapshotId, regionSnapshots.id))
       .groupBy(region.id, regionSnapshots.id);
 
-    return new Success(result);
+    return new Success(result as RegionObject[]);
   } catch (e) {
     return new Failure(ErrorCodes.Fatal, "Failed to fetch regions.", {}, e);
   }
@@ -115,7 +115,7 @@ export async function getRegionById(regionId: string, snapshotId?: string): Prom
           ), '[]'::json
         )
         FROM ${regionSequences}
-        WHERE ${regionSnapshots.regionId} = "region_snapshots"."id")`,
+        WHERE ${regionSequences.regionSnapshotId} = ${regionSnapshots.id})`,
 
         stations: sql<StationObject[]>`(
         SELECT COALESCE(
@@ -131,7 +131,7 @@ export async function getRegionById(regionId: string, snapshotId?: string): Prom
           ), '[]'::json
         )
         FROM ${regionStations}
-        WHERE ${regionSnapshots.regionId} = "region_snapshots"."id")`,
+        WHERE ${regionStations.regionSnapshotId} = ${regionSnapshots.id})`,
       })
       .from(region)
       .leftJoin(regionSnapshots, eq(regionSnapshots.id, snapshotId ? snapshotId : region.activeSnapshotId))
@@ -143,7 +143,7 @@ export async function getRegionById(regionId: string, snapshotId?: string): Prom
       return new Failure(ErrorCodes.ResourceNotFound, "Region not found.", { regionId });
     }
 
-    return new Success(result);
+    return new Success(result as RegionObject);
   } catch (e) {
     return new Failure(ErrorCodes.Fatal, "Failed to fetch regions.", {}, e);
   }
@@ -187,6 +187,7 @@ export async function createSnapshot(regionId: string, params: RegionAddParamete
         .insert(regionSnapshots)
         .values({
           versionName: params.snapshotName,
+          snapshotState: params.snapshotState ?? "wip",
           regionId: regionTarget.id,
           name: params.regionName,
           color: params.regionColor,
@@ -309,7 +310,7 @@ export async function copySnapshot(regionId: string, sourceSnapshotId: string): 
         .returning();
       if (!newSnapshot) return tx.rollback();
 
-      if (shape.length >= 0) {
+      if (shape.length > 0) {
         await tx
           .insert(regionSequences)
           .values(shape.map(p => ({
@@ -319,7 +320,7 @@ export async function copySnapshot(regionId: string, sourceSnapshotId: string): 
           })));
       }
 
-      if (stations.length >= 0) {
+      if (stations.length > 0) {
         await tx
           .insert(regionStations)
           .values(stations.map(s => ({
@@ -341,6 +342,35 @@ export async function copySnapshot(regionId: string, sourceSnapshotId: string): 
     return new Success(result);
   } catch (e) {
     return new Failure(ErrorCodes.Fatal, "Snapshot copying failed.", { regionId, sourceSnapshotId }, e);
+  }
+}
+
+export async function deleteSnapshot(regionId: string, snapshotId: string): Promise<Result<undefined>> {
+  try {
+    const [snapshot] = await db
+      .select({ id: regionSnapshots.id, state: regionSnapshots.snapshotState })
+      .from(regionSnapshots)
+      .where(
+        and(
+          eq(regionSnapshots.id, snapshotId),
+          eq(regionSnapshots.regionId, regionId),
+        ),
+      )
+      .limit(1);
+    if (!snapshot) {
+      return new Failure(ErrorCodes.ResourceExpired, "No snapshot found", { regionId, snapshotId });
+    }
+
+    if (snapshot.state === "ready") {
+      return new Failure(ErrorCodes.ValidationFailure, "You cannot delete this snapshot", { regionId, snapshotId });
+    }
+
+    await db.delete(regionSnapshots)
+      .where(eq(regionSnapshots.id, snapshot.id));
+
+    return new Success(undefined);
+  } catch (e) {
+    return new Failure(ErrorCodes.Fatal, "Unable to delete the snapshot", { regionId, snapshotId }, e);
   }
 }
 
@@ -528,6 +558,7 @@ export async function updateRegionSnapshot(
       // Patch to apply
       const regionPatch = {
         ...(params.snapshotName !== undefined && { versionName: params.snapshotName }),
+        ...(params.snapshotState !== undefined && { snapshotState: params.snapshotState }),
         ...(params.regionName !== undefined && { name: params.regionName }),
         ...(params.regionColor !== undefined && { color: params.regionColor }),
         ...(params.regionShape !== undefined && { shapeType: params.regionShape }),
@@ -614,6 +645,7 @@ export interface RegionObject {
 
 export interface RegionAddParameters {
   snapshotName: string;
+  snapshotState?: "wip" | "for_approval" | "ready";
   regionName: string;
   regionColor: string;
   regionShape: string;
@@ -623,6 +655,7 @@ export interface RegionAddParameters {
 
 export interface UpdateRegionParameters {
   snapshotName?: string;
+  snapshotState?: "wip" | "for_approval" | "ready";
   regionName?: string;
   regionColor?: string;
   regionShape?: string;

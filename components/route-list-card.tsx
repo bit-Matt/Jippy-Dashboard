@@ -20,6 +20,13 @@ export default function RouteListCard({
   onRegionSelect,
   onClosureSelect,
   onManageSnapshots,
+  onAddRoute,
+  onAddRegion,
+  onAddClosure,
+  onDeleteSelected,
+  deleteSelectedDisabled,
+  isDeletingSelected,
+  deleteSelectedLabel,
   manageSnapshotsDisabled,
   selectedItemVersionName,
   selectedItemSnapshotState,
@@ -39,8 +46,8 @@ export default function RouteListCard({
       : "Closures";
 
   return (
-    <div className="pointer-events-auto absolute top-2 right-6 z-9998 w-1/8 min-w-64 max-w-72">
-      <Card className="h-[40vh] min-h-52 gap-2 py-4">
+    <div className="pointer-events-auto absolute top-1 right-6 bottom-1 z-9998 w-1/8 min-w-64 max-w-72">
+      <Card className="h-[calc(100vh-80px)] min-h-0 gap-2 py-4">
         <CardHeader className="px-4 pb-1">
           <CardTitle className="text-base">
             {title}
@@ -70,6 +77,18 @@ export default function RouteListCard({
               >
                 Manage Snapshots
               </Button>
+              {onDeleteSelected ? (
+                <Button
+                  type="button"
+                  className="mt-2 w-full"
+                  size="sm"
+                  variant="destructive"
+                  onClick={onDeleteSelected}
+                  disabled={deleteSelectedDisabled || isDeletingSelected}
+                >
+                  {isDeletingSelected ? `Deleting ${deleteSelectedLabel ?? "Item"}...` : `Delete ${deleteSelectedLabel ?? "Selected"}`}
+                </Button>
+              ) : null}
             </div>
           ) : null}
           {mode === "all" ? (
@@ -243,6 +262,29 @@ export default function RouteListCard({
                 <p className="text-muted-foreground text-sm text-center">No items available</p>
               )}
           </div>
+
+          {(onAddRoute || onAddRegion || onAddClosure) ? (
+            <div className="mt-3 border-t pt-3">
+              <p className="text-xs text-muted-foreground">Create</p>
+              <div className="mt-2 flex flex-col gap-2">
+                {onAddRoute ? (
+                  <Button type="button" size="sm" variant="outline" onClick={onAddRoute}>
+                    Add Route
+                  </Button>
+                ) : null}
+                {onAddClosure ? (
+                  <Button type="button" size="sm" variant="outline" onClick={onAddClosure}>
+                    Add Closure
+                  </Button>
+                ) : null}
+                {onAddRegion ? (
+                  <Button type="button" size="sm" variant="outline" onClick={onAddRegion}>
+                    Add Region
+                  </Button>
+                ) : null}
+              </div>
+            </div>
+          ) : null}
         </CardContent>
       </Card>
     </div>
@@ -262,6 +304,13 @@ interface RouteListCardProps {
   onRegionSelect?: (region: AllResponse["regions"][0]) => void;
   onClosureSelect?: (closure: AllResponse["closures"][0]) => void;
   onManageSnapshots?: () => void;
+  onAddRoute?: () => void;
+  onAddRegion?: () => void;
+  onAddClosure?: () => void;
+  onDeleteSelected?: () => void;
+  deleteSelectedDisabled?: boolean;
+  isDeletingSelected?: boolean;
+  deleteSelectedLabel?: string;
   manageSnapshotsDisabled?: boolean;
   selectedItemVersionName?: string | null;
   selectedItemSnapshotState?: string | null;

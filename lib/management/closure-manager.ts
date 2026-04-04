@@ -104,6 +104,7 @@ export async function createSnapshot(closureId: string, params: ClosureAddParame
         .insert(roadClosureSnapshots)
         .values({
           versionName: params.versionName,
+          snapshotState: params.snapshotState ?? "wip",
           name: params.closureName,
           description: params.closureDescription,
           shape: params.shape,
@@ -144,6 +145,34 @@ export async function createSnapshot(closureId: string, params: ClosureAddParame
     return new Success(transaction);
   } catch (e) {
     return new Failure(ErrorCodes.Fatal, "Failed to create a road closure snapshot.", { closureId, params }, e);
+  }
+}
+
+export async function deleteSnapshot(closureId: string, snapshotId: string): Promise<Result<undefined>> {
+  try {
+    const [snapshot] = await db
+      .select({ id: roadClosureSnapshots.id, state: roadClosureSnapshots.snapshotState })
+      .from(roadClosureSnapshots)
+      .where(
+        and(
+          eq(roadClosureSnapshots.id, snapshotId),
+          eq(roadClosureSnapshots.roadClosureId, closureId),
+        ),
+      )
+      .limit(1);
+    if (!snapshot) {
+      return new Failure(ErrorCodes.ResourceNotFound, "No such snapshot found.", { snapshotId });
+    }
+
+    if (snapshot.state === "ready") {
+      return new Failure(ErrorCodes.ValidationFailure, "You cannot delete this snapshot.", { snapshotId });
+    }
+
+    // Delete the snapshot
+    await db.delete(roadClosureSnapshots).where(eq(roadClosureSnapshots.id, snapshot.id));
+    return new Success(undefined);
+  } catch (e) {
+    return new Failure(ErrorCodes.Fatal, "Unable to delete a snapshot", { closureId, snapshotId }, e);
   }
 }
 
@@ -364,6 +393,7 @@ export async function updateClosure(
       // Patch to apply
       const closurePatch = {
         ...(params.versionName !== undefined && { versionName: params.versionName }),
+        ...(params.snapshotState !== undefined && { snapshotState: params.snapshotState }),
         ...(params.closureName !== undefined && { name: params.closureName }),
         ...(params.closureDescription !== undefined && { description: params.closureDescription }),
         ...(params.shape !== undefined && { shape: params.shape }),
@@ -430,6 +460,7 @@ export interface ClosureObject {
 
 export interface ClosureAddParameters {
   versionName: string;
+  snapshotState?: "wip" | "for_approval" | "ready";
   closureName: string;
   closureDescription: string;
   shape: string;
@@ -438,6 +469,7 @@ export interface ClosureAddParameters {
 
 export interface ClosureUpdateParameters {
   versionName?: string;
+  snapshotState?: "wip" | "for_approval" | "ready";
   closureName?: string;
   closureDescription?: string;
   shape?: string;

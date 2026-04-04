@@ -149,7 +149,7 @@ export function SignupForm({ ...props }: ComponentProps<typeof Card>) {
               <Input
                 id="role"
                 type="text"
-                value={data?.data?.data?.role ? "Root Account" : "Administrator"}
+                value={data?.data?.data?.role === "administrator_user" ? "Root Account" : "Collaborator"}
                 readOnly
                 required
               />

@@ -8,6 +8,7 @@ import * as region from "@/lib/management/region-manager";
 import * as route from "@/lib/management/route-manager";
 import { tryParseJson } from "@/lib/http/RequestUtilities";
 import { utils, validator } from "@/lib/validator";
+import { session, SessionCode } from "@/lib/auth";
 
 export async function GET() {
   try {
@@ -30,6 +31,12 @@ export async function GET() {
 }
 
 export async function POST(req: NextRequest) {
+  const currentSession = await session.verify();
+  if (currentSession.code !== SessionCode.Ok) {
+    return ResponseComposer.composeFromSessionValidation(currentSession)
+      .orchestrate();
+  }
+
   const data = await tryParseJson<RequestBody>(req);
 
   // Body is unparseable.
@@ -42,6 +49,14 @@ export async function POST(req: NextRequest) {
   const validation = await validator.validate<RequestBody>(data, {
     properties: {
       snapshotName: { type: "string", formatter: "non-empty-string" },
+      snapshotState: {
+        type: "string",
+        formatterFn: async (value) => {
+          if (value === undefined) return { ok: true };
+          if (["wip", "for_approval", "ready"].includes(value)) return { ok: true };
+          return { ok: false, error: "Invalid snapshot state." };
+        },
+      },
       routeNumber: { type: "string", formatter: "non-empty-string" },
       routeName: { type: "string", formatter: "non-empty-string" },
       routeColor: { type: "string", formatter: "hex-color" },
@@ -83,6 +98,11 @@ export async function POST(req: NextRequest) {
       .orchestrate();
   }
 
+  if (data.snapshotState === "ready" && currentSession.user?.role !== "administrator_user") {
+    return ResponseComposer.composeError(StatusCodes.Status403Forbidden, [{ message: "Insufficient permissions to set ready state." }])
+      .orchestrate();
+  }
+
   const [polylineGoingTo, polylineGoingBack] = await Promise.all([
     getRoutePolyline(data.points.goingTo),
     getRoutePolyline(data.points.goingBack),
@@ -102,6 +122,7 @@ export async function POST(req: NextRequest) {
 
 type RequestBody = {
   snapshotName: string;
+  snapshotState?: "wip" | "for_approval" | "ready";
   routeNumber: string;
   routeName: string;
   routeColor: string;

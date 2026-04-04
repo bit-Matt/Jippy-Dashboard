@@ -26,6 +26,14 @@ export async function POST(req: NextRequest) {
   const validation = await validator.validate<RequestBody>(data, {
     properties: {
       snapshotName: { type: "string", formatter: "non-empty-string" },
+      snapshotState: {
+        type: "string",
+        formatterFn: async (value) => {
+          if (value === undefined) return { ok: true };
+          if (["wip", "for_approval", "ready"].includes(value)) return { ok: true };
+          return { ok: false, error: "Invalid snapshot state." };
+        },
+      },
       regionName: { type: "string", formatter: "non-empty-string" },
       regionShape: { type: "string", formatter: "non-empty-string" },
       regionColor: { type: "string", formatter: "hex-color" },
@@ -83,6 +91,11 @@ export async function POST(req: NextRequest) {
       .orchestrate();
   }
 
+  if (data.snapshotState === "ready" && currentSession.user?.role !== "administrator_user") {
+    return ResponseComposer.composeError(StatusCodes.Status403Forbidden, [{ message: "Insufficient permissions to set ready state." }])
+      .orchestrate();
+  }
+
   const result = await region.createRegion(data);
   return oneOf(result).match(
     s => ResponseComposer.compose(StatusCodes.Status201Created).setBody(s).orchestrate(),
@@ -92,6 +105,7 @@ export async function POST(req: NextRequest) {
 
 type RequestBody = {
   snapshotName: string;
+  snapshotState?: "wip" | "for_approval" | "ready";
   regionName: string;
   regionColor: string;
   regionShape: string;

@@ -1,8 +1,12 @@
+"use client";
+
 import { type ComponentProps } from "react";
-import { Command, Map, SquareDashed, TriangleAlert } from "lucide-react";
+import { Command, Map, ShieldCheck, SquareDashed } from "lucide-react";
+import useSWR from "swr";
 
 import { NavMain } from "@/components/nav-main";
 import { NavUser } from "@/components/nav-user";
+import { $fetch } from "@/lib/http/client";
 import {
   Sidebar,
   SidebarContent,
@@ -14,52 +18,24 @@ import {
 } from "@/components/ui/sidebar";
 
 export function AppSidebar({
-  onAddRouteClick,
-  onAddRegionClick,
-  onAddClosureRegionClick,
-  mode = "all",
   ...props
 }: SidebarProps) {
-  const data = {
+  const { data: meResponse, error, isLoading } = useSWR<BetterFetchMeResult>("/api/me", $fetch);
+  const currentUser = meResponse?.data?.data;
+
+  const navData = {
     navMain: [
       {
         title: "Route Management",
         url: "/dashboard/route",
         icon: Map,
         isActive: true,
-        items: [
-          {
-            title: "Add a new Route",
-            url: "/dashboard/route",
-            onClick: onAddRouteClick,
-          },
-        ],
       },
       {
         title: "Region Management",
         url: "/dashboard/region",
         isActive: true,
         icon: SquareDashed,
-        items: [
-          {
-            title: "Add a new Region",
-            url: "/dashboard/region",
-            onClick: onAddRegionClick,
-          },
-        ],
-      },
-      {
-        title: "Road Closure",
-        url: "/dashboard/route",
-        isActive: true,
-        icon: TriangleAlert,
-        items: [
-          {
-            title: "Add closure",
-            url: "/dashboard/route",
-            onClick: onAddClosureRegionClick,
-          },
-        ],
       },
     ],
 
@@ -67,7 +43,7 @@ export function AppSidebar({
       {
         title: "User Management",
         url: "#",
-        icon: Map,
+        icon: ShieldCheck,
         isActive: true,
         items: [
           {
@@ -99,24 +75,38 @@ export function AppSidebar({
         </SidebarMenu>
       </SidebarHeader>
       <SidebarContent>
-        <NavMain items={data.navMain} />
-        <div className="grow" />
-        <NavMain items={data.administration} />
+        <NavMain items={navData.navMain} />
+        {currentUser?.role === "administrator_user" ? (
+          <>
+            <div className="grow" />
+            <NavMain items={navData.administration} />
+          </>
+        ) : null}
       </SidebarContent>
       <SidebarFooter>
-        <NavUser />
+        <NavUser
+          user={currentUser}
+          isLoading={isLoading}
+          hasError={Boolean(error || meResponse?.error)}
+        />
       </SidebarFooter>
     </Sidebar>
   );
 }
 
-interface SidebarProps extends ComponentProps<typeof Sidebar> {
-  mode?: "all" | "route" | "region"
-  onAddRouteClick?: () => void
-  onAddRegionClick?: () => void
-  onSimulationClick?: () => void
-  onAddClosureRegionClick?: () => void
-}
+type SidebarProps = ComponentProps<typeof Sidebar>;
+
+type BetterFetchMeResult = {
+  data: {
+    ok: boolean;
+    data: {
+      fullName: string;
+      email: string;
+      role: string;
+    }
+  },
+  error: unknown;
+};
 
 export interface AllResponse {
   routes: Array<{

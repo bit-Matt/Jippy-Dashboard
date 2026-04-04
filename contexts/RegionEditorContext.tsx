@@ -81,6 +81,7 @@ interface RegionEditorContextType {
   editingRegionId: string | null;
   editingSnapshotId: string | null;
   snapshotName: string;
+  snapshotState: "wip" | "for_approval" | "ready";
   regionName: string;
   regionColor: string;
   regionShape: RegionDraftShape | null;
@@ -92,9 +93,11 @@ interface RegionEditorContextType {
   mutationVersion: number;
 
   openRegionEditor: () => void;
+  openRegionSnapshotEditor: (regionId: string) => void;
   openRegionEditorForEdit: (region: RegionSummary) => void;
   closeRegionEditor: () => void;
   setSnapshotName: (name: string) => void;
+  setSnapshotState: (state: "wip" | "for_approval" | "ready") => void;
   setRegionName: (name: string) => void;
   setRegionColor: (color: string) => void;
   setRegionShape: (shape: RegionDraftShape | null) => void;
@@ -117,6 +120,7 @@ export function RegionEditorProvider({ children }: { children: React.ReactNode }
   const [editingRegionId, setEditingRegionId] = useState<string | null>(null);
   const [editingSnapshotId, setEditingSnapshotId] = useState<string | null>(null);
   const [snapshotName, setSnapshotName] = useState("v1");
+  const [snapshotState, setSnapshotState] = useState<"wip" | "for_approval" | "ready">("wip");
   const [regionName, setRegionName] = useState("");
   const [regionColor, setRegionColor] = useState("#fff100");
   const [regionShape, setRegionShape] = useState<RegionDraftShape | null>(null);
@@ -136,6 +140,23 @@ export function RegionEditorProvider({ children }: { children: React.ReactNode }
     setEditingRegionId(null);
     setEditingSnapshotId(null);
     setSnapshotName("v1");
+    setSnapshotState("wip");
+    setRegionName("");
+    setRegionColor("#fff100");
+    setRegionShape(null);
+    setStations([]);
+    setActiveStationId(null);
+    setStationCounter(0);
+    setIsAddingStation(false);
+    setActiveRegionToolState("none");
+  };
+
+  const openRegionSnapshotEditor = (regionId: string) => {
+    setShowRegionEditor(true);
+    setEditingRegionId(regionId);
+    setEditingSnapshotId(null);
+    setSnapshotName("v1");
+    setSnapshotState("wip");
     setRegionName("");
     setRegionColor("#fff100");
     setRegionShape(null);
@@ -151,6 +172,7 @@ export function RegionEditorProvider({ children }: { children: React.ReactNode }
     setEditingRegionId(region.id);
     setEditingSnapshotId(region.activeSnapshotId);
     setSnapshotName(region.snapshotName ?? "Draft");
+    setSnapshotState((region.snapshotState as "wip" | "for_approval" | "ready") ?? "wip");
     setRegionName(region.regionName);
     setRegionColor(region.regionColor);
 
@@ -181,6 +203,7 @@ export function RegionEditorProvider({ children }: { children: React.ReactNode }
     setEditingRegionId(null);
     setEditingSnapshotId(null);
     setSnapshotName("v1");
+    setSnapshotState("wip");
     setRegionShape(null);
     setStations([]);
     setActiveStationId(null);
@@ -280,6 +303,7 @@ export function RegionEditorProvider({ children }: { children: React.ReactNode }
 
     const payload = {
       snapshotName,
+      snapshotState,
       regionName,
       regionColor,
       regionShape: regionShape.type,
@@ -291,9 +315,12 @@ export function RegionEditorProvider({ children }: { children: React.ReactNode }
     };
 
     const isSnapshotEdit = !!editingRegionId && !!editingSnapshotId;
+    const isSnapshotCreate = !!editingRegionId && !editingSnapshotId;
     const endpoint = isSnapshotEdit
       ? `/api/restricted/management/region/${editingRegionId}/${editingSnapshotId}`
-      : "/api/restricted/management/region";
+      : isSnapshotCreate
+        ? `/api/restricted/management/region/${editingRegionId}`
+        : "/api/restricted/management/region";
     const method = isSnapshotEdit ? "PATCH" : "POST";
 
     try {
@@ -340,6 +367,7 @@ export function RegionEditorProvider({ children }: { children: React.ReactNode }
     editingRegionId,
     editingSnapshotId,
     snapshotName,
+    snapshotState,
     regionName,
     regionColor,
     regionShape,
@@ -350,9 +378,11 @@ export function RegionEditorProvider({ children }: { children: React.ReactNode }
     hasDefinedPolygon: regionShape !== null,
     mutationVersion,
     openRegionEditor,
+    openRegionSnapshotEditor,
     openRegionEditorForEdit,
     closeRegionEditor,
     setSnapshotName,
+    setSnapshotState,
     setRegionName,
     setRegionColor,
     setRegionShape: handleSetRegionShape,

@@ -61,6 +61,14 @@ export async function POST(
       },
       shape: { type: "string", formatter: "non-empty-string" },
       versionName: { type: "string", formatter: "non-empty-string" },
+      snapshotState: {
+        type: "string",
+        formatterFn: async (value) => {
+          if (value === undefined) return { ok: true };
+          if (["wip", "for_approval", "ready"].includes(value)) return { ok: true };
+          return { ok: false, error: "Invalid snapshot state." };
+        },
+      },
     },
     requiredProperties: ["closureName", "closureDescription", "points", "shape", "versionName"],
     allowUnvalidatedProperties: false,
@@ -68,6 +76,11 @@ export async function POST(
   if (!validation.ok) {
     return ResponseComposer
       .composeError(StatusCodes.Status400BadRequest, validation.errors!)
+      .orchestrate();
+  }
+
+  if (data.snapshotState === "ready" && currentSession.user?.role !== "administrator_user") {
+    return ResponseComposer.composeError(StatusCodes.Status403Forbidden, [{ message: "Insufficient permissions to set ready state." }])
       .orchestrate();
   }
 
@@ -163,4 +176,5 @@ type RequestBody = {
   }>;
   shape: string;
   versionName: string;
+  snapshotState?: "wip" | "for_approval" | "ready";
 }

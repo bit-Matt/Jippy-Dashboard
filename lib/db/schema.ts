@@ -258,7 +258,7 @@ export const regionSequences = pgTable(
       .$default(() => uuidv7()),
     regionSnapshotId: text("region_snapshot_id")
       .notNull()
-      .references(() => region.id, { onDelete: "cascade" }),
+      .references(() => regionSnapshots.id, { onDelete: "cascade" }),
 
     // Region data
     sequenceNumber: integer("sequence_number").notNull(),
@@ -283,7 +283,7 @@ export const regionStations = pgTable(
       .$default(() => uuidv7()),
     regionSnapshotId: text("region_snapshot_id")
       .notNull()
-      .references(() => region.id, { onDelete: "cascade" }),
+      .references(() => regionSnapshots.id, { onDelete: "cascade" }),
 
     // Station data
     address: text("address")

@@ -3,9 +3,7 @@
 import { ChevronsUpDown, Ellipsis, LogOut } from "lucide-react";
 import { redirect, RedirectType } from "next/navigation";
 import { useMemo } from "react";
-import useSWR from "swr";
 
-import { $fetch } from "@/lib/http/client";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import {
   DropdownMenu,
@@ -18,15 +16,13 @@ import {
 import { SidebarMenu, SidebarMenuButton, SidebarMenuItem, useSidebar } from "@/components/ui/sidebar";
 import { Skeleton } from "@/components/ui/skeleton";
 
-export function NavUser() {
+export function NavUser({ user, isLoading, hasError }: NavUserProps) {
   const { isMobile } = useSidebar();
 
-  const { data, error, isLoading } = useSWR<BetterFetchMeResult>("/api/me", $fetch);
-
   const userAbbreviation = useMemo(() => {
-    if (!data || data.error) return "";
+    if (!user) return "";
 
-    const split = data.data.data.fullName.split(/\s/);
+    const split = user.fullName.split(/\s/);
 
     // Impossible, but it's there.
     if (split.length === 0) return "?";
@@ -38,7 +34,7 @@ export function NavUser() {
     const last = split[split.length - 1];
 
     return `${first[0]}${last[0]}`.toUpperCase();
-  }, [data]);
+  }, [user]);
 
   // Loading state
   if (isLoading) {
@@ -66,8 +62,7 @@ export function NavUser() {
   }
 
   // Don't render if it failed.
-  if (error || data?.error) {
-    console.error(error);
+  if (hasError || !user) {
 
     return (<></>);
   }
@@ -89,8 +84,8 @@ export function NavUser() {
                 <AvatarFallback className="rounded-lg">{userAbbreviation}</AvatarFallback>
               </Avatar>
               <div className="grid flex-1 text-left text-sm leading-tight">
-                <span className="truncate font-medium">{data!.data.data.fullName}</span>
-                <span className="truncate text-xs">{data!.data.data.email}</span>
+                <span className="truncate font-medium">{user.fullName}</span>
+                <span className="truncate text-xs">{user.email}</span>
               </div>
               <ChevronsUpDown className="ml-auto size-4" />
             </SidebarMenuButton>
@@ -107,8 +102,8 @@ export function NavUser() {
                   <AvatarFallback className="rounded-lg">{userAbbreviation}</AvatarFallback>
                 </Avatar>
                 <div className="grid flex-1 text-left text-sm leading-tight">
-                  <span className="truncate font-medium">{data!.data.data.fullName}</span>
-                  <span className="truncate text-xs">{data!.data.data.email}</span>
+                  <span className="truncate font-medium">{user.fullName}</span>
+                  <span className="truncate text-xs">{user.email}</span>
                 </div>
               </div>
             </DropdownMenuLabel>
@@ -124,13 +119,12 @@ export function NavUser() {
   );
 }
 
-type BetterFetchMeResult = {
-  data: {
-    ok: boolean;
-    data: {
-      fullName: string;
-      email: string;
-    }
-  },
-  error: unknown;
-};
+interface NavUserProps {
+  user?: {
+    fullName: string;
+    email: string;
+    role: string;
+  };
+  isLoading?: boolean;
+  hasError?: boolean;
+}

@@ -35,6 +35,8 @@ interface SnapshotManagerDialogProps {
   onEditSnapshot: (snapshotId: string) => void;
   onCloneSnapshot: (snapshotId: string) => void;
   onSwitchActiveSnapshot: (snapshotId: string) => void;
+  onDeleteSnapshot?: (snapshotId: string) => void;
+  onCreateBlankSnapshot?: () => void;
 }
 
 const normalizeStateLabel = (state: string) => {
@@ -58,6 +60,8 @@ export default function SnapshotManagerDialog({
   onEditSnapshot,
   onCloneSnapshot,
   onSwitchActiveSnapshot,
+  onDeleteSnapshot,
+  onCreateBlankSnapshot,
 }: SnapshotManagerDialogProps) {
   const selectedSnapshot = useMemo(
     () => snapshots.find((snapshot) => snapshot.id === selectedSnapshotId) ?? null,
@@ -67,6 +71,7 @@ export default function SnapshotManagerDialog({
   const canSwitch = selectedSnapshot?.state === "ready";
   const canEdit = !!selectedSnapshot && selectedSnapshot.state !== "ready";
   const canClone = selectedSnapshot?.state === "ready";
+  const canDelete = !!selectedSnapshot && selectedSnapshot.state !== "ready";
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -139,6 +144,16 @@ export default function SnapshotManagerDialog({
             >
               Clone
             </Button>
+            {onCreateBlankSnapshot ? (
+              <Button
+                type="button"
+                variant="outline"
+                disabled={isActing || isLoading}
+                onClick={onCreateBlankSnapshot}
+              >
+                New Blank Snapshot
+              </Button>
+            ) : null}
             <Button
               type="button"
               disabled={!canSwitch || isActing}
@@ -146,6 +161,16 @@ export default function SnapshotManagerDialog({
             >
               Switch Active
             </Button>
+            {onDeleteSnapshot ? (
+              <Button
+                type="button"
+                variant="destructive"
+                disabled={!canDelete || isActing}
+                onClick={() => selectedSnapshot && onDeleteSnapshot(selectedSnapshot.id)}
+              >
+                Delete Snapshot
+              </Button>
+            ) : null}
           </div>
         </DialogFooter>
       </DialogContent>

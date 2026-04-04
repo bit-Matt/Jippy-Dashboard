@@ -2,6 +2,7 @@
 
 import { Check, PenTool, Pencil, Square, Trash2, X } from "lucide-react";
 import { useEffect, useState } from "react";
+import useSWR from "swr";
 
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -16,6 +17,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useRegionEditor } from "@/contexts/RegionEditorContext";
+import { $fetch } from "@/lib/http/client";
 
 import * as nominatim from "@/lib/osm/nominatim";
 
@@ -40,6 +42,7 @@ export default function RegionEditor() {
   const {
     editingRegionId,
     snapshotName,
+    snapshotState,
     regionName,
     regionColor,
     stations,
@@ -56,10 +59,12 @@ export default function RegionEditor() {
     stopAddingStation,
     removeStation,
     saveRegionTemplate,
-    deleteRegionTemplate,
     closeRegionEditor,
     setSnapshotName,
+    setSnapshotState,
   } = useRegionEditor();
+  const { data: me } = useSWR<MeResponse>("/api/me", $fetch);
+  const isAdministrator = me?.data?.data?.role === "administrator_user";
 
   useEffect(() => {
     const initialAddresses: Record<number, string> = {};
@@ -137,10 +142,6 @@ export default function RegionEditor() {
     void saveRegionTemplate();
   };
 
-  const handleDeleteRegion = () => {
-    void deleteRegionTemplate();
-  };
-
   return (
     <div className="absolute top-2 left-6 z-9999 w-1/4">
       <Card>
@@ -182,6 +183,22 @@ export default function RegionEditor() {
                 value={snapshotName}
                 onChange={(e) => setSnapshotName(e.target.value)}
               />
+            </div>
+            <div className="space-y-2">
+              <Label>Snapshot State</Label>
+              <Select
+                value={snapshotState}
+                onValueChange={(value) => setSnapshotState(value as "wip" | "for_approval" | "ready")}
+              >
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="Select snapshot state" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="wip">WIP</SelectItem>
+                  <SelectItem value="for_approval">For Approval</SelectItem>
+                  {isAdministrator ? <SelectItem value="ready">Ready</SelectItem> : null}
+                </SelectContent>
+              </Select>
             </div>
             <div className="space-y-2">
               <Label htmlFor="region-name">Region Name</Label>
@@ -309,17 +326,18 @@ export default function RegionEditor() {
             </div>
           </div>
 
-          {editingRegionId ? (
-            <Button
-              className="w-full"
-              variant="destructive"
-              onClick={handleDeleteRegion}
-            >
-              Delete Region
-            </Button>
-          ) : null}
         </CardContent>
       </Card>
     </div>
   );
+}
+
+type MeResponse = {
+  data: {
+    ok: boolean;
+    data: {
+      role: string;
+    };
+  };
+  error?: unknown;
 }

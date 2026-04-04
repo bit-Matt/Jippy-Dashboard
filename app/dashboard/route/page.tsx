@@ -32,10 +32,13 @@ function RouteDashboardContent() {
   const [isClosureSnapshotDialogOpen, setIsClosureSnapshotDialogOpen] = useState(false);
   const [isSnapshotLoading, setIsSnapshotLoading] = useState(false);
   const [isSnapshotActing, setIsSnapshotActing] = useState(false);
+  const [isDeletingRoute, setIsDeletingRoute] = useState(false);
+  const [isDeletingClosure, setIsDeletingClosure] = useState(false);
   const [routeSnapshots, setRouteSnapshots] = useState<SnapshotListItem[]>([]);
   const [closureSnapshots, setClosureSnapshots] = useState<SnapshotListItem[]>([]);
   const [selectedRouteSnapshotId, setSelectedRouteSnapshotId] = useState<string | null>(null);
   const [selectedClosureSnapshotId, setSelectedClosureSnapshotId] = useState<string | null>(null);
+  const [snapshotCreateParentRouteId, setSnapshotCreateParentRouteId] = useState<string | null>(null);
   const selectedRouteRef = useRef<AllResponse["routes"][0] | null>(null);
   const selectedClosureRef = useRef<AllResponse["closures"][0] | null>(null);
 
@@ -43,6 +46,7 @@ function RouteDashboardContent() {
   const {
     mode: closureMode,
     startCreating: startCreatingClosure,
+    startCreatingSnapshot: startCreatingClosureSnapshot,
     startEditing: startEditingClosure,
     stopEditing: stopClosureEditing,
   } = useClosureEditor();
@@ -68,6 +72,42 @@ function RouteDashboardContent() {
     ].filter((entry): entry is { color: string; polyline: string } => entry !== null)),
     [routes],
   );
+
+  const mapRouting = useMemo(() => {
+    if (!selectedRoute) {
+      return persistedRouting;
+    }
+
+    const selectedSnapshotRouting = [
+      selectedRoute.points.polylineGoingTo
+        ? { color: selectedRoute.routeColor, polyline: selectedRoute.points.polylineGoingTo }
+        : null,
+      selectedRoute.points.polylineGoingBack
+        ? { color: selectedRoute.routeColor, polyline: selectedRoute.points.polylineGoingBack }
+        : null,
+    ].filter((entry): entry is { color: string; polyline: string } => entry !== null);
+
+    const otherRoutesRouting = routes
+      .filter((route) => route.id !== selectedRoute.id)
+      .flatMap((route) => [
+        route.points.polylineGoingTo
+          ? { color: route.routeColor, polyline: route.points.polylineGoingTo }
+          : null,
+        route.points.polylineGoingBack
+          ? { color: route.routeColor, polyline: route.points.polylineGoingBack }
+          : null,
+      ].filter((entry): entry is { color: string; polyline: string } => entry !== null));
+
+    return [...otherRoutesRouting, ...selectedSnapshotRouting];
+  }, [persistedRouting, routes, selectedRoute]);
+
+  const mapClosures = useMemo(() => {
+    if (!selectedClosure) {
+      return closures;
+    }
+
+    return [selectedClosure, ...closures.filter((closure) => closure.id !== selectedClosure.id)];
+  }, [closures, selectedClosure]);
 
   useEffect(() => {
     selectedRouteRef.current = selectedRoute;
@@ -136,11 +176,13 @@ function RouteDashboardContent() {
     if (isCreating) {
       stopCreating();
       setEditingRoute(null);
+      setSnapshotCreateParentRouteId(null);
       setRouteFocusKey(null);
       return;
     }
 
     setEditingRoute(null);
+    setSnapshotCreateParentRouteId(null);
     setRouteFocusKey(null);
     startCreating();
   };
@@ -149,6 +191,7 @@ function RouteDashboardContent() {
     if (isCreating) {
       stopCreating();
       setEditingRoute(null);
+      setSnapshotCreateParentRouteId(null);
       setRouteFocusKey(null);
     }
 
@@ -161,6 +204,7 @@ function RouteDashboardContent() {
   const handleSelectClosure = (closure: AllResponse["closures"][0]) => {
     setRouteFocusKey(null);
     setEditingRoute(null);
+    setSnapshotCreateParentRouteId(null);
     stopCreating();
     stopClosureEditing();
 
@@ -176,12 +220,14 @@ function RouteDashboardContent() {
     setRouteFocusKey(`${route.id}-${Date.now()}`);
     setSelectedRoute(route);
     setEditingRoute(null);
+    setSnapshotCreateParentRouteId(null);
     stopCreating();
   };
 
   const openRouteEditor = (route: AllResponse["routes"][0]) => {
     setSelectedRoute(route);
     setEditingRoute(route);
+    setSnapshotCreateParentRouteId(null);
     startEditing({
       color: route.routeColor,
       points: {
@@ -256,6 +302,60 @@ function RouteDashboardContent() {
     }
   };
 
+  const handleDeleteSelected = async () => {
+    if (selectedRoute && !isDeletingRoute) {
+      const shouldDelete = window.confirm("Delete this route and all its snapshots? This action cannot be undone.");
+      if (!shouldDelete) return;
+
+      setIsDeletingRoute(true);
+      const { error } = await $fetch(`/api/restricted/management/route/${selectedRoute.id}`, {
+        method: "DELETE",
+      });
+
+      if (error) {
+        console.error("Failed to delete route:", error);
+        setIsDeletingRoute(false);
+        return;
+      }
+
+      setSelectedRoute(null);
+      setEditingRoute(null);
+      setSelectedRouteSnapshotId(null);
+      setIsRouteSnapshotDialogOpen(false);
+      stopCreating();
+      setRouteFocusKey(null);
+
+      await fetchRoutes();
+      setIsDeletingRoute(false);
+      return;
+    }
+
+    if (selectedClosure && !isDeletingClosure) {
+      const shouldDelete = window.confirm("Delete this closure and all its snapshots? This action cannot be undone.");
+      if (!shouldDelete) return;
+
+      setIsDeletingClosure(true);
+      const { error } = await $fetch(`/api/restricted/management/closure/${selectedClosure.id}`, {
+        method: "DELETE",
+      });
+
+      if (error) {
+        console.error("Failed to delete closure:", error);
+        setIsDeletingClosure(false);
+        return;
+      }
+
+      setSelectedClosure(null);
+      setSelectedClosureId(null);
+      setSelectedClosureSnapshotId(null);
+      setIsClosureSnapshotDialogOpen(false);
+      stopClosureEditing();
+
+      await fetchRoutes();
+      setIsDeletingClosure(false);
+    }
+  };
+
   const handleViewRouteSnapshot = async (snapshotId: string) => {
     if (!selectedRoute) return;
     setIsSnapshotActing(true);
@@ -308,6 +408,16 @@ function RouteDashboardContent() {
     setIsRouteSnapshotDialogOpen(false);
   };
 
+  const handleCreateBlankRouteSnapshot = async () => {
+    if (!selectedRoute) return;
+    setRouteFocusKey(null);
+    setEditingRoute(null);
+    setSnapshotCreateParentRouteId(selectedRoute.id);
+    stopClosureEditing();
+    startCreating();
+    setIsRouteSnapshotDialogOpen(false);
+  };
+
   const handleSwitchRouteSnapshot = async (snapshotId: string) => {
     if (!selectedRoute) return;
 
@@ -328,6 +438,33 @@ function RouteDashboardContent() {
     setSelectedRouteSnapshotId(snapshotId);
     setIsSnapshotActing(false);
     setIsRouteSnapshotDialogOpen(false);
+    await fetchRoutes();
+  };
+
+  const handleDeleteRouteSnapshot = async (snapshotId: string) => {
+    if (!selectedRoute) return;
+
+    const selectedSnapshot = routeSnapshots.find((snapshot) => snapshot.id === snapshotId);
+    if (!selectedSnapshot || selectedSnapshot.state === "ready") return;
+
+    const shouldDelete = window.confirm(`Delete snapshot \"${selectedSnapshot.name}\"? This action cannot be undone.`);
+    if (!shouldDelete) return;
+
+    setIsSnapshotActing(true);
+    const { error } = await $fetch(`/api/restricted/management/route/${selectedRoute.id}/${snapshotId}`, {
+      method: "DELETE",
+    });
+
+    if (error) {
+      console.error("Failed to delete route snapshot:", error);
+      setIsSnapshotActing(false);
+      return;
+    }
+
+    const nextSnapshots = routeSnapshots.filter((snapshot) => snapshot.id !== snapshotId);
+    setRouteSnapshots(nextSnapshots);
+    setSelectedRouteSnapshotId(nextSnapshots[0]?.id ?? null);
+    setIsSnapshotActing(false);
     await fetchRoutes();
   };
 
@@ -379,6 +516,18 @@ function RouteDashboardContent() {
     setIsClosureSnapshotDialogOpen(false);
   };
 
+  const handleCreateBlankClosureSnapshot = async () => {
+    if (!selectedClosure) return;
+
+    stopCreating();
+    setEditingRoute(null);
+    setSnapshotCreateParentRouteId(null);
+    setSelectedRoute(null);
+    setSelectedClosureId(selectedClosure.id);
+    startCreatingClosureSnapshot(selectedClosure.id);
+    setIsClosureSnapshotDialogOpen(false);
+  };
+
   const handleSwitchClosureSnapshot = async (snapshotId: string) => {
     if (!selectedClosure) return;
 
@@ -402,21 +551,44 @@ function RouteDashboardContent() {
     await fetchRoutes();
   };
 
+  const handleDeleteClosureSnapshot = async (snapshotId: string) => {
+    if (!selectedClosure) return;
+
+    const selectedSnapshot = closureSnapshots.find((snapshot) => snapshot.id === snapshotId);
+    if (!selectedSnapshot || selectedSnapshot.state === "ready") return;
+
+    const shouldDelete = window.confirm(`Delete snapshot \"${selectedSnapshot.name}\"? This action cannot be undone.`);
+    if (!shouldDelete) return;
+
+    setIsSnapshotActing(true);
+    const { error } = await $fetch(`/api/restricted/management/closure/${selectedClosure.id}/${snapshotId}`, {
+      method: "DELETE",
+    });
+
+    if (error) {
+      console.error("Failed to delete closure snapshot:", error);
+      setIsSnapshotActing(false);
+      return;
+    }
+
+    const nextSnapshots = closureSnapshots.filter((snapshot) => snapshot.id !== snapshotId);
+    setClosureSnapshots(nextSnapshots);
+    setSelectedClosureSnapshotId(nextSnapshots[0]?.id ?? null);
+    setIsSnapshotActing(false);
+    await fetchRoutes();
+  };
+
   return (
     <SidebarProvider>
-      <AppSidebar
-        mode="route"
-        onAddRouteClick={handleShowRoutes}
-        onAddClosureRegionClick={handleShowClosureRegion}
-      />
+      <AppSidebar />
       <SidebarInset>
         <div className="relative z-0 mt-4 flex flex-1 flex-col gap-4 overflow-hidden p-4 pt-0">
           <RouteMapComponent
-            closures={closures}
+            closures={mapClosures}
             onClosureClick={handleSelectClosure}
             isRoutesLoading={isRoutesLoading}
             onRoutesReadyChange={setAreRouteLayersReady}
-            routing={persistedRouting}
+            routing={mapRouting}
             focusedWaypoints={selectedRoute
               ? [...selectedRoute.points.goingTo]
                 .sort((a, b) => a.sequence - b.sequence)
@@ -436,6 +608,12 @@ function RouteDashboardContent() {
             onRouteSelect={handleSelectRoute}
             onClosureSelect={handleSelectClosure}
             onManageSnapshots={handleManageSnapshots}
+            onDeleteSelected={handleDeleteSelected}
+            deleteSelectedDisabled={!selectedRoute && !selectedClosure}
+            isDeletingSelected={isDeletingRoute || isDeletingClosure}
+            deleteSelectedLabel={selectedRoute ? "Route" : selectedClosure ? "Closure" : undefined}
+            onAddRoute={handleShowRoutes}
+            onAddClosure={handleShowClosureRegion}
             manageSnapshotsDisabled={!selectedRoute && !selectedClosure}
             selectedItemVersionName={selectedRoute?.snapshotName ?? selectedClosure?.versionName ?? null}
             selectedItemSnapshotState={selectedRoute?.snapshotState ?? selectedClosure?.snapshotState ?? null}
@@ -445,6 +623,7 @@ function RouteDashboardContent() {
           {isCreating ? (
             <RouteEditor
               editingRoute={editingRoute}
+              snapshotParentRouteId={snapshotCreateParentRouteId}
               onSaved={async () => {
                 await fetchRoutes();
 
@@ -455,7 +634,10 @@ function RouteDashboardContent() {
                   }
                 }
               }}
-              onClosed={() => setEditingRoute(null)}
+              onClosed={() => {
+                setEditingRoute(null);
+                setSnapshotCreateParentRouteId(null);
+              }}
             />
           ) : null}
           <ClosureRegionEditor onSaved={async () => {
@@ -482,7 +664,9 @@ function RouteDashboardContent() {
             onViewSnapshot={handleViewRouteSnapshot}
             onEditSnapshot={handleEditRouteSnapshot}
             onCloneSnapshot={handleCloneRouteSnapshot}
+            onCreateBlankSnapshot={handleCreateBlankRouteSnapshot}
             onSwitchActiveSnapshot={handleSwitchRouteSnapshot}
+            onDeleteSnapshot={handleDeleteRouteSnapshot}
           />
           <SnapshotManagerDialog
             open={isClosureSnapshotDialogOpen}
@@ -497,7 +681,9 @@ function RouteDashboardContent() {
             onViewSnapshot={handleViewClosureSnapshot}
             onEditSnapshot={handleEditClosureSnapshot}
             onCloneSnapshot={handleCloneClosureSnapshot}
+            onCreateBlankSnapshot={handleCreateBlankClosureSnapshot}
             onSwitchActiveSnapshot={handleSwitchClosureSnapshot}
+            onDeleteSnapshot={handleDeleteClosureSnapshot}
           />
         </div>
       </SidebarInset>

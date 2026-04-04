@@ -95,6 +95,7 @@ export async function PATCH(
 
   const hasAnyPatchField =
     data.versionName !== undefined
+    || data.snapshotState !== undefined
     || data.shape !== undefined
     || data.closureName !== undefined
     || data.closureDescription !== undefined
@@ -107,6 +108,14 @@ export async function PATCH(
   const validation = await validator.validate<PatchRequestBody>(data, {
     properties: {
       versionName: { type: "string", formatter: "non-empty-string" },
+      snapshotState: {
+        type: "string",
+        formatterFn: async (value) => {
+          if (value === undefined) return { ok: true };
+          if (["wip", "for_approval", "ready"].includes(value)) return { ok: true };
+          return { ok: false, error: "Invalid snapshot state." };
+        },
+      },
       shape: { type: "string", formatter: "non-empty-string" },
       closureName: { type: "string", formatter: "non-empty-string" },
       closureDescription: { type: "string", formatter: "non-empty-string" },
@@ -143,7 +152,43 @@ export async function PATCH(
       .orchestrate();
   }
 
+  if (data.snapshotState === "ready" && currentSession.user?.role !== "administrator_user") {
+    return ResponseComposer.composeError(StatusCodes.Status403Forbidden, [{ message: "Insufficient permissions to set ready state." }])
+      .orchestrate();
+  }
+
   const result = await closure.updateClosure(id, snapshotId, data);
+  return oneOf(result).match(
+    success => ResponseComposer.compose(StatusCodes.Status200Ok)
+      .setBody(success)
+      .orchestrate(),
+    e => ResponseComposer.composeFromFailure(e).orchestrate(),
+  );
+}
+
+export async function DELETE(
+  request: NextRequest,
+  { params }: RouteContext<"/api/restricted/management/closure/[id]/[snapshotId]">,
+) {
+  const currentSession = await session.verify();
+  if (currentSession.code !== SessionCode.Ok) {
+    return ResponseComposer.composeFromSessionValidation(currentSession)
+      .orchestrate();
+  }
+
+  const { id, snapshotId } = await params;
+
+  if (!utils.isUuid(id)) {
+    return ResponseComposer.composeError(StatusCodes.Status404NotFound, [{ message: "No closures found." }])
+      .orchestrate();
+  }
+
+  if (!utils.isUuid(snapshotId)) {
+    return ResponseComposer.composeError(StatusCodes.Status404NotFound, [{ message: "No such snapshot found." }])
+      .orchestrate();
+  }
+
+  const result = await closure.deleteSnapshot(id, snapshotId);
   return oneOf(result).match(
     success => ResponseComposer.compose(StatusCodes.Status200Ok)
       .setBody(success)
@@ -154,6 +199,7 @@ export async function PATCH(
 
 type PatchRequestBody = {
   versionName?: string;
+  snapshotState?: "wip" | "for_approval" | "ready";
   shape?: string;
   closureName?: string;
   closureDescription?: string;

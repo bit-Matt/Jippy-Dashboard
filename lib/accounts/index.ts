@@ -237,9 +237,9 @@ export async function createNewInvitation(email: string): Promise<Result<SentInv
     // Send the email to the user.
     const { error } = await mailer.send({
       to: [result.email],
-      subject: `Invitation to Join ${process.env.NEXT_PUBLIC_PROJECT_ORG_NAME}`,
+      subject: "Invitation to Join Jippy as Collaborator",
       html: InvitationEmailHtml({
-        inviteUrl: `/enrollment/?token=${token}`,
+        inviteUrl: `/signup/?token=${token}`,
         expiresAt: DateTime
           .fromJSDate(expiresAt, { zone: "UTC" })
           .setZone("Asia/Manila")

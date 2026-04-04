@@ -200,7 +200,7 @@ export async function createSnapshot(routeId: string, params: AddRouteParameters
         .insert(routeSnapshots)
         .values({
           versionName: params.snapshotName,
-          snapshotState: "wip",
+          snapshotState: params.snapshotState ?? "wip",
           routeId: route.id,
           routeName: params.routeName,
           routeNumber: params.routeNumber,
@@ -364,6 +364,35 @@ export async function copySnapshot(routeId: string, sourceSnapshotId: string): P
     return new Success(result);
   } catch (e) {
     return new Failure(ErrorCodes.Fatal, "Failed to copy snapshot", { routeId, sourceSnapshotId }, e);
+  }
+}
+
+export async function deleteSnapshot(routeId: string, snapshotId: string): Promise<Result<undefined>> {
+  try {
+    const [snapshot] = await db
+      .select({ id: routeSnapshots.id, state: routeSnapshots.snapshotState })
+      .from(routeSnapshots)
+      .where(
+        and(
+          eq(routeSnapshots.id, snapshotId),
+          eq(routeSnapshots.routeId, routeId),
+        ),
+      )
+      .limit(1);
+    if (!snapshot) {
+      return new Failure(ErrorCodes.ResourceNotFound, "No such snapshot found", { routeId, snapshotId });
+    }
+
+    if (snapshot.state === "ready") {
+      return new Failure(ErrorCodes.ValidationFailure, "You cannot delete this snapshot.", { snapshotId });
+    }
+
+    await db.delete(routeSnapshots)
+      .where(eq(routeSnapshots.id, snapshot.id));
+
+    return new Success(undefined);
+  } catch (e) {
+    return new Failure(ErrorCodes.Fatal, "Unable to delete snapshot", { routeId, snapshotId }, e);
   }
 }
 
@@ -589,6 +618,7 @@ export async function updateRouteSnapshot(
     await db.transaction(async (tx) => {
       const routePatch = {
         ...(params.snapshotName !== undefined && { versionName: params.snapshotName }),
+        ...(params.snapshotState !== undefined && { snapshotState: params.snapshotState }),
         ...(params.routeNumber !== undefined && { routeNumber: params.routeNumber }),
         ...(params.routeName !== undefined && { routeName: params.routeName }),
         ...(params.routeColor !== undefined && { routeColor: params.routeColor }),
@@ -653,6 +683,7 @@ export interface PointObject {
 
 export interface AddRouteParameters {
   snapshotName: string;
+  snapshotState?: "wip" | "for_approval" | "ready";
   routeNumber: string;
   routeName: string;
   routeColor: string;
@@ -667,6 +698,7 @@ export interface AddRouteParameters {
 
 export interface UpdateRouteParameters {
   snapshotName?: string;
+  snapshotState?: "wip" | "for_approval" | "ready";
   routeNumber?: string;
   routeName?: string;
   routeColor?: string;
