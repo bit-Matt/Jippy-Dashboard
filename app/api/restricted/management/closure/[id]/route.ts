@@ -5,11 +5,18 @@ import { ResponseComposer, StatusCodes } from "@/lib/http";
 import { tryParseJson } from "@/lib/http/RequestUtilities";
 import { oneOf } from "@/lib/one-of";
 import { utils, validator } from "@/lib/validator";
+import { session, SessionCode } from "@/lib/auth";
 
 export async function POST(
   request: NextRequest,
   { params }: RouteContext<"/api/restricted/management/closure/[id]">,
 ) {
+  const currentSession = await session.verify();
+  if (currentSession.code !== SessionCode.Ok) {
+    return ResponseComposer.composeFromSessionValidation(currentSession)
+      .orchestrate();
+  }
+
   const { id } = await params;
 
   if (!utils.isUuid(id)) {
@@ -75,6 +82,12 @@ export async function PATCH(
   request: NextRequest,
   { params }: RouteContext<"/api/restricted/management/closure/[id]">,
 ) {
+  const currentSession = await session.verify("administrator_user");
+  if (currentSession.code !== SessionCode.Ok) {
+    return ResponseComposer.composeFromSessionValidation(currentSession)
+      .orchestrate();
+  }
+
   const { id } = await params;
 
   // Invalid ID format.
@@ -114,6 +127,12 @@ export async function DELETE(
   request: NextRequest,
   { params }: RouteContext<"/api/restricted/management/closure/[id]">,
 ) {
+  const currentSession = await session.verify("administrator_user");
+  if (currentSession.code !== SessionCode.Ok) {
+    return ResponseComposer.composeFromSessionValidation(currentSession)
+      .orchestrate();
+  }
+
   const { id } = await params;
 
   // Invalid ID format.

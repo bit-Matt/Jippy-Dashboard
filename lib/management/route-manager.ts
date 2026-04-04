@@ -21,6 +21,9 @@ export async function getAllRoutes(): Promise<Result<RouteObject[]>> {
     const result = await db
       .select({
         id: routes.id,
+        activeSnapshotId: routeSnapshots.id,
+        snapshotName: routeSnapshots.versionName,
+        snapshotState: routeSnapshots.snapshotState,
         routeNumber: routeSnapshots.routeNumber,
         routeName: routeSnapshots.routeName,
         routeColor: routeSnapshots.routeColor,
@@ -97,6 +100,9 @@ export async function getRouteById(routeId: string, snapshotId?: string): Promis
     const [result] = await db
       .select({
         id: routes.id,
+        activeSnapshotId: routeSnapshots.id,
+        snapshotName: routeSnapshots.versionName,
+        snapshotState: routeSnapshots.snapshotState,
         routeNumber: routeSnapshots.routeNumber,
         routeName: routeSnapshots.routeName,
         routeColor: routeSnapshots.routeColor,
@@ -239,6 +245,9 @@ export async function createSnapshot(routeId: string, params: AddRouteParameters
 
       return {
         id: snapshot.id,
+        activeSnapshotId: snapshot.id,
+        snapshotName: snapshot.versionName,
+        snapshotState: snapshot.snapshotState,
         routeNumber: snapshot.routeNumber,
         routeName: snapshot.routeName,
         routeColor: snapshot.routeColor,
@@ -298,7 +307,7 @@ export async function copySnapshot(routeId: string, sourceSnapshotId: string): P
       .from(routeSnapshots)
       .where(
         and(
-          eq(routeSnapshots.id, routeId),
+          eq(routeSnapshots.id, sourceSnapshotId),
           eq(routeSnapshots.routeId, routeId),
         ),
       )
@@ -672,6 +681,9 @@ export interface UpdateRouteParameters {
 
 export interface RouteObject {
   id: string;
+  activeSnapshotId: string;
+  snapshotName: string;
+  snapshotState: string;
   routeNumber: string;
   routeName: string;
   routeColor: string;

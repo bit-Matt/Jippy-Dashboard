@@ -137,6 +137,29 @@ const utils = {
     if (!utils.isExisty(value) || typeof value !== "string") return false;
     return uuidValidate(value);
   },
+
+  /**
+   * Determines whether a given string is a syntactically valid email address.
+   *
+   * This is a lightweight format check intended for quick validation (e.g., form input).
+   * It rejects empty values and then verifies the value matches a basic `local@domain.tld` pattern.
+   * It does not guarantee the address exists, can receive mail, or complies with every edge case in
+   * relevant RFCs.
+   *
+   * @param {string} email - The email address candidate to validate.
+   * @returns {boolean} `true` if the input is non-empty and matches the expected email format; otherwise `false`.
+   *
+   * @example
+   * isEmail("person@example.com"); // true
+   * isEmail("not-an-email"); // false
+   */
+  isEmail: (email: string): boolean => {
+    // Fail on empty strings
+    if (!utils.isNonEmpty(email)) return false;
+
+    // Check via regex
+    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+  },
 };
 
 export { utils, validator };

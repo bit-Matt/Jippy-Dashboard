@@ -16,8 +16,11 @@ interface ClosureDraftPoint {
 interface ClosureEditorState {
   mode: ClosureMode;
   activeClosureId: string | null;
+  activeSnapshotId: string | null;
   activeClosureTool: ActiveClosureTool;
   draft: {
+    versionName: string;
+    shape: string;
     closureName: string;
     closureDescription: string;
     points: ClosureDraftPoint[];
@@ -35,6 +38,7 @@ interface ClosureEditorContextValue extends ClosureEditorState {
   finishClosureToolEditing: () => void;
   setClosureName: (name: string) => void;
   setClosureDescription: (description: string) => void;
+  setVersionName: (name: string) => void;
 }
 
 const ClosureEditorContext = createContext<ClosureEditorContextValue | undefined>(undefined);
@@ -43,6 +47,7 @@ export function ClosureEditorProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<ClosureEditorState>({
     mode: "idle",
     activeClosureId: null,
+    activeSnapshotId: null,
     activeClosureTool: "none",
     draft: null,
   });
@@ -51,8 +56,11 @@ export function ClosureEditorProvider({ children }: { children: ReactNode }) {
     setState({
       mode: "creating",
       activeClosureId: null,
+      activeSnapshotId: null,
       activeClosureTool: "draw-polygon",
       draft: {
+        versionName: "v1",
+        shape: "polygon",
         closureName: "",
         closureDescription: "",
         points: [],
@@ -66,8 +74,11 @@ export function ClosureEditorProvider({ children }: { children: ReactNode }) {
     setState({
       mode: "editing",
       activeClosureId: closure.id,
+      activeSnapshotId: closure.activeSnapshotId,
       activeClosureTool: "draw-polygon",
       draft: {
+        versionName: closure.versionName ?? "Draft",
+        shape: closure.shape || "polygon",
         closureName: closure.closureName,
         closureDescription: closure.closureDescription,
         points: sortedPoints.map((point, index) => ({
@@ -83,6 +94,7 @@ export function ClosureEditorProvider({ children }: { children: ReactNode }) {
     setState({
       mode: "idle",
       activeClosureId: null,
+      activeSnapshotId: null,
       activeClosureTool: "none",
       draft: null,
     });
@@ -163,6 +175,20 @@ export function ClosureEditorProvider({ children }: { children: ReactNode }) {
       : prev));
   }, []);
 
+  const setVersionName = useCallback((versionName: string) => {
+    setState((prev) => {
+      if (!prev.draft) return prev;
+
+      return {
+        ...prev,
+        draft: {
+          ...prev.draft,
+          versionName,
+        },
+      };
+    });
+  }, []);
+
   const value = useMemo<ClosureEditorContextValue>(
     () => ({
       ...state,
@@ -176,6 +202,7 @@ export function ClosureEditorProvider({ children }: { children: ReactNode }) {
       finishClosureToolEditing,
       setClosureName,
       setClosureDescription,
+      setVersionName,
     }),
     [
       state,
@@ -188,6 +215,7 @@ export function ClosureEditorProvider({ children }: { children: ReactNode }) {
       finishClosureToolEditing,
       setClosureName,
       setClosureDescription,
+      setVersionName,
     ],
   );
 

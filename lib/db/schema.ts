@@ -12,6 +12,7 @@ export const user = pgTable("user", {
   emailVerified: boolean("email_verified").default(false).notNull(),
   image: text("image"),
   role: roles().default("regular_user").notNull(),
+  banned: boolean("banned").default(false).notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at")
     .defaultNow()
@@ -77,6 +78,21 @@ export const verification = pgTable(
   },
   (table) => [index("verification_identifier_idx").on(table.identifier)],
 );
+
+export const invitations = pgTable("invitations", {
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => uuidv7()),
+  email: text("email").notNull().unique(),
+  validUntil: timestamp("valid_until").notNull(),
+  consumed: boolean("consumed").default(false).notNull(),
+  token: text("token").notNull().unique(),
+  role: roles().notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at")
+    .$onUpdate(() => /* @__PURE__ */ new Date())
+    .notNull(),
+});
 
 export const routes = pgTable(
   "routes",

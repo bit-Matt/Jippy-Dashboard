@@ -3,10 +3,17 @@ import type { NextRequest } from "next/server";
 import { oneOf } from "@/lib/one-of";
 import * as region from "@/lib/management/region-manager";
 import { ResponseComposer, StatusCodes } from "@/lib/http";
+import { session, SessionCode } from "@/lib/auth";
 import { tryParseJson } from "@/lib/http/RequestUtilities";
 import { utils, validator } from "@/lib/validator";
 
 export async function POST(req: NextRequest) {
+  const currentSession = await session.verify();
+  if (currentSession.code !== SessionCode.Ok) {
+    return ResponseComposer.composeFromSessionValidation(currentSession)
+      .orchestrate();
+  }
+
   const data = await tryParseJson<RequestBody>(req);
 
   // Body is unparseable.

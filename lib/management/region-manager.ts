@@ -1,7 +1,7 @@
 import {and, eq, sql} from "drizzle-orm";
 
 import {db} from "@/lib/db";
-import {region, regionSequences, regionSnapshots, regionStations, routeSnapshots} from "@/lib/db/schema";
+import {region, regionSequences, regionSnapshots, regionStations} from "@/lib/db/schema";
 import {ErrorCodes, Failure, Result, Success} from "@/lib/one-of/types";
 import {unwrap} from "@/lib/one-of";
 
@@ -19,6 +19,9 @@ export async function getAllRegions(): Promise<Result<RegionObject[]>> {
     const result = await db
       .select({
         id: region.id,
+        activeSnapshotId: regionSnapshots.id,
+        snapshotName: regionSnapshots.versionName,
+        snapshotState: regionSnapshots.snapshotState,
         regionName: regionSnapshots.name,
         regionColor: regionSnapshots.color,
         regionShape: regionSnapshots.shapeType,
@@ -57,7 +60,7 @@ export async function getAllRegions(): Promise<Result<RegionObject[]>> {
         WHERE ${regionSnapshots.regionId} = "region_snapshots"."id")`,
       })
       .from(region)
-      .leftJoin(routeSnapshots, eq(region.activeSnapshotId, regionSnapshots.id))
+      .leftJoin(regionSnapshots, eq(region.activeSnapshotId, regionSnapshots.id))
       .groupBy(region.id, regionSnapshots.id);
 
     return new Success(result);
@@ -90,6 +93,9 @@ export async function getRegionById(regionId: string, snapshotId?: string): Prom
     const [result] = await db
       .select({
         id: region.id,
+        activeSnapshotId: regionSnapshots.id,
+        snapshotName: regionSnapshots.versionName,
+        snapshotState: regionSnapshots.snapshotState,
         regionName: regionSnapshots.name,
         regionColor: regionSnapshots.color,
         regionShape: regionSnapshots.shapeType,
@@ -128,7 +134,7 @@ export async function getRegionById(regionId: string, snapshotId?: string): Prom
         WHERE ${regionSnapshots.regionId} = "region_snapshots"."id")`,
       })
       .from(region)
-      .leftJoin(routeSnapshots, eq(regionSnapshots.id, snapshotId ? snapshotId : region.activeSnapshotId))
+      .leftJoin(regionSnapshots, eq(regionSnapshots.id, snapshotId ? snapshotId : region.activeSnapshotId))
       .where(eq(region.id, regionId))
       .groupBy(region.id, regionSnapshots.id)
       .limit(1);
@@ -222,6 +228,9 @@ export async function createSnapshot(regionId: string, params: RegionAddParamete
 
       return {
         id: snapshot.id,
+        activeSnapshotId: snapshot.id,
+        snapshotName: snapshot.versionName,
+        snapshotState: snapshot.snapshotState,
         regionName: snapshot.name,
         regionColor: snapshot.color,
         regionShape: snapshot.shapeType,
@@ -358,7 +367,7 @@ export async function switchSnapshot(regionId: string, snapshotId: string): Prom
     const [regionToEdit] = await db
       .select({ id: region.id })
       .from(region)
-      .where(eq(region.id, region))
+      .where(eq(region.id, regionId))
       .limit(1);
     if (!regionToEdit) {
       return new Failure(ErrorCodes.ResourceNotFound, "Region not found.", { regionId });
@@ -593,6 +602,9 @@ export interface StationObject {
 
 export interface RegionObject {
   id: string;
+  activeSnapshotId: string;
+  snapshotName: string;
+  snapshotState: string;
   regionName: string;
   regionColor: string;
   regionShape: string;

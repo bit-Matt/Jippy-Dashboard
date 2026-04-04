@@ -5,11 +5,47 @@ import { ResponseComposer, StatusCodes } from "@/lib/http";
 import { tryParseJson } from "@/lib/http/RequestUtilities";
 import { oneOf } from "@/lib/one-of";
 import { utils, validator } from "@/lib/validator";
+import { session, SessionCode } from "@/lib/auth";
+
+export async function GET(
+  request: NextRequest,
+  { params }: RouteContext<"/api/restricted/management/closure/[id]/[snapshotId]">,
+) {
+  const currentSession = await session.verify();
+  if (currentSession.code !== SessionCode.Ok) {
+    return ResponseComposer.composeFromSessionValidation(currentSession)
+      .orchestrate();
+  }
+
+  const { id, snapshotId } = await params;
+
+  if (!utils.isUuid(id)) {
+    return ResponseComposer.composeError(StatusCodes.Status400BadRequest, [{ message: "Invalid closure ID" }])
+      .orchestrate();
+  }
+
+  if (!utils.isUuid(snapshotId)) {
+    return ResponseComposer.composeError(StatusCodes.Status400BadRequest, [{ message: "Invalid snapshot ID" }])
+      .orchestrate();
+  }
+
+  const result = await closure.getClosureById(id, snapshotId);
+  return oneOf(result).match(
+    s => ResponseComposer.compose(StatusCodes.Status200Ok).setBody(s).orchestrate(),
+    e => ResponseComposer.composeFromFailure(e).orchestrate(),
+  );
+}
 
 export async function PUT(
   request: NextRequest,
   { params }: RouteContext<"/api/restricted/management/closure/[id]/[snapshotId]">,
 ) {
+  const currentSession = await session.verify();
+  if (currentSession.code !== SessionCode.Ok) {
+    return ResponseComposer.composeFromSessionValidation(currentSession)
+      .orchestrate();
+  }
+
   const { id, snapshotId } = await params;
 
   if (!utils.isUuid(id)) {
@@ -33,6 +69,12 @@ export async function PATCH(
   request: NextRequest,
   { params }: RouteContext<"/api/restricted/management/closure/[id]/[snapshotId]">,
 ) {
+  const currentSession = await session.verify();
+  if (currentSession.code !== SessionCode.Ok) {
+    return ResponseComposer.composeFromSessionValidation(currentSession)
+      .orchestrate();
+  }
+
   const { id, snapshotId } = await params;
 
   if (!utils.isUuid(id)) {
@@ -52,7 +94,9 @@ export async function PATCH(
   }
 
   const hasAnyPatchField =
-    data.closureName !== undefined
+    data.versionName !== undefined
+    || data.shape !== undefined
+    || data.closureName !== undefined
     || data.closureDescription !== undefined
     || data.points !== undefined;
   if (!hasAnyPatchField) {
@@ -62,6 +106,8 @@ export async function PATCH(
 
   const validation = await validator.validate<PatchRequestBody>(data, {
     properties: {
+      versionName: { type: "string", formatter: "non-empty-string" },
+      shape: { type: "string", formatter: "non-empty-string" },
       closureName: { type: "string", formatter: "non-empty-string" },
       closureDescription: { type: "string", formatter: "non-empty-string" },
       points: {
@@ -107,6 +153,8 @@ export async function PATCH(
 }
 
 type PatchRequestBody = {
+  versionName?: string;
+  shape?: string;
   closureName?: string;
   closureDescription?: string;
   points?: Array<{

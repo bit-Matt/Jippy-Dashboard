@@ -11,6 +11,9 @@ export interface RegionDraftShape {
 
 export interface RegionSummary {
   id: string;
+  activeSnapshotId: string;
+  snapshotName: string;
+  snapshotState: string;
   regionName: string;
   regionColor: string;
   regionShape: string;
@@ -76,6 +79,8 @@ const getErrorMessage = (error: unknown, fallbackMessage: string) => {
 interface RegionEditorContextType {
   showRegionEditor: boolean;
   editingRegionId: string | null;
+  editingSnapshotId: string | null;
+  snapshotName: string;
   regionName: string;
   regionColor: string;
   regionShape: RegionDraftShape | null;
@@ -89,6 +94,7 @@ interface RegionEditorContextType {
   openRegionEditor: () => void;
   openRegionEditorForEdit: (region: RegionSummary) => void;
   closeRegionEditor: () => void;
+  setSnapshotName: (name: string) => void;
   setRegionName: (name: string) => void;
   setRegionColor: (color: string) => void;
   setRegionShape: (shape: RegionDraftShape | null) => void;
@@ -109,6 +115,8 @@ const RegionEditorContext = createContext<RegionEditorContextType | undefined>(u
 export function RegionEditorProvider({ children }: { children: React.ReactNode }) {
   const [showRegionEditor, setShowRegionEditor] = useState(false);
   const [editingRegionId, setEditingRegionId] = useState<string | null>(null);
+  const [editingSnapshotId, setEditingSnapshotId] = useState<string | null>(null);
+  const [snapshotName, setSnapshotName] = useState("v1");
   const [regionName, setRegionName] = useState("");
   const [regionColor, setRegionColor] = useState("#fff100");
   const [regionShape, setRegionShape] = useState<RegionDraftShape | null>(null);
@@ -126,6 +134,8 @@ export function RegionEditorProvider({ children }: { children: React.ReactNode }
   const openRegionEditor = () => {
     setShowRegionEditor(true);
     setEditingRegionId(null);
+    setEditingSnapshotId(null);
+    setSnapshotName("v1");
     setRegionName("");
     setRegionColor("#fff100");
     setRegionShape(null);
@@ -139,6 +149,8 @@ export function RegionEditorProvider({ children }: { children: React.ReactNode }
   const openRegionEditorForEdit = (region: RegionSummary) => {
     setShowRegionEditor(true);
     setEditingRegionId(region.id);
+    setEditingSnapshotId(region.activeSnapshotId);
+    setSnapshotName(region.snapshotName ?? "Draft");
     setRegionName(region.regionName);
     setRegionColor(region.regionColor);
 
@@ -167,6 +179,8 @@ export function RegionEditorProvider({ children }: { children: React.ReactNode }
   const closeRegionEditor = () => {
     setShowRegionEditor(false);
     setEditingRegionId(null);
+    setEditingSnapshotId(null);
+    setSnapshotName("v1");
     setRegionShape(null);
     setStations([]);
     setActiveStationId(null);
@@ -265,6 +279,7 @@ export function RegionEditorProvider({ children }: { children: React.ReactNode }
     );
 
     const payload = {
+      snapshotName,
       regionName,
       regionColor,
       regionShape: regionShape.type,
@@ -275,10 +290,11 @@ export function RegionEditorProvider({ children }: { children: React.ReactNode }
       stations: stationPayload,
     };
 
-    const endpoint = editingRegionId
-      ? `/api/restricted/management/region/${editingRegionId}`
+    const isSnapshotEdit = !!editingRegionId && !!editingSnapshotId;
+    const endpoint = isSnapshotEdit
+      ? `/api/restricted/management/region/${editingRegionId}/${editingSnapshotId}`
       : "/api/restricted/management/region";
-    const method = editingRegionId ? "PATCH" : "POST";
+    const method = isSnapshotEdit ? "PATCH" : "POST";
 
     try {
       const { error } = await $fetch(endpoint, {
@@ -322,6 +338,8 @@ export function RegionEditorProvider({ children }: { children: React.ReactNode }
   const value: RegionEditorContextType = {
     showRegionEditor,
     editingRegionId,
+    editingSnapshotId,
+    snapshotName,
     regionName,
     regionColor,
     regionShape,
@@ -334,6 +352,7 @@ export function RegionEditorProvider({ children }: { children: React.ReactNode }
     openRegionEditor,
     openRegionEditorForEdit,
     closeRegionEditor,
+    setSnapshotName,
     setRegionName,
     setRegionColor,
     setRegionShape: handleSetRegionShape,

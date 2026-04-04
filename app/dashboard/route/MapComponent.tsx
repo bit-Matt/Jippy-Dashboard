@@ -827,6 +827,10 @@ export interface RouteMapProps {
   focusKey?: string | number | null;
   closures?: Array<{
     id: string;
+    activeSnapshotId: string;
+    versionName: string;
+    snapshotState: string;
+    shape: string;
     closureName: string;
     closureDescription: string;
     points: Array<{

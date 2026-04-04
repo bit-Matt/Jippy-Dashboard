@@ -5,6 +5,7 @@ import { useState, useEffect, useRef, type DragEvent } from "react";
 
 import { Card, CardContent, CardHeader} from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import {
@@ -88,6 +89,7 @@ const getErrorMessage = (error: unknown, fallbackMessage: string) => {
 };
 
 export default function RouteEditor({ editingRoute, onSaved, onClosed }: RouteEditorProps) {
+  const [snapshotName, setSnapshotName] = useState("v1");
   const [routeNumber, setRouteNumber] = useState("");
   const [routeName, setRouteName] = useState("");
   const [routeDetails, setRouteDetails] = useState("");
@@ -115,8 +117,12 @@ export default function RouteEditor({ editingRoute, onSaved, onClosed }: RouteEd
   } = useRouteEditor();
 
   useEffect(() => {
-    if (!editingRoute) return;
+    if (!editingRoute) {
+      setSnapshotName("v1");
+      return;
+    }
 
+    setSnapshotName(editingRoute.snapshotName ?? "Draft");
     setRouteNumber(editingRoute.routeNumber);
     setRouteName(editingRoute.routeName);
     setRouteDetails(editingRoute.routeDetails ?? "");
@@ -194,19 +200,21 @@ export default function RouteEditor({ editingRoute, onSaved, onClosed }: RouteEd
       return;
     }
 
-    const endpoint = editingRoute
-      ? `/api/restricted/management/route/${editingRoute.id}`
+    const isSnapshotEdit = !!editingRoute?.id && !!editingRoute?.activeSnapshotId;
+    const endpoint = isSnapshotEdit
+      ? `/api/restricted/management/route/${editingRoute.id}/${editingRoute.activeSnapshotId}`
       : "/api/restricted/management/route";
 
-    const method = editingRoute ? "PATCH" : "POST";
-    const fallbackMessage = editingRoute
-      ? "Failed to update route."
+    const method = isSnapshotEdit ? "PATCH" : "POST";
+    const fallbackMessage = isSnapshotEdit
+      ? "Failed to update route snapshot."
       : "Failed to create route.";
 
     try {
       const { error } = await $fetch(endpoint, {
         method,
         body: {
+          snapshotName,
           routeNumber: routeNumber,
           routeName: routeName,
           routeColor: selectedColor,
@@ -234,6 +242,7 @@ export default function RouteEditor({ editingRoute, onSaved, onClosed }: RouteEd
 
       setRouteNumber("");
       setRouteName("");
+      setSnapshotName("v1");
       setRouteDetails("");
       clearAllWaypoints();
       stopCreating();
@@ -256,6 +265,7 @@ export default function RouteEditor({ editingRoute, onSaved, onClosed }: RouteEd
 
     setRouteNumber("");
     setRouteName("");
+    setSnapshotName("v1");
     setRouteDetails("");
     clearAllWaypoints();
     stopCreating();
@@ -263,7 +273,7 @@ export default function RouteEditor({ editingRoute, onSaved, onClosed }: RouteEd
   };
 
   const handleDeleteRoute = async () => {
-    if (!editingRoute) return;
+    if (!editingRoute?.id) return;
 
     const shouldDelete = window.confirm("Are you sure you want to delete this route?");
     if (!shouldDelete) return;
@@ -280,6 +290,7 @@ export default function RouteEditor({ editingRoute, onSaved, onClosed }: RouteEd
 
       setRouteNumber("");
       setRouteName("");
+      setSnapshotName("v1");
       setRouteDetails("");
       clearAllWaypoints();
       stopCreating();
@@ -335,7 +346,12 @@ export default function RouteEditor({ editingRoute, onSaved, onClosed }: RouteEd
     <div className="absolute top-2 left-6 z-9999 w-1/4">
       <Card>
         <CardHeader className="flex flex-row items-center justify-between">
-          <h2 className="text-base font-semibold">{editingRoute ? "Edit Route" : "Add Route"}</h2>
+          <div>
+            <h2 className="text-base font-semibold">{editingRoute ? "Edit Route" : "Add Route"}</h2>
+            <Badge className="mt-1" variant={editingRoute ? "default" : "secondary"}>
+              {editingRoute ? "Edit Mode" : "Create Mode"}
+            </Badge>
+          </div>
           <div className="flex items-center gap-2">
             <Button
               size="sm"
@@ -358,6 +374,15 @@ export default function RouteEditor({ editingRoute, onSaved, onClosed }: RouteEd
         <CardContent className="flex max-h-[75vh] flex-col space-y-5 overflow-hidden">
           <div className="space-y-3">
             <div className="flex items-end gap-3">
+              <div className="w-28 shrink-0 space-y-2">
+                <Label htmlFor="route-version">Version</Label>
+                <Input
+                  id="route-version"
+                  placeholder="e.g., v1"
+                  value={snapshotName}
+                  onChange={(e) => setSnapshotName(e.target.value)}
+                />
+              </div>
               <div className="w-20 shrink-0 space-y-2">
                 <Label htmlFor="route-number">Route No.</Label>
                 <Input

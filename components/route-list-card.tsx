@@ -3,6 +3,8 @@
 import { useState } from "react";
 
 import type { AllResponse } from "@/components/app-sidebar";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
 export default function RouteListCard({
@@ -17,6 +19,11 @@ export default function RouteListCard({
   onRouteSelect,
   onRegionSelect,
   onClosureSelect,
+  onManageSnapshots,
+  manageSnapshotsDisabled,
+  selectedItemVersionName,
+  selectedItemSnapshotState,
+  selectedItemModeLabel,
 }: RouteListCardProps) {
   const [viewMode, setViewMode] = useState<"routes" | "regions" | "closures">(
     mode === "regions" ? "regions" : "routes",
@@ -38,6 +45,33 @@ export default function RouteListCard({
           <CardTitle className="text-base">
             {title}
           </CardTitle>
+          {onManageSnapshots ? (
+            <div className="mt-2 rounded-md border p-2">
+              <p className="text-xs text-muted-foreground">
+                {selectedItemVersionName
+                  ? `Selected version: ${selectedItemVersionName}`
+                  : "Select an item to manage snapshots."}
+              </p>
+              {selectedItemSnapshotState ? (
+                <Badge className="mt-1" variant={selectedItemSnapshotState === "ready" ? "default" : "secondary"}>
+                  {selectedItemSnapshotState}
+                </Badge>
+              ) : null}
+              {selectedItemModeLabel ? (
+                <p className="mt-1 text-xs text-muted-foreground">{selectedItemModeLabel}</p>
+              ) : null}
+              <Button
+                type="button"
+                className="mt-2 w-full"
+                size="sm"
+                variant="outline"
+                onClick={onManageSnapshots}
+                disabled={manageSnapshotsDisabled}
+              >
+                Manage Snapshots
+              </Button>
+            </div>
+          ) : null}
           {mode === "all" ? (
             <div className="bg-muted mt-2 inline-flex rounded-md p-0.5">
               <button
@@ -128,6 +162,9 @@ export default function RouteListCard({
                             <span className="block truncate">
                               {route.routeNumber} - {route.routeName}
                             </span>
+                            <span className="text-muted-foreground block truncate text-xs">
+                              {route.snapshotName} ({route.snapshotState})
+                            </span>
                             {routeDistrict ? (
                               <span className="text-muted-foreground block truncate text-xs">
                                 {routeDistrict}
@@ -158,6 +195,9 @@ export default function RouteListCard({
                       />
                       <span className="min-w-0 flex-1">
                         <span className="block truncate">{region.regionName}</span>
+                        <span className="text-muted-foreground block truncate text-xs">
+                          {region.snapshotName} ({region.snapshotState})
+                        </span>
                       </span>
                     </button>
                   ))
@@ -191,6 +231,9 @@ export default function RouteListCard({
                             <span className="block truncate">
                               {closure.closureName?.trim() ? closure.closureName : "(untitled)"}
                             </span>
+                            <span className="text-muted-foreground block truncate text-xs">
+                              {closure.versionName} ({closure.snapshotState})
+                            </span>
                           </span>
                         </button>
                       );
@@ -218,4 +261,9 @@ interface RouteListCardProps {
   onRouteSelect?: (route: AllResponse["routes"][0]) => void;
   onRegionSelect?: (region: AllResponse["regions"][0]) => void;
   onClosureSelect?: (closure: AllResponse["closures"][0]) => void;
+  onManageSnapshots?: () => void;
+  manageSnapshotsDisabled?: boolean;
+  selectedItemVersionName?: string | null;
+  selectedItemSnapshotState?: string | null;
+  selectedItemModeLabel?: string | null;
 }

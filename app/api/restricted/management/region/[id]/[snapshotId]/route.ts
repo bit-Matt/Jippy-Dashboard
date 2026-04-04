@@ -2,14 +2,50 @@ import type { NextRequest } from "next/server";
 
 import * as region from "@/lib/management/region-manager";
 import { ResponseComposer, StatusCodes } from "@/lib/http";
+import { session, SessionCode } from "@/lib/auth";
 import { tryParseJson } from "@/lib/http/RequestUtilities";
 import { oneOf } from "@/lib/one-of";
 import { utils, validator } from "@/lib/validator";
+
+export async function GET(
+  request: NextRequest,
+  { params }: RouteContext<"/api/restricted/management/region/[id]/[snapshotId]">,
+) {
+  const currentSession = await session.verify();
+  if (currentSession.code !== SessionCode.Ok) {
+    return ResponseComposer.composeFromSessionValidation(currentSession)
+      .orchestrate();
+  }
+
+  const { id, snapshotId } = await params;
+
+  if (!utils.isUuid(id)) {
+    return ResponseComposer.composeError(StatusCodes.Status404NotFound, [{ message: "No region found with the given ID." }])
+      .orchestrate();
+  }
+
+  if (!utils.isUuid(snapshotId)) {
+    return ResponseComposer.composeError(StatusCodes.Status404NotFound, [{ message: "No snapshot found with the given ID." }])
+      .orchestrate();
+  }
+
+  const result = await region.getRegionById(id, snapshotId);
+  return oneOf(result).match(
+    s => ResponseComposer.compose(StatusCodes.Status200Ok).setBody(s).orchestrate(),
+    e => ResponseComposer.composeFromFailure(e).orchestrate(),
+  );
+}
 
 export async function PUT(
   request: NextRequest,
   { params }: RouteContext<"/api/restricted/management/region/[id]/[snapshotId]">,
 ) {
+  const currentSession = await session.verify();
+  if (currentSession.code !== SessionCode.Ok) {
+    return ResponseComposer.composeFromSessionValidation(currentSession)
+      .orchestrate();
+  }
+
   const { id, snapshotId } = await params;
 
   if (!utils.isUuid(id)) {
@@ -33,6 +69,12 @@ export async function PATCH(
   request: NextRequest,
   { params }: RouteContext<"/api/restricted/management/region/[id]/[snapshotId]">,
 ) {
+  const currentSession = await session.verify();
+  if (currentSession.code !== SessionCode.Ok) {
+    return ResponseComposer.composeFromSessionValidation(currentSession)
+      .orchestrate();
+  }
+
   const { id, snapshotId } = await params;
 
   if (!utils.isUuid(id)) {
@@ -52,11 +94,13 @@ export async function PATCH(
   }
 
   const hasAnyPatchField =
-    data.regionName !== undefined
+    data.snapshotName !== undefined
+    || data.regionName !== undefined
     || data.regionColor !== undefined
     || data.regionShape !== undefined
     || data.points !== undefined
     || data.stations !== undefined;
+
   if (!hasAnyPatchField) {
     return ResponseComposer.composeError(StatusCodes.Status400BadRequest, [{ message: "No update fields provided." }])
       .orchestrate();

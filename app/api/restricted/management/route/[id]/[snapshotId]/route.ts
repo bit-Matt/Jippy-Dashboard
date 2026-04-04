@@ -7,6 +7,29 @@ import { tryParseJson } from "@/lib/http/RequestUtilities";
 import { oneOf } from "@/lib/one-of";
 import { utils, validator } from "@/lib/validator";
 
+export async function GET(
+  request: NextRequest,
+  { params }: RouteContext<"/api/restricted/management/route/[id]/[snapshotId]">,
+) {
+  const { id, snapshotId } = await params;
+
+  if (!utils.isUuid(id)) {
+    return ResponseComposer.composeError(StatusCodes.Status404NotFound, [{ message: "No route found with the given ID." }])
+      .orchestrate();
+  }
+
+  if (!utils.isUuid(snapshotId)) {
+    return ResponseComposer.composeError(StatusCodes.Status404NotFound, [{ message: "No snapshot found with the given ID." }])
+      .orchestrate();
+  }
+
+  const result = await route.getRouteById(id, snapshotId);
+  return oneOf(result).match(
+    s => ResponseComposer.compose(StatusCodes.Status200Ok).setBody(s).orchestrate(),
+    e => ResponseComposer.composeFromFailure(e).orchestrate(),
+  );
+}
+
 export async function PUT(
   request: NextRequest,
   { params }: RouteContext<"/api/restricted/management/route/[id]/[snapshotId]">,
@@ -53,7 +76,8 @@ export async function PATCH(
   }
 
   const hasAnyPatchField =
-    data.routeNumber !== undefined
+    data.snapshotName !== undefined
+    || data.routeNumber !== undefined
     || data.routeName !== undefined
     || data.routeColor !== undefined
     || data.routeDetails !== undefined
@@ -65,6 +89,7 @@ export async function PATCH(
 
   const validation = await validator.validate<PatchRequestBody>(data, {
     properties: {
+      snapshotName: { type: "string", formatter: "non-empty-string" },
       routeNumber: { type: "string", formatter: "non-empty-string" },
       routeName: { type: "string", formatter: "non-empty-string" },
       routeColor: { type: "string", formatter: "hex-color" },

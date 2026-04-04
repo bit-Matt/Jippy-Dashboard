@@ -4,6 +4,7 @@ import { PenTool, Trash2, X } from "lucide-react";
 import { useState } from "react";
 
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -59,6 +60,7 @@ export default function ClosureRegionEditor({ onSaved }: ClosureRegionEditorProp
   const {
     mode,
     activeClosureId,
+    activeSnapshotId,
     activeClosureTool,
     hasDefinedPolygon,
     draft,
@@ -66,6 +68,7 @@ export default function ClosureRegionEditor({ onSaved }: ClosureRegionEditorProp
     clearPolygon,
     setClosureName,
     setClosureDescription,
+    setVersionName,
     finishClosureToolEditing,
     stopEditing,
   } = useClosureEditor();
@@ -94,8 +97,10 @@ export default function ClosureRegionEditor({ onSaved }: ClosureRegionEditorProp
         const { error } = await $fetch<IApiResponse<ClosureObject>>("/api/restricted/management/closure", {
           method: "POST",
           body: {
+            versionName: draft.versionName,
             closureName: draft.closureName,
             closureDescription: draft.closureDescription,
+            shape: draft.shape || "polygon",
             points: draft.points.map(p => ({
               sequence: p.sequence,
               point: p.point,
@@ -108,12 +113,14 @@ export default function ClosureRegionEditor({ onSaved }: ClosureRegionEditorProp
           alert(getErrorMessage(error, fallbackMessage));
           return;
         }
-      } else if (mode === "editing" && activeClosureId) {
-        const { error } = await $fetch<IApiResponse<ClosureObject>>(`/api/restricted/management/closure/${activeClosureId}`, {
+      } else if (mode === "editing" && activeClosureId && activeSnapshotId) {
+        const { error } = await $fetch<IApiResponse<ClosureObject>>(`/api/restricted/management/closure/${activeClosureId}/${activeSnapshotId}`, {
           method: "PATCH",
           body: {
+            versionName: draft.versionName,
             closureName: draft.closureName,
             closureDescription: draft.closureDescription,
+            shape: draft.shape || "polygon",
             points: draft.points.map(p => ({
               sequence: p.sequence,
               point: p.point,
@@ -164,9 +171,14 @@ export default function ClosureRegionEditor({ onSaved }: ClosureRegionEditorProp
     <div className="absolute top-2 left-6 z-9999 w-1/4">
       <Card>
         <CardHeader className="flex flex-row items-center justify-between">
-          <h2 className="text-base font-semibold">
-            {mode === "creating" ? "Add Road Closure" : "Edit Road Closure"}
-          </h2>
+          <div>
+            <h2 className="text-base font-semibold">
+              {mode === "creating" ? "Add Road Closure" : "Edit Road Closure"}
+            </h2>
+            <Badge className="mt-1" variant={mode === "editing" ? "default" : "secondary"}>
+              {mode === "editing" ? "Edit Mode" : "Create Mode"}
+            </Badge>
+          </div>
           <div className="flex items-center gap-2">
             <Button size="sm" onClick={handleSave} disabled={isSaving || isDeleting || draft.points.length < 3}>
               {isSaving ? "Saving..." : "Save"}
@@ -185,6 +197,15 @@ export default function ClosureRegionEditor({ onSaved }: ClosureRegionEditorProp
         </CardHeader>
         <CardContent className="flex max-h-[75vh] flex-col space-y-5 overflow-hidden">
           <div className="space-y-3">
+            <div className="grid gap-1.5">
+              <Label htmlFor="closure-version-name">Version Name</Label>
+              <Input
+                id="closure-version-name"
+                value={draft.versionName}
+                onChange={e => setVersionName(e.target.value)}
+                placeholder="e.g. v1"
+              />
+            </div>
             <div className="grid gap-1.5">
               <Label htmlFor="closure-name">Closure name</Label>
               <Input

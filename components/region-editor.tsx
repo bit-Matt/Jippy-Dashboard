@@ -4,6 +4,7 @@ import { Check, PenTool, Pencil, Square, Trash2, X } from "lucide-react";
 import { useEffect, useState } from "react";
 
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -38,6 +39,7 @@ export default function RegionEditor() {
 
   const {
     editingRegionId,
+    snapshotName,
     regionName,
     regionColor,
     stations,
@@ -56,6 +58,7 @@ export default function RegionEditor() {
     saveRegionTemplate,
     deleteRegionTemplate,
     closeRegionEditor,
+    setSnapshotName,
   } = useRegionEditor();
 
   useEffect(() => {
@@ -142,9 +145,14 @@ export default function RegionEditor() {
     <div className="absolute top-2 left-6 z-9999 w-1/4">
       <Card>
         <CardHeader className="flex flex-row items-center justify-between">
-          <h2 className="text-base font-semibold">
-            {editingRegionId ? "Edit Region" : "Add Region"}
-          </h2>
+          <div>
+            <h2 className="text-base font-semibold">
+              {editingRegionId ? "Edit Region" : "Add Region"}
+            </h2>
+            <Badge className="mt-1" variant={editingRegionId ? "default" : "secondary"}>
+              {editingRegionId ? "Edit Mode" : "Create Mode"}
+            </Badge>
+          </div>
           <div className="flex items-center gap-2">
             <Button
               size="sm"
@@ -166,6 +174,15 @@ export default function RegionEditor() {
         </CardHeader>
         <CardContent className="flex max-h-[75vh] flex-col space-y-5 overflow-hidden">
           <div className="space-y-3">
+            <div className="space-y-2">
+              <Label htmlFor="region-version-name">Version Name</Label>
+              <Input
+                id="region-version-name"
+                placeholder="e.g., v1"
+                value={snapshotName}
+                onChange={(e) => setSnapshotName(e.target.value)}
+              />
+            </div>
             <div className="space-y-2">
               <Label htmlFor="region-name">Region Name</Label>
               <Input

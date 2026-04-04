@@ -25,3 +25,8 @@ export const $fetch = createFetch({
     },
   },
 });
+
+export interface BetterFetchResponse<TSuccess, TError> {
+    data: TSuccess,
+    error?: TError
+}

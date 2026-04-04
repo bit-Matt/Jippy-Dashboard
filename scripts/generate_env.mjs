@@ -30,10 +30,23 @@ async function main() {
     process.exit(1);
   }
 
+  const resend = await utils.env.ask("Your Resend API Key", "runtime.resend.api.key");
+  if (!resend) {
+    throw new Error("Resend API Key is required.");
+  }
+
+  const resendFromAddress = await utils.env.ask(
+    "Your Resend From Address (Example: jippy <no-reply@jippy.com>)",
+    "runtime.resend.from.address",
+  );
+  if (!resendFromAddress) {
+    throw new Error("Resend From Address is required.");
+  }
+
   // Token generation for authentication
   const token = utils.token.generatePassword(32, "!#%&()*+,/:;<=>?@[]^`{|}");
   utils.env.write("better.auth.secret", token);
-  utils.env.write("better.auth.url", "http://localhost:3000");
+  utils.env.write("better.auth.url", "http://localhost:6769");
 
   // Database configuration
   const databaseUsername = await utils.env.ask(

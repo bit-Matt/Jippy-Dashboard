@@ -61,17 +61,22 @@ export function AppSidebar({
           },
         ],
       },
-    ].filter((item) => {
-      if (mode === "route") {
-        return item.title === "Route Management" || item.title === "Road Closure";
-      }
+    ],
 
-      if (mode === "region") {
-        return item.title === "Region Management";
-      }
-
-      return true;
-    }),
+    administration: [
+      {
+        title: "User Management",
+        url: "#",
+        icon: Map,
+        isActive: true,
+        items: [
+          {
+            title: "User Invitations",
+            url: "/dashboard/invitations",
+          },
+        ],
+      },
+    ],
   };
 
   return (
@@ -95,6 +100,8 @@ export function AppSidebar({
       </SidebarHeader>
       <SidebarContent>
         <NavMain items={data.navMain} />
+        <div className="grow" />
+        <NavMain items={data.administration} />
       </SidebarContent>
       <SidebarFooter>
         <NavUser />
@@ -114,6 +121,9 @@ interface SidebarProps extends ComponentProps<typeof Sidebar> {
 export interface AllResponse {
   routes: Array<{
     id: string
+    activeSnapshotId: string
+    snapshotName: string
+    snapshotState: string
     routeNumber: string
     routeName: string
     routeColor: string
@@ -137,6 +147,9 @@ export interface AllResponse {
   }>;
   regions: Array<{
     id: string;
+    activeSnapshotId: string;
+    snapshotName: string;
+    snapshotState: string;
     regionName: string;
     regionColor: string;
     regionShape: string;
@@ -153,8 +166,12 @@ export interface AllResponse {
   }>;
   closures: Array<{
     id: string;
+    activeSnapshotId: string;
+    versionName: string;
+    snapshotState: string;
     closureName: string;
     closureDescription: string;
+    shape: string;
     points: Array<{
       id: string;
       sequence: number;

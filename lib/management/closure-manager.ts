@@ -10,6 +10,9 @@ export async function getAllClosures(): Promise<Result<ClosureObject[]>> {
     const result = await db
       .select({
         id: roadClosures.id,
+        activeSnapshotId: roadClosureSnapshots.id,
+        versionName: roadClosureSnapshots.versionName,
+        snapshotState: roadClosureSnapshots.snapshotState,
         closureName: roadClosureSnapshots.name,
         closureDescription: roadClosureSnapshots.description,
         shape: roadClosureSnapshots.shape,
@@ -45,6 +48,9 @@ export async function getClosureById(closureId: string, snapshotId?: string): Pr
     const [closure] = await db
       .select({
         id: roadClosures.id,
+        activeSnapshotId: roadClosureSnapshots.id,
+        versionName: roadClosureSnapshots.versionName,
+        snapshotState: roadClosureSnapshots.snapshotState,
         closureName: roadClosureSnapshots.name,
         closureDescription: roadClosureSnapshots.description,
         shape: roadClosureSnapshots.shape,
@@ -121,6 +127,9 @@ export async function createSnapshot(closureId: string, params: ClosureAddParame
 
       return {
         id: snapshot.id,
+        activeSnapshotId: snapshot.id,
+        versionName: snapshot.versionName,
+        snapshotState: snapshot.snapshotState,
         closureName: snapshot.name,
         closureDescription: snapshot.description,
         shape: snapshot.shape,
@@ -410,6 +419,9 @@ export interface PointObject {
 
 export interface ClosureObject {
   id: string;
+  activeSnapshotId: string;
+  versionName: string;
+  snapshotState: string;
   closureName: string;
   closureDescription: string;
   shape: string;
