@@ -18,6 +18,7 @@ export async function POST(req: NextRequest) {
   // Validate the body first.
   const validation = await validator.validate<RequestBody>(data, {
     properties: {
+      snapshotName: { type: "string", formatter: "non-empty-string" },
       regionName: { type: "string", formatter: "non-empty-string" },
       regionShape: { type: "string", formatter: "non-empty-string" },
       regionColor: { type: "string", formatter: "hex-color" },
@@ -66,7 +67,7 @@ export async function POST(req: NextRequest) {
         },
       },
     },
-    requiredProperties: ["regionName", "regionColor", "regionShape", "points", "stations"],
+    requiredProperties: ["snapshotName", "regionName", "regionColor", "regionShape", "points", "stations"],
     allowUnvalidatedProperties: false,
   });
   if (!validation.ok) {
@@ -83,6 +84,7 @@ export async function POST(req: NextRequest) {
 }
 
 type RequestBody = {
+  snapshotName: string;
   regionName: string;
   regionColor: string;
   regionShape: string;

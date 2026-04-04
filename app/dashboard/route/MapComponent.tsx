@@ -14,9 +14,8 @@ import "leaflet/dist/leaflet.css";
 import "@geoman-io/leaflet-geoman-free/dist/leaflet-geoman.css";
 import "leaflet-routing-machine/dist/leaflet-routing-machine.css";
 
-import { useRegionEditor, type ActiveRegionTool } from "@/contexts/RegionEditorContext";
-import { useRouteEditor } from "@/contexts/RouteEditorContext";
 import { useClosureEditor } from "@/contexts/ClosureEditorContext";
+import { useRouteEditor } from "@/contexts/RouteEditorContext";
 
 const FocusRouteView = ({ focusKey, focusedWaypoints }: FocusRouteViewProps) => {
   const map = useMap();
@@ -45,38 +44,7 @@ const FocusRouteView = ({ focusKey, focusedWaypoints }: FocusRouteViewProps) => 
   return null;
 };
 
-const FocusRegionView = ({ regionFocusKey, focusedRegionWaypoints }: FocusRegionViewProps) => {
-  const map = useMap();
-  const lastFocusedRegionKeyRef = useRef<string | number | null>(null);
-
-  useEffect(() => {
-    if (regionFocusKey === null || regionFocusKey === undefined) {
-      lastFocusedRegionKeyRef.current = null;
-      return;
-    }
-
-    if (!map || !focusedRegionWaypoints?.length) return;
-    if (lastFocusedRegionKeyRef.current === regionFocusKey) return;
-
-    if (focusedRegionWaypoints.length === 1) {
-      map.setView(focusedRegionWaypoints[0], 16, { animate: true });
-      lastFocusedRegionKeyRef.current = regionFocusKey;
-      return;
-    }
-
-    const bounds = L.latLngBounds(focusedRegionWaypoints.map(([lat, lng]) => L.latLng(lat, lng)));
-    if (!bounds.isValid()) return;
-
-    map.fitBounds(bounds, { padding: [40, 40], animate: true, maxZoom: 16 });
-    lastFocusedRegionKeyRef.current = regionFocusKey;
-  }, [map, regionFocusKey, focusedRegionWaypoints]);
-
-  return null;
-};
-
 const fixLeafletIcons = () => {
-  // delete (L.Icon.Default.prototype)._getIconUrl;
-
   L.Icon.Default.mergeOptions({
     iconRetinaUrl: "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon-2x.png",
     iconUrl: "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon.png",
@@ -86,30 +54,11 @@ const fixLeafletIcons = () => {
 
 const MapClickHandler = () => {
   const { isCreating, addWaypoint } = useRouteEditor();
-  const {
-    showRegionEditor,
-    regionShape,
-    isAddingStation,
-    addStation,
-  } = useRegionEditor();
 
   useMapEvents({
     click: (e) => {
-      if (isCreating) {
-        addWaypoint(e.latlng.lat, e.latlng.lng);
-        return;
-      }
-
-      if (!showRegionEditor || !regionShape || !isAddingStation) {
-        return;
-      }
-
-      if (!isPointInsideRegion(regionShape, [e.latlng.lat, e.latlng.lng])) {
-        console.warn("Station must be inside the region.");
-        return;
-      }
-
-      addStation(e.latlng.lat, e.latlng.lng);
+      if (!isCreating) return;
+      addWaypoint(e.latlng.lat, e.latlng.lng);
     },
   });
 
@@ -207,11 +156,9 @@ const RoutingMachine = ({ waypoints, color, onRouteCoordinatesChange }: RoutingM
     if (!map || waypoints.length < 2) return;
 
     const serviceUrl = new URL("route", process.env.NEXT_PUBLIC_VALHALLA_URL);
-
-    // Create Valhalla router instance
     const mapzenRouter = L.Routing.mapzen("valhalla-", {
       costing: "auto",
-      serviceUrl: serviceUrl.toString() + "?",
+      serviceUrl: `${serviceUrl.toString()}?`,
     });
 
     const routingControl = L.Routing.control({
@@ -219,7 +166,7 @@ const RoutingMachine = ({ waypoints, color, onRouteCoordinatesChange }: RoutingM
       formatter: new L.Routing.mapzenFormatter(),
       waypoints: waypoints.map(([lat, lng]) => L.latLng(lat, lng)),
       routeWhileDragging: true,
-      // @ts-expect-error - createMarker is required but we don't need it since we're using custom markers
+      // @ts-expect-error createMarker is required but not used with custom markers
       createMarker: () => null,
       lineOptions: {
         styles: [{ color, weight: 4 }],
@@ -235,9 +182,7 @@ const RoutingMachine = ({ waypoints, color, onRouteCoordinatesChange }: RoutingM
     const handleRoutesFound: L.LeafletEventHandlerFn = (event) => {
       if (!onRouteCoordinatesChange) return;
       const routeEvent = event as L.LeafletEvent & {
-        routes?: Array<{
-          coordinates?: L.LatLng[];
-        }>;
+        routes?: Array<{ coordinates?: L.LatLng[] }>;
       };
       const coordinates = routeEvent.routes?.[0]?.coordinates ?? [];
       onRouteCoordinatesChange(coordinates.map((point) => [point.lat, point.lng] as [number, number]));
@@ -255,8 +200,7 @@ const RoutingMachine = ({ waypoints, color, onRouteCoordinatesChange }: RoutingM
 };
 
 const RegionDrawingLayer = ({
-  enabled,
-  activeRegionTool,
+  activeTool,
   regionName,
   regionColor,
   regionShape,
@@ -264,35 +208,24 @@ const RegionDrawingLayer = ({
   onToolComplete,
 }: RegionDrawingLayerProps) => {
   const map = useMap();
-  const regionLayerRef = useRef<L.Polygon | L.Rectangle | null>(null);
+  const regionLayerRef = useRef<L.Polygon | null>(null);
 
   type PmMapApi = {
     setGlobalOptions?: (options: object) => void;
-    enableDraw?: (shape: "Polygon" | "Rectangle", options?: object) => void;
-    disableDraw?: (shape: "Polygon" | "Rectangle") => void;
+    enableDraw?: (shape: "Polygon", options?: object) => void;
+    disableDraw?: (shape: "Polygon") => void;
     disableGlobalDrawMode?: () => void;
     enableGlobalEditMode?: (options?: object) => void;
     disableGlobalEditMode?: () => void;
-    enableGlobalRemovalMode?: () => void;
     disableGlobalRemovalMode?: () => void;
   };
 
-  type PmLayerApi = {
-    disable?: () => void;
-  };
-
-  const normalizeCoordinates = useCallback((layer: L.Polygon | L.Rectangle): Array<[number, number]> => {
-    const latLngs = layer.getLatLngs();
-    const first = latLngs[0];
-
-    if (Array.isArray(first)) {
-      return (first as L.LatLng[]).map((latLng) => [latLng.lat, latLng.lng]);
-    }
-
-    return (latLngs as L.LatLng[]).map((latLng) => [latLng.lat, latLng.lng]);
+  const normalizeCoordinates = useCallback((layer: L.Polygon): Array<[number, number]> => {
+    const latLngs = layer.getLatLngs()[0] as L.LatLng[];
+    return latLngs.map((latLng) => [latLng.lat, latLng.lng]);
   }, []);
 
-  const applyRegionStyles = useCallback((layer: L.Polygon | L.Rectangle) => {
+  const applyRegionStyles = useCallback((layer: L.Polygon) => {
     layer.setStyle({
       color: regionColor,
       fillColor: regionColor,
@@ -301,7 +234,7 @@ const RegionDrawingLayer = ({
     });
   }, [regionColor]);
 
-  const applyRegionLabel = useCallback((layer: L.Polygon | L.Rectangle) => {
+  const applyRegionLabel = useCallback((layer: L.Polygon) => {
     layer.unbindTooltip();
 
     const label = regionName.trim();
@@ -317,37 +250,16 @@ const RegionDrawingLayer = ({
     layer.openTooltip(center);
   }, [regionName]);
 
-  const toShapeFromLayer = useCallback((layer: L.Polygon | L.Rectangle): RegionDraftShape => ({
-    type: layer instanceof L.Rectangle ? "Rectangle" : "Polygon",
-    coordinates: normalizeCoordinates(layer),
-  }), [normalizeCoordinates]);
-
-  const areShapesEqual = useCallback((left: RegionDraftShape, right: RegionDraftShape) => {
-    if (left.type !== right.type) return false;
-    if (left.coordinates.length !== right.coordinates.length) return false;
-
-    return left.coordinates.every(([leftLat, leftLng], index) => {
-      const [rightLat, rightLng] = right.coordinates[index];
-      return Math.abs(leftLat - rightLat) < 1e-7 && Math.abs(leftLng - rightLng) < 1e-7;
-    });
-  }, []);
-
-  const syncShapeFromLayer = useCallback((layer?: L.Polygon | L.Rectangle | null) => {
+  const syncShapeFromLayer = useCallback((layer?: L.Polygon | null) => {
     const targetLayer = layer ?? regionLayerRef.current;
     if (!targetLayer) return;
-    onRegionShapeChange(toShapeFromLayer(targetLayer));
-  }, [onRegionShapeChange, toShapeFromLayer]);
+    onRegionShapeChange({
+      type: "Polygon",
+      coordinates: normalizeCoordinates(targetLayer),
+    });
+  }, [onRegionShapeChange, normalizeCoordinates]);
 
-  const bindLayerMutationEvents = useCallback((layer: L.Polygon | L.Rectangle) => {
-    const shapeLayer = layer as L.Layer;
-    shapeLayer.on("pm:edit", () => syncShapeFromLayer(layer));
-    shapeLayer.on("pm:update", () => syncShapeFromLayer(layer));
-    shapeLayer.on("pm:markerdragend", () => syncShapeFromLayer(layer));
-    shapeLayer.on("pm:vertexadded", () => syncShapeFromLayer(layer));
-    shapeLayer.on("pm:vertexremoved", () => syncShapeFromLayer(layer));
-  }, [syncShapeFromLayer]);
-
-  const unbindLayerMutationEvents = useCallback((layer: L.Polygon | L.Rectangle) => {
+  const unbindLayerMutationEvents = useCallback((layer: L.Polygon) => {
     const shapeLayer = layer as L.Layer;
     shapeLayer.off("pm:edit");
     shapeLayer.off("pm:update");
@@ -356,33 +268,26 @@ const RegionDrawingLayer = ({
     shapeLayer.off("pm:vertexremoved");
   }, []);
 
-  const disableLayerEditing = useCallback(() => {
-    const pmLayer = regionLayerRef.current as (L.Layer & { pm?: PmLayerApi }) | null;
-    pmLayer?.pm?.disable?.();
-  }, []);
-
   const disableAllRegionTools = useCallback(() => {
     const pmMap = map as L.Map & { pm?: PmMapApi };
     if (!pmMap.pm) return;
 
     pmMap.pm.disableDraw?.("Polygon");
-    pmMap.pm.disableDraw?.("Rectangle");
     pmMap.pm.disableGlobalDrawMode?.();
     pmMap.pm.disableGlobalEditMode?.();
     pmMap.pm.disableGlobalRemovalMode?.();
-    disableLayerEditing();
-  }, [map, disableLayerEditing]);
+  }, [map]);
 
   useEffect(() => {
-    if (!enabled || !regionLayerRef.current) return;
+    if (!regionLayerRef.current || !regionShape || regionShape.coordinates.length < 3) {
+      return;
+    }
 
     applyRegionStyles(regionLayerRef.current);
     applyRegionLabel(regionLayerRef.current);
-  }, [enabled, regionColor, regionName, applyRegionLabel, applyRegionStyles]);
+  }, [regionShape, applyRegionLabel, applyRegionStyles]);
 
   useEffect(() => {
-    if (!enabled) return;
-
     if (!regionShape || regionShape.coordinates.length < 3) {
       if (regionLayerRef.current) {
         unbindLayerMutationEvents(regionLayerRef.current);
@@ -393,48 +298,24 @@ const RegionDrawingLayer = ({
     }
 
     if (regionLayerRef.current) {
-      const currentShape = toShapeFromLayer(regionLayerRef.current);
-      if (areShapesEqual(currentShape, regionShape)) {
-        applyRegionStyles(regionLayerRef.current);
-        applyRegionLabel(regionLayerRef.current);
-        return;
-      }
-    }
-
-    if (regionLayerRef.current) {
       unbindLayerMutationEvents(regionLayerRef.current);
       map.removeLayer(regionLayerRef.current);
       regionLayerRef.current = null;
     }
 
-    const latLngs = regionShape.coordinates.map(([lat, lng]) => L.latLng(lat, lng));
-    const layer = regionShape.type === "Rectangle"
-      ? L.rectangle(L.latLngBounds(latLngs))
-      : L.polygon(latLngs);
+    const layer = L.polygon(regionShape.coordinates.map(([lat, lng]) => L.latLng(lat, lng)));
 
     layer.addTo(map);
     regionLayerRef.current = layer;
     applyRegionStyles(layer);
     applyRegionLabel(layer);
-    bindLayerMutationEvents(layer);
-
-  }, [enabled, map, regionShape, applyRegionLabel, applyRegionStyles, areShapesEqual, bindLayerMutationEvents, toShapeFromLayer, unbindLayerMutationEvents]);
+  }, [map, regionShape, applyRegionLabel, applyRegionStyles, unbindLayerMutationEvents]);
 
   useEffect(() => {
     const pmMap = map as L.Map & { pm?: PmMapApi };
-
     if (!pmMap.pm) return;
 
-    const clearRegionLayer = () => {
-      if (!regionLayerRef.current) return;
-
-      unbindLayerMutationEvents(regionLayerRef.current);
-      map.removeLayer(regionLayerRef.current);
-      regionLayerRef.current = null;
-      onRegionShapeChange(null);
-    };
-
-    const handleCreate: (event: { layer: L.Polygon | L.Rectangle; shape?: string }) => void = (event) => {
+    const handleCreate: (event: { layer: L.Polygon }) => void = (event) => {
       if (regionLayerRef.current) {
         unbindLayerMutationEvents(regionLayerRef.current);
         map.removeLayer(regionLayerRef.current);
@@ -445,80 +326,53 @@ const RegionDrawingLayer = ({
 
       applyRegionStyles(layer);
       applyRegionLabel(layer);
-      bindLayerMutationEvents(layer);
 
       onRegionShapeChange({
-        type: event.shape === "Rectangle" ? "Rectangle" : "Polygon",
+        type: "Polygon",
         coordinates: normalizeCoordinates(layer),
       });
 
       onToolComplete();
     };
 
-    const handleEdit = (event: { layer: L.Polygon | L.Rectangle }) => {
-      if (!event.layer || event.layer !== regionLayerRef.current) return;
-      syncShapeFromLayer(event.layer);
-    };
-
-    const handleGeometryMutated = (event: { layer?: L.Polygon | L.Rectangle }) => {
+    const handleGeometryMutated = (event: { layer?: L.Polygon }) => {
       if (event.layer && event.layer !== regionLayerRef.current) return;
       syncShapeFromLayer(event.layer ?? regionLayerRef.current);
     };
 
-    const handleRemove = (event: { layer: L.Polygon | L.Rectangle }) => {
+    const handleRemove = (event: { layer: L.Polygon }) => {
       if (!event.layer || event.layer !== regionLayerRef.current) return;
-
       regionLayerRef.current = null;
       onRegionShapeChange(null);
       onToolComplete();
     };
 
-    if (enabled) {
-      pmMap.pm.setGlobalOptions?.({ continueDrawing: false });
-      map.on("pm:create", handleCreate);
-      map.on("pm:edit", handleEdit);
-      map.on("pm:update", handleGeometryMutated);
-      map.on("pm:markerdragend", handleGeometryMutated);
-      map.on("pm:vertexadded", handleGeometryMutated);
-      map.on("pm:vertexremoved", handleGeometryMutated);
-      map.on("pm:remove", handleRemove);
-    } else {
-      disableAllRegionTools();
-      clearRegionLayer();
-    }
+    pmMap.pm.setGlobalOptions?.({ continueDrawing: false });
+    map.on("pm:create", handleCreate);
+    map.on("pm:update", handleGeometryMutated);
+    map.on("pm:markerdragend", handleGeometryMutated);
+    map.on("pm:vertexadded", handleGeometryMutated);
+    map.on("pm:vertexremoved", handleGeometryMutated);
+    map.on("pm:remove", handleRemove);
 
     return () => {
       map.off("pm:create", handleCreate);
-      map.off("pm:edit", handleEdit);
       map.off("pm:update", handleGeometryMutated);
       map.off("pm:markerdragend", handleGeometryMutated);
       map.off("pm:vertexadded", handleGeometryMutated);
       map.off("pm:vertexremoved", handleGeometryMutated);
       map.off("pm:remove", handleRemove);
-
-      if (regionLayerRef.current) {
-        unbindLayerMutationEvents(regionLayerRef.current);
-      }
       disableAllRegionTools();
-
-      if (!enabled) {
-        clearRegionLayer();
-      }
     };
-  }, [enabled, map, onRegionShapeChange, applyRegionLabel, applyRegionStyles, normalizeCoordinates, syncShapeFromLayer, bindLayerMutationEvents, unbindLayerMutationEvents, disableAllRegionTools, onToolComplete]);
+  }, [map, onRegionShapeChange, applyRegionLabel, applyRegionStyles, normalizeCoordinates, syncShapeFromLayer, unbindLayerMutationEvents, disableAllRegionTools, onToolComplete]);
 
   useEffect(() => {
-    if (!enabled) {
-      disableAllRegionTools();
-      return;
-    }
-
     const pmMap = map as L.Map & { pm?: PmMapApi };
     if (!pmMap.pm) return;
 
     disableAllRegionTools();
 
-    if (activeRegionTool === "draw-polygon") {
+    if (activeTool === "draw-polygon") {
       pmMap.pm.enableDraw?.("Polygon", {
         continueDrawing: false,
         allowSelfIntersection: false,
@@ -526,25 +380,10 @@ const RegionDrawingLayer = ({
       return;
     }
 
-    if (activeRegionTool === "draw-rectangle") {
-      pmMap.pm.enableDraw?.("Rectangle", { continueDrawing: false });
-      return;
-    }
-
-    if (activeRegionTool === "edit-region" && regionLayerRef.current) {
+    if (activeTool === "edit-region" && regionLayerRef.current) {
       pmMap.pm.enableGlobalEditMode?.({ allowSelfIntersection: false });
-      return;
     }
-
-  }, [enabled, map, activeRegionTool, disableAllRegionTools]);
-
-  useEffect(() => () => {
-    if (!regionLayerRef.current) return;
-
-    unbindLayerMutationEvents(regionLayerRef.current);
-    map.removeLayer(regionLayerRef.current);
-    regionLayerRef.current = null;
-  }, [map, unbindLayerMutationEvents]);
+  }, [activeTool, map, disableAllRegionTools]);
 
   return null;
 };
@@ -585,8 +424,6 @@ const createSequenceIcon = (sequence: number, isActive: boolean) => {
 };
 
 const createDirectionArrowIcon = (angle: number, color: string) => {
-  // Arrow SVG points to the right (east) by default, while bearing 0 points north.
-  // Offset by -90deg so cardinal directions line up with map movement.
   const rotation = angle - 90;
 
   return L.divIcon({
@@ -658,37 +495,6 @@ const projectPointByBearing = (
   );
 
   return [lat2 * (180 / Math.PI), lng2 * (180 / Math.PI)];
-};
-
-const isPointInsidePolygon = (polygon: Array<[number, number]>, point: [number, number]) => {
-  const [lat, lng] = point;
-  const x = lng;
-  const y = lat;
-  let inside = false;
-
-  for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
-    const xi = polygon[i][1];
-    const yi = polygon[i][0];
-    const xj = polygon[j][1];
-    const yj = polygon[j][0];
-
-    const intersect = ((yi > y) !== (yj > y))
-      && (x < ((xj - xi) * (y - yi)) / ((yj - yi) || Number.EPSILON) + xi);
-    if (intersect) inside = !inside;
-  }
-
-  return inside;
-};
-
-const isPointInsideRegion = (shape: RegionDraftShape, point: [number, number]) => {
-  if (shape.coordinates.length < 3) return false;
-
-  if (shape.type === "Rectangle") {
-    const bounds = L.latLngBounds(shape.coordinates.map(([lat, lng]) => L.latLng(lat, lng)));
-    return bounds.contains(L.latLng(point[0], point[1]));
-  }
-
-  return isPointInsidePolygon(shape.coordinates, point);
 };
 
 const WaypointMarkers = () => {
@@ -821,106 +627,13 @@ const DirectionArrows = ({ routeCoordinates }: DirectionArrowsProps) => {
   );
 };
 
-const StationMarkers = () => {
-  const {
-    regionShape,
-    stations,
-    activeStationId,
-    updateStation,
-    setActiveStationId,
-  } = useRegionEditor();
-
-  if (!regionShape) return null;
-
-  return (
-    <>
-      {stations.map((station, position) => {
-        const isDraggable = station.id === activeStationId;
-
-        return (
-          <Marker
-            key={station.id}
-            position={[station.lat, station.lng]}
-            icon={createSequenceIcon(position + 1, isDraggable)}
-            draggable={isDraggable}
-            autoPan={true}
-            eventHandlers={{
-              click: () => {
-                setActiveStationId(station.id);
-              },
-              dragend: (event) => {
-                const marker = event.target as L.Marker;
-                const { lat, lng } = marker.getLatLng();
-                const nextPoint: [number, number] = [lat, lng];
-
-                if (!isPointInsideRegion(regionShape, nextPoint)) {
-                  marker.setLatLng(L.latLng(station.lat, station.lng));
-                  console.warn("Station must stay inside the region.");
-                  return;
-                }
-
-                updateStation(station.id, lat, lng);
-              },
-            }}
-          />
-        );
-      })}
-    </>
-  );
-};
-
-const RegionsLayer = ({ regions }: RegionsLayerProps) => {
-  const {
-    showRegionEditor,
-    editingRegionId,
-  } = useRegionEditor();
-
-  const displayRegions = showRegionEditor && editingRegionId
-    ? regions.filter((region) => region.id === editingRegionId)
-    : regions;
-
-  return (
-    <>
-      {displayRegions.map((region) => {
-        const sortedPoints = [...region.points]
-          .sort((a, b) => a.sequence - b.sequence)
-          .map((point) => point.point);
-
-        if (sortedPoints.length < 3) return null;
-
-        return (
-          <Polygon
-            key={region.id}
-            positions={sortedPoints}
-            pathOptions={{
-              color: region.regionColor,
-              fillColor: region.regionColor,
-              fillOpacity: 0.15,
-              weight: 2,
-            }}
-          >
-            <Tooltip
-              permanent
-              direction="center"
-              opacity={1}
-              className="region-name-label"
-            >
-              {region.regionName}
-            </Tooltip>
-          </Polygon>
-        );
-      })}
-    </>
-  );
-};
-
 const ClosureRegionsLayer = ({ closures, onClosureClick }: ClosureRegionsLayerProps) => {
   return (
     <>
-      {closures.map(closure => {
+      {closures.map((closure) => {
         const sortedPoints = [...closure.points]
           .sort((a, b) => a.sequence - b.sequence)
-          .map(p => p.point);
+          .map((point) => point.point);
 
         if (sortedPoints.length < 3) return null;
 
@@ -945,16 +658,11 @@ const ClosureRegionsLayer = ({ closures, onClosureClick }: ClosureRegionsLayerPr
               },
             }}
           >
-            {closure.closureName && (
-              <Tooltip
-                permanent
-                direction="center"
-                opacity={1}
-                className="region-name-label"
-              >
+            {closure.closureName ? (
+              <Tooltip permanent direction="center" opacity={1} className="region-name-label">
                 {closure.closureName}
               </Tooltip>
-            )}
+            ) : null}
           </Polygon>
         );
       })}
@@ -962,18 +670,15 @@ const ClosureRegionsLayer = ({ closures, onClosureClick }: ClosureRegionsLayerPr
   );
 };
 
-export default function MapComponent({
-  regions,
+export default function RouteMapComponent({
   routing,
   focusedWaypoints,
   focusKey,
-  focusedRegionWaypoints,
-  regionFocusKey,
   closures,
   onClosureClick,
   isRoutesLoading = false,
   onRoutesReadyChange,
-}: MapProps) {
+}: RouteMapProps) {
   const { isCreating, waypoints, selectedColor } = useRouteEditor();
   const [activeRouteCoordinates, setActiveRouteCoordinates] = useState<Array<[number, number]>>([]);
   const [preparedRouting, setPreparedRouting] = useState<Array<{ coordinates: Array<[number, number]>; color: string }>>([]);
@@ -989,16 +694,6 @@ export default function MapComponent({
     setPolygonPoints,
     finishClosureToolEditing,
   } = useClosureEditor();
-  const {
-    showRegionEditor,
-    hasDefinedPolygon,
-    activeRegionTool,
-    regionShape,
-    regionName,
-    regionColor,
-    setRegionShape,
-    finishRegionToolEditing,
-  } = useRegionEditor();
 
   useEffect(() => {
     fixLeafletIcons();
@@ -1037,10 +732,7 @@ export default function MapComponent({
     };
   }, [routing, isCreating, onRoutesReadyChange]);
 
-  const shouldRenderDirectionArrows = isCreating
-    && !showRegionEditor
-    && activeRoutingWaypoints.length >= 2;
-
+  const shouldRenderDirectionArrows = isCreating && activeRoutingWaypoints.length >= 2;
   const showRouteLoadingOverlay = isRoutesLoading || isPreparingRoutes;
   const isClosureEditing = closureMode === "creating" || closureMode === "editing";
   const closurePolygon: RegionDraftShape | null = (closureDraft?.points.length ?? 0) >= 3
@@ -1051,7 +743,7 @@ export default function MapComponent({
         .map((point) => point.point),
     }
     : null;
-  const mappedClosureTool: ActiveRegionTool = activeClosureTool === "draw-polygon"
+  const mappedClosureTool: ClosureDrawingTool = activeClosureTool === "draw-polygon"
     ? "draw-polygon"
     : activeClosureTool === "edit-polygon"
       ? "edit-region"
@@ -1064,22 +756,10 @@ export default function MapComponent({
         <VectorTileLayer />
         <MapClickHandler />
         <FocusRouteView focusKey={focusKey} focusedWaypoints={focusedWaypoints} />
-        <FocusRegionView regionFocusKey={regionFocusKey} focusedRegionWaypoints={focusedRegionWaypoints} />
-        {!isCreating && showRegionEditor ? (
+
+        {!isCreating && isClosureEditing ? (
           <RegionDrawingLayer
-            enabled={true}
-            activeRegionTool={activeRegionTool}
-            regionName={regionName}
-            regionColor={regionColor}
-            regionShape={regionShape}
-            onRegionShapeChange={setRegionShape}
-            onToolComplete={finishRegionToolEditing}
-          />
-        ) : null}
-        {!isCreating && !showRegionEditor && isClosureEditing ? (
-          <RegionDrawingLayer
-            enabled={true}
-            activeRegionTool={mappedClosureTool}
+            activeTool={mappedClosureTool}
             regionName={closureDraft?.closureName ?? ""}
             regionColor="#e81123"
             regionShape={closurePolygon}
@@ -1089,20 +769,19 @@ export default function MapComponent({
             onToolComplete={finishClosureToolEditing}
           />
         ) : null}
-        {!isCreating && !showRegionEditor && !isClosureEditing && <RegionsLayer regions={regions ?? []} />}
-        {!isCreating && showRegionEditor && hasDefinedPolygon && <StationMarkers />}
-        {isCreating && <WaypointMarkers />}
-        {shouldRenderDirectionArrows && <DirectionArrows routeCoordinates={activeRouteCoordinates} />}
 
-        {isCreating && activeRoutingWaypoints.length >= 2 && (
+        {isCreating ? <WaypointMarkers /> : null}
+        {shouldRenderDirectionArrows ? <DirectionArrows routeCoordinates={activeRouteCoordinates} /> : null}
+
+        {isCreating && activeRoutingWaypoints.length >= 2 ? (
           <RoutingMachine
             waypoints={activeRoutingWaypoints}
             color={selectedColor}
             onRouteCoordinatesChange={setActiveRouteCoordinates}
           />
-        )}
+        ) : null}
 
-        {!isCreating && !showRegionEditor && !isClosureEditing && !showRouteLoadingOverlay
+        {!isCreating && !isClosureEditing && !showRouteLoadingOverlay
           ? preparedRouting.map((route, index) => (
             <Polyline
               key={`${route.color}-${index}`}
@@ -1112,7 +791,7 @@ export default function MapComponent({
           ))
           : null}
 
-        {!showRegionEditor && !isClosureEditing ? (
+        {!isClosureEditing ? (
           <ClosureRegionsLayer
             closures={closures ?? []}
             onClosureClick={onClosureClick}
@@ -1120,14 +799,14 @@ export default function MapComponent({
         ) : null}
       </MapContainer>
 
-      {showRouteLoadingOverlay && (
+      {showRouteLoadingOverlay ? (
         <div className="absolute inset-0 z-1000 flex items-center justify-center bg-slate-900/40 backdrop-blur-[1px]">
           <div className="flex items-center gap-3 rounded-md bg-background/95 px-4 py-2 shadow-lg">
             <span className="h-5 w-5 animate-spin rounded-full border-2 border-slate-300 border-t-slate-700" />
             <span className="text-sm font-medium">Loading routes...</span>
           </div>
         </div>
-      )}
+      ) : null}
     </div>
   );
 }
@@ -1142,28 +821,10 @@ interface DirectionArrowsProps {
   routeCoordinates: Array<[number, number]>;
 }
 
-export interface MapProps {
-  regions?: Array<{
-    id: string;
-    regionName: string;
-    regionColor: string;
-    regionShape: string;
-    points: Array<{
-      id: string;
-      sequence: number;
-      point: [number, number];
-    }>;
-    stations: Array<{
-      id: string;
-      address: string;
-      point: [number, number];
-    }>;
-  }>;
+export interface RouteMapProps {
   routing?: Array<{ polyline: string; color: string }>;
   focusedWaypoints?: Array<[number, number]>;
   focusKey?: string | number | null;
-  focusedRegionWaypoints?: Array<[number, number]>;
-  regionFocusKey?: string | number | null;
   closures?: Array<{
     id: string;
     closureName: string;
@@ -1174,7 +835,7 @@ export interface MapProps {
       point: [number, number];
     }>;
   }>;
-  onClosureClick?: (closure: NonNullable<MapProps["closures"]>[number]) => void;
+  onClosureClick?: (closure: NonNullable<RouteMapProps["closures"]>[number]) => void;
   isRoutesLoading?: boolean;
   onRoutesReadyChange?: (isReady: boolean) => void;
 }
@@ -1184,14 +845,10 @@ interface FocusRouteViewProps {
   focusKey?: string | number | null;
 }
 
-interface FocusRegionViewProps {
-  focusedRegionWaypoints?: Array<[number, number]>;
-  regionFocusKey?: string | number | null;
-}
+type ClosureDrawingTool = "none" | "draw-polygon" | "edit-region";
 
 interface RegionDrawingLayerProps {
-  enabled: boolean;
-  activeRegionTool: ActiveRegionTool;
+  activeTool: ClosureDrawingTool;
   regionName: string;
   regionColor: string;
   regionShape: RegionDraftShape | null;
@@ -1199,31 +856,12 @@ interface RegionDrawingLayerProps {
   onToolComplete: () => void;
 }
 
-interface RegionsLayerProps {
-  regions: Array<{
-    id: string;
-    regionName: string;
-    regionColor: string;
-    regionShape: string;
-    points: Array<{
-      id: string;
-      sequence: number;
-      point: [number, number];
-    }>;
-    stations: Array<{
-      id: string;
-      address: string;
-      point: [number, number];
-    }>;
-  }>;
-}
-
 interface ClosureRegionsLayerProps {
-  closures: NonNullable<MapProps["closures"]>;
-  onClosureClick?: (closure: NonNullable<MapProps["closures"]>[number]) => void;
+  closures: NonNullable<RouteMapProps["closures"]>;
+  onClosureClick?: (closure: NonNullable<RouteMapProps["closures"]>[number]) => void;
 }
 
 export interface RegionDraftShape {
-  type: "Polygon" | "Rectangle";
+  type: "Polygon";
   coordinates: Array<[number, number]>;
 }

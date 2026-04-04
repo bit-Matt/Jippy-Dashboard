@@ -6,6 +6,7 @@ import type { AllResponse } from "@/components/app-sidebar";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
 export default function RouteListCard({
+  mode = "all",
   routes,
   regions,
   closures,
@@ -17,44 +18,78 @@ export default function RouteListCard({
   onRegionSelect,
   onClosureSelect,
 }: RouteListCardProps) {
-  const [viewMode, setViewMode] = useState<"routes" | "regions" | "closures">("routes");
+  const [viewMode, setViewMode] = useState<"routes" | "regions" | "closures">(
+    mode === "regions" ? "regions" : "routes",
+  );
+  const allowRoutes = mode === "all" || mode === "route-closures";
+  const allowRegions = mode === "all" || mode === "regions";
+  const allowClosures = mode === "all" || mode === "route-closures";
+
+  const title = viewMode === "routes"
+    ? "Routes"
+    : viewMode === "regions"
+      ? "Regions"
+      : "Closures";
 
   return (
     <div className="pointer-events-auto absolute top-2 right-6 z-9998 w-1/8 min-w-64 max-w-72">
       <Card className="h-[40vh] min-h-52 gap-2 py-4">
         <CardHeader className="px-4 pb-1">
           <CardTitle className="text-base">
-            {viewMode === "routes" ? "Routes" : viewMode === "regions" ? "Regions" : "Closures"}
+            {title}
           </CardTitle>
-          <div className="bg-muted mt-2 inline-flex rounded-md p-0.5">
-            <button
-              type="button"
-              onClick={() => setViewMode("routes")}
-              className={`rounded px-2 py-1 text-xs transition-colors ${
-                viewMode === "routes" ? "bg-background text-foreground shadow-xs" : "text-muted-foreground"
-              }`}
-            >
-              Routes
-            </button>
-            <button
-              type="button"
-              onClick={() => setViewMode("regions")}
-              className={`rounded px-2 py-1 text-xs transition-colors ${
-                viewMode === "regions" ? "bg-background text-foreground shadow-xs" : "text-muted-foreground"
-              }`}
-            >
-              Regions
-            </button>
-            <button
-              type="button"
-              onClick={() => setViewMode("closures")}
-              className={`rounded px-2 py-1 text-xs transition-colors ${
-                viewMode === "closures" ? "bg-background text-foreground shadow-xs" : "text-muted-foreground"
-              }`}
-            >
-              Closures
-            </button>
-          </div>
+          {mode === "all" ? (
+            <div className="bg-muted mt-2 inline-flex rounded-md p-0.5">
+              <button
+                type="button"
+                onClick={() => setViewMode("routes")}
+                className={`rounded px-2 py-1 text-xs transition-colors ${
+                  viewMode === "routes" ? "bg-background text-foreground shadow-xs" : "text-muted-foreground"
+                }`}
+              >
+                Routes
+              </button>
+              <button
+                type="button"
+                onClick={() => setViewMode("regions")}
+                className={`rounded px-2 py-1 text-xs transition-colors ${
+                  viewMode === "regions" ? "bg-background text-foreground shadow-xs" : "text-muted-foreground"
+                }`}
+              >
+                Regions
+              </button>
+              <button
+                type="button"
+                onClick={() => setViewMode("closures")}
+                className={`rounded px-2 py-1 text-xs transition-colors ${
+                  viewMode === "closures" ? "bg-background text-foreground shadow-xs" : "text-muted-foreground"
+                }`}
+              >
+                Closures
+              </button>
+            </div>
+          ) : mode === "route-closures" ? (
+            <div className="bg-muted mt-2 inline-flex rounded-md p-0.5">
+              <button
+                type="button"
+                onClick={() => setViewMode("routes")}
+                className={`rounded px-2 py-1 text-xs transition-colors ${
+                  viewMode === "routes" ? "bg-background text-foreground shadow-xs" : "text-muted-foreground"
+                }`}
+              >
+                Routes
+              </button>
+              <button
+                type="button"
+                onClick={() => setViewMode("closures")}
+                className={`rounded px-2 py-1 text-xs transition-colors ${
+                  viewMode === "closures" ? "bg-background text-foreground shadow-xs" : "text-muted-foreground"
+                }`}
+              >
+                Closures
+              </button>
+            </div>
+          ) : null}
         </CardHeader>
         <CardContent className="flex min-h-0 flex-1 flex-col px-4">
           <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto pr-1">
@@ -63,7 +98,7 @@ export default function RouteListCard({
                 <span className="h-6 w-6 animate-spin rounded-full border-2 border-slate-300 border-t-slate-700" />
                 <p className="text-muted-foreground text-sm">Loading routes...</p>
               </div>
-            ) : viewMode === "routes"
+            ) : allowRoutes && viewMode === "routes"
               ? (
                 routes.length === 0 ? (
                   <p className="text-muted-foreground text-sm text-center">No routes available</p>
@@ -79,7 +114,7 @@ export default function RouteListCard({
                         <button
                           key={route.id}
                           type="button"
-                          onClick={() => onRouteSelect(route)}
+                          onClick={() => onRouteSelect?.(route)}
                           className={`hover:bg-accent hover:text-accent-foreground flex w-full items-start gap-2 rounded-md border px-3 py-2 text-left text-sm transition-colors ${
                             selectedRouteId === route.id ? "border-primary bg-accent" : "border-border"
                           }`}
@@ -103,7 +138,7 @@ export default function RouteListCard({
                       );
                     })
                 )
-              ) : viewMode === "regions" ? (
+              ) : allowRegions && viewMode === "regions" ? (
                 regions.length === 0 ? (
                   <p className="text-muted-foreground text-sm text-center">No regions available</p>
                 ) : (
@@ -111,7 +146,7 @@ export default function RouteListCard({
                     <button
                       key={region.id}
                       type="button"
-                      onClick={() => onRegionSelect(region)}
+                      onClick={() => onRegionSelect?.(region)}
                       className={`hover:bg-accent hover:text-accent-foreground flex w-full items-start gap-2 rounded-md border px-3 py-2 text-left text-sm transition-colors ${
                         selectedRegionId === region.id ? "border-primary bg-accent" : "border-border"
                       }`}
@@ -127,7 +162,7 @@ export default function RouteListCard({
                     </button>
                   ))
                 )
-              ) : (
+              ) : allowClosures ? (
                 closures.length === 0 ? (
                   <p className="text-muted-foreground text-sm text-center">No closures available</p>
                 ) : (
@@ -142,7 +177,7 @@ export default function RouteListCard({
                         <button
                           key={closure.id}
                           type="button"
-                          onClick={() => onClosureSelect(closure)}
+                          onClick={() => onClosureSelect?.(closure)}
                           className={`hover:bg-accent hover:text-accent-foreground flex w-full items-start gap-2 rounded-md border px-3 py-2 text-left text-sm transition-colors ${
                             isSelected ? "border-primary bg-accent" : "border-border"
                           }`}
@@ -161,6 +196,8 @@ export default function RouteListCard({
                       );
                     })
                 )
+              ) : (
+                <p className="text-muted-foreground text-sm text-center">No items available</p>
               )}
           </div>
         </CardContent>
@@ -170,6 +207,7 @@ export default function RouteListCard({
 }
 
 interface RouteListCardProps {
+  mode?: "all" | "route-closures" | "regions";
   routes: AllResponse["routes"];
   regions: AllResponse["regions"];
   closures: AllResponse["closures"];
@@ -177,7 +215,7 @@ interface RouteListCardProps {
   selectedRouteId: string | null;
   selectedRegionId: string | null;
   selectedClosureId: string | null;
-  onRouteSelect: (route: AllResponse["routes"][0]) => void;
-  onRegionSelect: (region: AllResponse["regions"][0]) => void;
-  onClosureSelect: (closure: AllResponse["closures"][0]) => void;
+  onRouteSelect?: (route: AllResponse["routes"][0]) => void;
+  onRegionSelect?: (region: AllResponse["regions"][0]) => void;
+  onClosureSelect?: (closure: AllResponse["closures"][0]) => void;
 }

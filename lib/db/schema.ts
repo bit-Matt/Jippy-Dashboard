@@ -1,3 +1,4 @@
+import { ro } from "date-fns/locale";
 import { relations } from "drizzle-orm";
 import { pgEnum, pgTable, text, timestamp, boolean, index, integer, geometry } from "drizzle-orm/pg-core";
 import { v7 as uuidv7 } from "uuid";
@@ -83,20 +84,64 @@ export const routes = pgTable(
     id: text("id")
       .primaryKey()
       .$default(() => uuidv7()),
-    routeNumber: text("route_number").notNull(),
-    routeName: text("route_name").notNull(),
-    routeColor: text("route_color").notNull().default("#FFF000"),
-    routeDetails: text("route_details").default("").notNull(),
-    createdAt: timestamp("created_at").defaultNow().notNull(),
+
+    activeSnapshotId: text("active_snapshot_id")
+      .notNull(),
+
+    // Meta
+    createdAt: timestamp("created_at")
+      .defaultNow()
+      .notNull(),
     updatedAt: timestamp("updated_at")
       .defaultNow()
       .$onUpdate(() => new Date())
       .notNull(),
-    polylineGoingTo: text("polyline_going_to")
+  },
+);
+
+export const snapshotState = pgEnum("snapshot_state", ["ready", "wip", "for_approval"]);
+
+export const routeSnapshots = pgTable(
+  "route_snapshots",
+  {
+    id: text("id")
+      .primaryKey()
+      .$default(() => uuidv7()),
+
+    snapshotState: snapshotState()
+      .notNull()
+      .default("wip"),
+
+    // Snapshot for
+    routeId: text("route_id")
+      .notNull()
+      .references(() => routes.id, { onDelete: "cascade" }),
+
+    // Versioning
+    versionName: text("version_name")
+      .notNull(),
+
+    // Route details
+    routeNumber: text("route_number")
+      .notNull(),
+    routeName: text("route_name")
+      .notNull(),
+    routeColor: text("route_color")
+      .notNull()
+      .default("#FFF000"),
+    routeDetails: text("route_details")
       .default("")
       .notNull(),
+    polylineGoingTo: text("polyline_going_to")
+      .notNull(),
     polylineGoingBack: text("polyline_going_back")
-      .default("")
+      .notNull(),
+
+    // Metadata
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at")
+      .defaultNow()
+      .$onUpdate(() => new Date())
       .notNull(),
   },
 );
@@ -109,9 +154,13 @@ export const routeSequences = pgTable(
     id: text("id")
       .primaryKey()
       .$default(() => uuidv7()),
-    routeId: text("route_id")
+
+    // Sequence where this route belongs to
+    routeSnapshotId: text("route_snapshot_id")
       .notNull()
-      .references(() => routes.id, { onDelete: "cascade" }),
+      .references(() => routeSnapshots.id, { onDelete: "cascade" }),
+
+    // Sequence info
     sequenceType: sequenceType("sequence_type")
       .default("going_to")
       .notNull(),
@@ -128,7 +177,7 @@ export const routeSequences = pgTable(
   },
   (t) => [
     index("spatial_index").using("gist", t.point),
-    index("route_seq_idx").on(t.routeId, t.sequenceNumber),
+    index("route_seq_idx").on(t.routeSnapshotId, t.sequenceNumber),
   ],
 );
 
@@ -138,6 +187,36 @@ export const region = pgTable(
     id: text("id")
       .primaryKey()
       .$default(() => uuidv7()),
+
+    activeSnapshotId: text("active_snapshot_id").notNull(),
+
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at")
+      .defaultNow()
+      .$onUpdate(() => new Date())
+      .notNull(),
+  },
+);
+
+export const regionSnapshots = pgTable(
+  "region_snapshots",
+  {
+    id: text("id")
+      .primaryKey()
+      .$default(() => uuidv7()),
+
+    snapshotState: snapshotState()
+      .notNull()
+      .default("wip"),
+
+    versionName: text("version_name").notNull(),
+
+    // Snapshot for
+    regionId: text("region_id")
+      .notNull()
+      .references(() => region.id, { onDelete: "cascade" }),
+
+    // Region info
     name: text("region_name")
       .notNull(),
     color: text("color")
@@ -145,6 +224,8 @@ export const region = pgTable(
       .notNull(),
     shapeType: text("shape")
       .notNull(),
+
+    // Metadata
     createdAt: timestamp("created_at").defaultNow().notNull(),
     updatedAt: timestamp("updated_at")
       .defaultNow()
@@ -159,9 +240,11 @@ export const regionSequences = pgTable(
     id: text("id")
       .primaryKey()
       .$default(() => uuidv7()),
-    regionId: text("region_id")
+    regionSnapshotId: text("region_snapshot_id")
       .notNull()
       .references(() => region.id, { onDelete: "cascade" }),
+
+    // Region data
     sequenceNumber: integer("sequence_number").notNull(),
     point: geometry("point", { type: "point", mode: "tuple", srid: 4326 }).notNull(),
     createdAt: timestamp("created_at").defaultNow().notNull(),
@@ -172,7 +255,7 @@ export const regionSequences = pgTable(
   },
   (t) => [
     index("spatial_index_region").using("gist", t.point),
-    index("region_seq_idx").on(t.regionId, t.sequenceNumber),
+    index("region_seq_idx").on(t.regionSnapshotId, t.sequenceNumber),
   ],
 );
 
@@ -182,13 +265,17 @@ export const regionStations = pgTable(
     id: text("id")
       .primaryKey()
       .$default(() => uuidv7()),
-    regionId: text("region_id")
+    regionSnapshotId: text("region_snapshot_id")
       .notNull()
       .references(() => region.id, { onDelete: "cascade" }),
+
+    // Station data
     address: text("address")
       .notNull()
       .default("Unknown"),
     point: geometry("point", { type: "point", mode: "tuple", srid: 4326 }).notNull(),
+
+    // Metadata
     createdAt: timestamp("created_at").defaultNow().notNull(),
     updatedAt: timestamp("updated_at")
       .defaultNow()
@@ -197,7 +284,7 @@ export const regionStations = pgTable(
   },
   (t) => [
     index("spatial_index_region_station").using("gist", t.point),
-    index("region_station_ref_idx").on(t.regionId),
+    index("region_station_ref_idx").on(t.regionSnapshotId),
   ],
 );
 
@@ -205,8 +292,10 @@ export const roadClosures = pgTable("road_closure", {
   id: text("id")
     .primaryKey()
     .$default(() => uuidv7()),
-  name: text("name").notNull(),
-  description: text("description").notNull(),
+
+  activeSnapshotId: text("active_snapshot_id").notNull(),
+
+  // Metadata
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at")
     .defaultNow()
@@ -214,15 +303,51 @@ export const roadClosures = pgTable("road_closure", {
     .notNull(),
 });
 
-export const roadClosureRegions = pgTable("road_closure_regions", {
+export const roadClosureSnapshots = pgTable(
+  "road_closure_snapshot",
+  {
+    id: text("id")
+      .primaryKey()
+      .$default(() => uuidv7()),
+
+    snapshotState: snapshotState()
+      .notNull()
+      .default("wip"),
+
+    // Snapshot
+    roadClosureId: text("road_closure_id")
+      .notNull()
+      .references(() => roadClosures.id, { onDelete: "cascade" }),
+
+    versionName: text("version_name").notNull(),
+
+    // Closure details
+    name: text("name").notNull(),
+    description: text("description").notNull(),
+    shape: text("shape").notNull(),
+
+    // Metadata
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at")
+      .defaultNow()
+      .$onUpdate(() => new Date())
+      .notNull(),
+  },
+);
+
+export const roadClosurePoints = pgTable("road_closure_points", {
   id: text("id")
     .primaryKey()
     .$default(() => uuidv7()),
-  roadClosureId: text("road_closure_id")
+  roadClosureSnapshotId: text("road_closure_snapshot_id")
     .notNull()
-    .references(() => roadClosures.id, { onDelete: "cascade" }),
+    .references(() => roadClosureSnapshots.id, { onDelete: "cascade" }),
+
+  // Data
   sequenceNumber: integer("sequence_number").notNull(),
   point: geometry("point", { type: "point", mode: "tuple", srid: 4326 }).notNull(),
+
+  // Metadata
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at")
     .defaultNow()
@@ -230,8 +355,12 @@ export const roadClosureRegions = pgTable("road_closure_regions", {
     .notNull(),
 }, (t) => [
   index("spatial_index_road_closure_region").using("gist", t.point),
-  index("road_closure_region_ref_idx").on(t.roadClosureId),
+  index("road_closure_region_ref_idx").on(t.roadClosureSnapshotId),
 ]);
+
+// ============================================================================
+// BETTER AUTH RELATIONS
+// ============================================================================
 
 export const userRelations = relations(user, ({ many }) => ({
   sessions: many(session),
@@ -252,30 +381,55 @@ export const accountRelations = relations(account, ({ one }) => ({
   }),
 }));
 
-export const routeRelations = relations(routeSequences, ({ one }) => ({
+// ============================================================================
+// JIPPY
+// ============================================================================
+
+export const routeSnapshotRelations = relations(routeSnapshots, ({ one }) => ({
   route: one(routes, {
-    fields: [routeSequences.routeId],
+    fields: [routeSnapshots.routeId],
     references: [routes.id],
   }),
 }));
 
-export const regionRelations = relations(regionSequences, ({ one }) => ({
+export const routeSequencesRelations = relations(routeSequences, ({ one }) => ({
+  route: one(routeSnapshots, {
+    fields: [routeSequences.routeSnapshotId],
+    references: [routeSnapshots.id],
+  }),
+}));
+
+export const regionSnapshotRelations = relations(regionSnapshots, ({ one }) => ({
   region: one(region, {
-    fields: [regionSequences.regionId],
+    fields: [regionSnapshots.regionId],
     references: [region.id],
+  }),
+}));
+
+export const regionSequencesRelations = relations(regionSequences, ({ one }) => ({
+  region: one(regionSnapshots, {
+    fields: [regionSequences.regionSnapshotId],
+    references: [regionSnapshots.id],
   }),
 }));
 
 export const regionStationRelations = relations(regionStations, ({ one }) => ({
-  region: one(region, {
-    fields: [regionStations.regionId],
-    references: [region.id],
+  region: one(regionSnapshots, {
+    fields: [regionStations.regionSnapshotId],
+    references: [regionSnapshots.id],
   }),
 }));
 
-export const roadClosureRegionsRelations = relations(roadClosureRegions, ({ one }) => ({
+export const roadClosureSnapshotRelations = relations(roadClosureSnapshots, ({ one }) => ({
   roadClosures: one(roadClosures, {
-    fields: [roadClosureRegions.roadClosureId],
+    fields: [roadClosureSnapshots.roadClosureId],
     references: [roadClosures.id],
+  }),
+}));
+
+export const roadClosureRegionsRelations = relations(roadClosurePoints, ({ one }) => ({
+  roadClosures: one(roadClosureSnapshots, {
+    fields: [roadClosurePoints.roadClosureSnapshotId],
+    references: [roadClosureSnapshots.id],
   }),
 }));

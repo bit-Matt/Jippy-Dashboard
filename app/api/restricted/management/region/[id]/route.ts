@@ -6,36 +6,27 @@ import { tryParseJson } from "@/lib/http/RequestUtilities";
 import { oneOf } from "@/lib/one-of";
 import { utils, validator } from "@/lib/validator";
 
-export async function PATCH(
+export async function POST(
   request: NextRequest,
   { params }: RouteContext<"/api/restricted/management/region/[id]">,
 ) {
   const { id } = await params;
 
   if (!utils.isUuid(id)) {
-    return ResponseComposer.composeError(StatusCodes.Status400BadRequest, [{ message: "Invalid route ID" }])
+    return ResponseComposer.composeError(StatusCodes.Status404NotFound, [{ message: "Invalid closure ID" }])
       .orchestrate();
   }
 
-  const data = await tryParseJson<PatchRequestBody>(request);
+  const data = await tryParseJson<RequestBody>(request);
   if (!data) {
-    return ResponseComposer.composeError(StatusCodes.Status400BadRequest, [{ message: "Invalid payload." }])
+    return ResponseComposer.composeError(StatusCodes.Status400BadRequest, [{ message: "Invalid Payload." }])
       .orchestrate();
   }
 
-  const hasAnyPatchField =
-    data.regionName !== undefined
-    || data.regionColor !== undefined
-    || data.regionShape !== undefined
-    || data.points !== undefined
-    || data.stations !== undefined;
-  if (!hasAnyPatchField) {
-    return ResponseComposer.composeError(StatusCodes.Status400BadRequest, [{ message: "No update fields provided." }])
-      .orchestrate();
-  }
-
-  const validation = await validator.validate<PatchRequestBody>(data, {
+  // Validate the body first.
+  const validation = await validator.validate<RequestBody>(data, {
     properties: {
+      snapshotName: { type: "string", formatter: "non-empty-string" },
       regionName: { type: "string", formatter: "non-empty-string" },
       regionShape: { type: "string", formatter: "non-empty-string" },
       regionColor: { type: "string", formatter: "hex-color" },
@@ -47,7 +38,7 @@ export async function PATCH(
           }
 
           if (values.length < 2) {
-            return { ok: false, error: "At least 2 points are required." };
+            return { ok: false, error: "Invalid points." };
           }
 
           for (const point of values) {
@@ -84,19 +75,57 @@ export async function PATCH(
         },
       },
     },
-    requiredProperties: [],
+    requiredProperties: ["snapshotName", "regionName", "regionColor", "regionShape", "points", "stations"],
     allowUnvalidatedProperties: false,
   });
   if (!validation.ok) {
-    return ResponseComposer.composeError(StatusCodes.Status400BadRequest, [validation.errors!])
+    return ResponseComposer
+      .composeError(StatusCodes.Status400BadRequest, validation.errors!)
       .orchestrate();
   }
 
-  const result = await region.updateRegion(id, data);
+  const result = await region.createSnapshot(id, data);
   return oneOf(result).match(
-    success => ResponseComposer.compose(StatusCodes.Status200Ok)
-      .setBody(success)
-      .orchestrate(),
+    s => ResponseComposer.compose(StatusCodes.Status201Created).setBody(s).orchestrate(),
+    e => ResponseComposer.composeFromFailure(e).orchestrate(),
+  );
+}
+
+export async function PATCH(
+  request: NextRequest,
+  { params }: RouteContext<"/api/restricted/management/region/[id]">,
+) {
+  const { id } = await params;
+
+  // Invalid ID format.
+  if (!utils.isUuid(id)) {
+    return ResponseComposer.composeError(StatusCodes.Status404NotFound, [{ message: "No region found with given ID." }])
+      .orchestrate();
+  }
+
+  const data = await tryParseJson<SwitchPatchBody>(request);
+  if (!data) {
+    return ResponseComposer.composeError(StatusCodes.Status400BadRequest, [{ message: "Invalid Payload." }])
+      .orchestrate();
+  }
+
+  // Validate the body first.
+  const validation = await validator.validate<SwitchPatchBody>(data, {
+    properties: {
+      snapshotId: { type: "string", formatter: "uuid" },
+    },
+    requiredProperties: ["snapshotId"],
+    allowUnvalidatedProperties: false,
+  });
+  if (!validation.ok) {
+    return ResponseComposer
+      .composeError(StatusCodes.Status400BadRequest, validation.errors!)
+      .orchestrate();
+  }
+
+  const result = await region.switchSnapshot(id, data.snapshotId);
+  return oneOf(result).match(
+    s => ResponseComposer.compose(StatusCodes.Status200Ok).setBody(s).orchestrate(),
     e => ResponseComposer.composeFromFailure(e).orchestrate(),
   );
 }
@@ -122,15 +151,20 @@ export async function DELETE(
   );
 }
 
-type PatchRequestBody = {
-  regionName?: string;
-  regionColor?: string;
-  regionShape?: string;
-  points?: Array<{
+type SwitchPatchBody = {
+  snapshotId: string;
+}
+
+type RequestBody = {
+  snapshotName: string;
+  regionName: string;
+  regionColor: string;
+  regionShape: string;
+  points: Array<{
     sequence: number;
     point: [number, number];
   }>;
-  stations?: Array<{
+  stations: Array<{
     address: string;
     point: [number, number];
   }>;

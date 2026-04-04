@@ -41,6 +41,7 @@ export async function POST(req: NextRequest) {
   // Validate the body first.
   const validation = await validator.validate<RequestBody>(data, {
     properties: {
+      snapshotName: { type: "string", formatter: "non-empty-string" },
       routeNumber: { type: "string", formatter: "non-empty-string" },
       routeName: { type: "string", formatter: "non-empty-string" },
       routeColor: { type: "string", formatter: "hex-color" },
@@ -100,6 +101,7 @@ export async function POST(req: NextRequest) {
 }
 
 type RequestBody = {
+  snapshotName: string;
   routeNumber: string;
   routeName: string;
   routeColor: string;

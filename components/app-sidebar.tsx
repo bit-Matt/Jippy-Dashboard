@@ -17,50 +17,61 @@ export function AppSidebar({
   onAddRouteClick,
   onAddRegionClick,
   onAddClosureRegionClick,
+  mode = "all",
   ...props
 }: SidebarProps) {
   const data = {
     navMain: [
       {
         title: "Route Management",
-        url: "#",
+        url: "/dashboard/route",
         icon: Map,
         isActive: true,
         items: [
           {
             title: "Add a new Route",
-            url: "#",
+            url: "/dashboard/route",
             onClick: onAddRouteClick,
           },
         ],
       },
       {
         title: "Region Management",
-        url: "#",
+        url: "/dashboard/region",
         isActive: true,
         icon: SquareDashed,
         items: [
           {
             title: "Add a new Region",
-            url: "#",
+            url: "/dashboard/region",
             onClick: onAddRegionClick,
           },
         ],
       },
       {
         title: "Road Closure",
-        url: "#",
+        url: "/dashboard/route",
         isActive: true,
         icon: TriangleAlert,
         items: [
           {
             title: "Add closure",
-            url: "#",
+            url: "/dashboard/route",
             onClick: onAddClosureRegionClick,
           },
         ],
       },
-    ],
+    ].filter((item) => {
+      if (mode === "route") {
+        return item.title === "Route Management" || item.title === "Road Closure";
+      }
+
+      if (mode === "region") {
+        return item.title === "Region Management";
+      }
+
+      return true;
+    }),
   };
 
   return (
@@ -93,6 +104,7 @@ export function AppSidebar({
 }
 
 interface SidebarProps extends ComponentProps<typeof Sidebar> {
+  mode?: "all" | "route" | "region"
   onAddRouteClick?: () => void
   onAddRegionClick?: () => void
   onSimulationClick?: () => void

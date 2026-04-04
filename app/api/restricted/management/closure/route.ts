@@ -44,8 +44,10 @@ export async function POST(req: NextRequest) {
           return { ok: true };
         },
       },
+      shape: { type: "string", formatter: "non-empty-string" },
+      versionName: { type: "string", formatter: "non-empty-string" },
     },
-    requiredProperties: ["closureName", "closureDescription", "points"],
+    requiredProperties: ["closureName", "closureDescription", "points", "shape", "versionName"],
     allowUnvalidatedProperties: false,
   });
   if (!validation.ok) {
@@ -68,4 +70,6 @@ type RequestBody = {
     sequence: number;
     point: [number, number];
   }>;
+  shape: string;
+  versionName: string;
 }

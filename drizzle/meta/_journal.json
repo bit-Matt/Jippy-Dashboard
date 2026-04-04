@@ -120,6 +120,34 @@
       "when": 1773807662379,
       "tag": "0016_curved_onslaught",
       "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1774614210434,
+      "tag": "0017_petite_meggan",
+      "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1774620603996,
+      "tag": "0018_parallel_sleepwalker",
+      "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1774620661286,
+      "tag": "0019_living_mathemanic",
+      "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1775292005899,
+      "tag": "0020_dashing_emma_frost",
+      "breakpoints": true
     }
   ]
 }
