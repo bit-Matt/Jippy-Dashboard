@@ -30,6 +30,119 @@ import type { IApiResponse } from "@/lib/http/ResponseComposer";
 
 import RouteMapComponent from "./MapComponent";
 
+const POLYLINE6_PRECISION = 1_000_000;
+
+const decodePolyline6 = (encoded: string): Array<[number, number]> => {
+  if (!encoded) return [];
+
+  const coordinates: Array<[number, number]> = [];
+  let index = 0;
+  let lat = 0;
+  let lng = 0;
+
+  while (index < encoded.length) {
+    let result = 0;
+    let shift = 0;
+    let byte: number;
+
+    do {
+      byte = encoded.charCodeAt(index++) - 63;
+      result |= (byte & 0x1f) << shift;
+      shift += 5;
+    } while (byte >= 0x20);
+
+    lat += (result & 1) ? ~(result >> 1) : (result >> 1);
+
+    result = 0;
+    shift = 0;
+
+    do {
+      byte = encoded.charCodeAt(index++) - 63;
+      result |= (byte & 0x1f) << shift;
+      shift += 5;
+    } while (byte >= 0x20);
+
+    lng += (result & 1) ? ~(result >> 1) : (result >> 1);
+    coordinates.push([lat / POLYLINE6_PRECISION, lng / POLYLINE6_PRECISION]);
+  }
+
+  return coordinates;
+};
+
+const isPointInPolygon = (point: [number, number], polygon: Array<[number, number]>): boolean => {
+  const [lat, lng] = point;
+  let isInside = false;
+
+  for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
+    const [latI, lngI] = polygon[i];
+    const [latJ, lngJ] = polygon[j];
+
+    const intersects = ((latI > lat) !== (latJ > lat))
+      && (lng < ((lngJ - lngI) * (lat - latI) / ((latJ - latI) || Number.EPSILON)) + lngI);
+
+    if (intersects) {
+      isInside = !isInside;
+    }
+  }
+
+  return isInside;
+};
+
+const orientation = (a: [number, number], b: [number, number], c: [number, number]): number => {
+  const value = ((b[1] - a[1]) * (c[0] - b[0])) - ((b[0] - a[0]) * (c[1] - b[1]));
+  if (Math.abs(value) < 1e-12) return 0;
+  return value > 0 ? 1 : 2;
+};
+
+const onSegment = (a: [number, number], b: [number, number], c: [number, number]): boolean => {
+  return b[0] <= Math.max(a[0], c[0])
+    && b[0] >= Math.min(a[0], c[0])
+    && b[1] <= Math.max(a[1], c[1])
+    && b[1] >= Math.min(a[1], c[1]);
+};
+
+const segmentsIntersect = (
+  p1: [number, number],
+  q1: [number, number],
+  p2: [number, number],
+  q2: [number, number],
+): boolean => {
+  const o1 = orientation(p1, q1, p2);
+  const o2 = orientation(p1, q1, q2);
+  const o3 = orientation(p2, q2, p1);
+  const o4 = orientation(p2, q2, q1);
+
+  if (o1 !== o2 && o3 !== o4) return true;
+  if (o1 === 0 && onSegment(p1, p2, q1)) return true;
+  if (o2 === 0 && onSegment(p1, q2, q1)) return true;
+  if (o3 === 0 && onSegment(p2, p1, q2)) return true;
+  if (o4 === 0 && onSegment(p2, q1, q2)) return true;
+  return false;
+};
+
+const routeLineIntersectsPolygon = (
+  line: Array<[number, number]>,
+  polygon: Array<[number, number]>,
+): boolean => {
+  if (line.length < 2 || polygon.length < 3) return false;
+  if (line.some((point) => isPointInPolygon(point, polygon))) return true;
+
+  for (let lineIdx = 0; lineIdx < line.length - 1; lineIdx += 1) {
+    const lineStart = line[lineIdx];
+    const lineEnd = line[lineIdx + 1];
+
+    for (let polygonIdx = 0; polygonIdx < polygon.length; polygonIdx += 1) {
+      const polyStart = polygon[polygonIdx];
+      const polyEnd = polygon[(polygonIdx + 1) % polygon.length];
+      if (segmentsIntersect(lineStart, lineEnd, polyStart, polyEnd)) {
+        return true;
+      }
+    }
+  }
+
+  return false;
+};
+
 function RouteDashboardContent() {
   const [isFetchingRoutes, setIsFetchingRoutes] = useState(true);
   const [areRouteLayersReady, setAreRouteLayersReady] = useState(false);
@@ -82,6 +195,56 @@ function RouteDashboardContent() {
         : null,
     ].filter((entry): entry is { color: string; polyline: string } => entry !== null);
   }, [persistedRouting, selectedRoute]);
+
+  const routeWarningRouteIds = useMemo(() => {
+    if (!showClosuresOnMap || closures.length === 0 || routes.length === 0) {
+      return new Set<string>();
+    }
+
+    const polygons = closures
+      .map((closure) => [...closure.points]
+        .sort((a, b) => a.sequence - b.sequence)
+        .map((point) => [Number(point.point[0]), Number(point.point[1])] as [number, number])
+        .filter(([lat, lng]) => Number.isFinite(lat) && Number.isFinite(lng)))
+      .filter((polygon) => polygon.length >= 3);
+
+    if (polygons.length === 0) {
+      return new Set<string>();
+    }
+
+    const warningIds = new Set<string>();
+
+    for (const route of routes) {
+      const routeLines: Array<Array<[number, number]>> = [];
+
+      if (route.points.polylineGoingTo) {
+        routeLines.push(decodePolyline6(route.points.polylineGoingTo));
+      } else {
+        routeLines.push([...route.points.goingTo]
+          .sort((a, b) => a.sequence - b.sequence)
+          .map((point) => point.point));
+      }
+
+      if (route.points.polylineGoingBack) {
+        routeLines.push(decodePolyline6(route.points.polylineGoingBack));
+      } else {
+        routeLines.push([...route.points.goingBack]
+          .sort((a, b) => a.sequence - b.sequence)
+          .map((point) => point.point));
+      }
+
+      const hasIntersection = routeLines.some((line) => (
+        line.length >= 2
+          && polygons.some((polygon) => routeLineIntersectsPolygon(line, polygon))
+      ));
+
+      if (hasIntersection) {
+        warningIds.add(route.id);
+      }
+    }
+
+    return warningIds;
+  }, [closures, routes, showClosuresOnMap]);
 
   useEffect(() => {
     selectedRouteRef.current = selectedRoute;
@@ -395,6 +558,7 @@ function RouteDashboardContent() {
             onAddRoute={handleShowRoutes}
             onOpenRouteMapSettings={() => setIsMapSettingsDialogOpen(true)}
             routeMapSettingsLabel="Map Settings"
+            routeWarningRouteIds={routeWarningRouteIds}
           />
 
           {selectedRoute ? (

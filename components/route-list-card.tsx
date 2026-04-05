@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { TriangleAlert } from "lucide-react";
 
 import type { AllResponse } from "@/components/app-sidebar";
 import { Button } from "@/components/ui/button";
@@ -24,6 +25,7 @@ export default function RouteListCard({
   onAddClosure,
   onOpenRouteMapSettings,
   routeMapSettingsLabel,
+  routeWarningRouteIds,
 }: RouteListCardProps) {
   const [viewMode, setViewMode] = useState<"routes" | "regions" | "closures">(
     mode === "regions"
@@ -120,6 +122,7 @@ export default function RouteListCard({
                       const routeDistrict = "routeDistrict" in route
                         ? (route.routeDistrict as string | null | undefined)
                         : undefined;
+                      const hasClosureWarning = routeWarningRouteIds?.has(route.id) ?? false;
 
                       return (
                         <button
@@ -136,8 +139,16 @@ export default function RouteListCard({
                             style={{ backgroundColor: route.routeColor }}
                           />
                           <span className="min-w-0 flex-1">
-                            <span className="block truncate">
-                              {route.routeNumber} - {route.routeName}
+                            <span className="flex items-center gap-1">
+                              <span className="block min-w-0 truncate">
+                                {route.routeNumber} - {route.routeName}
+                              </span>
+                              {hasClosureWarning ? (
+                                <TriangleAlert
+                                  aria-label="Route intersects active closure"
+                                  className="h-3.5 w-3.5 shrink-0 text-amber-500"
+                                />
+                              ) : null}
                             </span>
                             <span className="text-muted-foreground block truncate text-xs">
                               {route.snapshotName} ({route.snapshotState})
@@ -275,4 +286,5 @@ interface RouteListCardProps {
   onAddClosure?: () => void;
   onOpenRouteMapSettings?: () => void;
   routeMapSettingsLabel?: string;
+  routeWarningRouteIds?: ReadonlySet<string>;
 }
