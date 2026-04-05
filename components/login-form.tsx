@@ -1,10 +1,10 @@
 "use client";
 
 import { type ComponentProps, type SyntheticEvent, useState } from "react";
+import { useRouter } from "next/navigation";
 
 import { $fetch } from "@/lib/http/client";
 import { cn } from "@/lib/utils";
-import { redirect, RedirectType } from "next/navigation";
 
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -13,6 +13,7 @@ import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 
 export function LoginForm({ className, ...props }: ComponentProps<"div">) {
+  const router = useRouter();
   const [credentials, setCredentials] = useState<Credentials>({
     email: "",
     password: "",
@@ -39,7 +40,7 @@ export function LoginForm({ className, ...props }: ComponentProps<"div">) {
       return;
     }
 
-    redirect("/dashboard", RedirectType.push);
+    router.push("/dashboard/route");
   };
 
   return (

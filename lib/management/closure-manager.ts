@@ -5,19 +5,18 @@ import {roadClosurePoints, roadClosures, roadClosureSnapshots} from "@/lib/db/sc
 import {ErrorCodes, Failure, Result, Success} from "@/lib/one-of/types";
 import {unwrap} from "@/lib/one-of";
 
-export async function getAllClosures(): Promise<Result<ClosureObject[]>> {
+export async function getAllClosures(readyActiveOnly = false): Promise<Result<ClosureObject[]>> {
   try {
-    const result = await db
-      .select({
-        id: roadClosures.id,
-        activeSnapshotId: roadClosureSnapshots.id,
-        versionName: roadClosureSnapshots.versionName,
-        snapshotState: roadClosureSnapshots.snapshotState,
-        closureName: roadClosureSnapshots.name,
-        closureDescription: roadClosureSnapshots.description,
-        shape: roadClosureSnapshots.shape,
+    const selectFields = {
+      id: roadClosures.id,
+      activeSnapshotId: roadClosureSnapshots.id,
+      versionName: roadClosureSnapshots.versionName,
+      snapshotState: roadClosureSnapshots.snapshotState,
+      closureName: roadClosureSnapshots.name,
+      closureDescription: roadClosureSnapshots.description,
+      shape: roadClosureSnapshots.shape,
 
-        points: sql<PointObject[]>`(
+      points: sql<PointObject[]>`(
         SELECT COALESCE(
           json_agg(
             json_build_object(
@@ -32,10 +31,20 @@ export async function getAllClosures(): Promise<Result<ClosureObject[]>> {
         )
         FROM ${roadClosurePoints}
         WHERE ${roadClosurePoints.roadClosureSnapshotId} = "road_closure_snapshot"."id")`,
-      })
-      .from(roadClosures)
-      .leftJoin(roadClosureSnapshots, eq(roadClosures.activeSnapshotId, roadClosureSnapshots.id))
-      .groupBy(roadClosures.id, roadClosureSnapshots.id);
+    };
+
+    const result = readyActiveOnly
+      ? await db
+        .select(selectFields)
+        .from(roadClosures)
+        .innerJoin(roadClosureSnapshots, eq(roadClosures.activeSnapshotId, roadClosureSnapshots.id))
+        .where(eq(roadClosureSnapshots.snapshotState, "ready"))
+        .groupBy(roadClosures.id, roadClosureSnapshots.id)
+      : await db
+        .select(selectFields)
+        .from(roadClosures)
+        .leftJoin(roadClosureSnapshots, eq(roadClosures.activeSnapshotId, roadClosureSnapshots.id))
+        .groupBy(roadClosures.id, roadClosureSnapshots.id);
 
     return new Success(result as ClosureObject[]);
   } catch (e) {

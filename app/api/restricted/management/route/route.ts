@@ -4,7 +4,6 @@ import * as closure from "@/lib/management/closure-manager";
 import { getRoutePolyline } from "@/lib/osm/valhalla";
 import { oneOf, unwrap } from "@/lib/one-of";
 import { ResponseComposer, StatusCodes } from "@/lib/http";
-import * as region from "@/lib/management/region-manager";
 import * as route from "@/lib/management/route-manager";
 import { tryParseJson } from "@/lib/http/RequestUtilities";
 import { utils, validator } from "@/lib/validator";
@@ -12,14 +11,12 @@ import { session, SessionCode } from "@/lib/auth";
 
 export async function GET() {
   try {
-    const allRoutes = await unwrap(route.getAllRoutes());
-    const allRegions = await unwrap(region.getAllRegions());
-    const allClosures = await unwrap(closure.getAllClosures());
+    const allRoutes = await unwrap(route.getAllRoutes(false));
+    const allClosures = await unwrap(closure.getAllClosures(false));
 
     return ResponseComposer.compose(StatusCodes.Status200Ok)
       .setBody({
         routes: allRoutes,
-        regions: allRegions,
         closures: allClosures,
       })
       .orchestrate();

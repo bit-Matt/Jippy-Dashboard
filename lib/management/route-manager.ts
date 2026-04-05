@@ -16,21 +16,20 @@ import { unwrap } from "../one-of";
  *
  * @returns A `Result<RouteObject[]>` wrapping either the list of routes or a failure.
  */
-export async function getAllRoutes(): Promise<Result<RouteObject[]>> {
+export async function getAllRoutes(readyActiveOnly = false): Promise<Result<RouteObject[]>> {
   try {
-    const result = await db
-      .select({
-        id: routes.id,
-        activeSnapshotId: routeSnapshots.id,
-        snapshotName: routeSnapshots.versionName,
-        snapshotState: routeSnapshots.snapshotState,
-        routeNumber: routeSnapshots.routeNumber,
-        routeName: routeSnapshots.routeName,
-        routeColor: routeSnapshots.routeColor,
-        routeDetails: routeSnapshots.routeDetails,
+    const selectFields = {
+      id: routes.id,
+      activeSnapshotId: routeSnapshots.id,
+      snapshotName: routeSnapshots.versionName,
+      snapshotState: routeSnapshots.snapshotState,
+      routeNumber: routeSnapshots.routeNumber,
+      routeName: routeSnapshots.routeName,
+      routeColor: routeSnapshots.routeColor,
+      routeDetails: routeSnapshots.routeDetails,
 
-        // language=text
-        points: sql<RoutePoint>`
+      // language=text
+      points: sql<RoutePoint>`
         json_build_object(
           'polylineGoingTo', ${routeSnapshots.polylineGoingTo},
           'goingTo', COALESCE(
@@ -64,11 +63,22 @@ export async function getAllRoutes(): Promise<Result<RouteObject[]>> {
           )
         )
       `,
-      })
-      .from(routes)
-      .leftJoin(routeSnapshots, eq(routes.activeSnapshotId, routeSnapshots.id))
-      .leftJoin(routeSequences, eq(routeSnapshots.id, routeSequences.routeSnapshotId))
-      .groupBy(routes.id, routeSnapshots.id);
+    };
+
+    const result = readyActiveOnly
+      ? await db
+        .select(selectFields)
+        .from(routes)
+        .innerJoin(routeSnapshots, eq(routes.activeSnapshotId, routeSnapshots.id))
+        .leftJoin(routeSequences, eq(routeSnapshots.id, routeSequences.routeSnapshotId))
+        .where(eq(routeSnapshots.snapshotState, "ready"))
+        .groupBy(routes.id, routeSnapshots.id)
+      : await db
+        .select(selectFields)
+        .from(routes)
+        .leftJoin(routeSnapshots, eq(routes.activeSnapshotId, routeSnapshots.id))
+        .leftJoin(routeSequences, eq(routeSnapshots.id, routeSequences.routeSnapshotId))
+        .groupBy(routes.id, routeSnapshots.id);
 
     return new Success(result as RouteObject[]);
   } catch (e) {
@@ -161,15 +171,13 @@ export async function getRouteById(routeId: string, snapshotId?: string): Promis
 }
 
 /**
- * Creates a new WIP snapshot for an existing route, persists its directional sequence points,
- * and sets the new snapshot as the route's active snapshot.
+ * Creates a new WIP snapshot for an existing route and persists its directional sequence points.
  *
  * This operation is executed in a database transaction:
  * 1. Verifies that the route exists.
  * 2. Inserts a new snapshot record.
  * 3. Inserts sequence points for `going_to` and `going_back` directions (if provided).
- * 4. Updates the route to reference the new snapshot as active.
- * 5. Returns a normalized `RouteObject` payload.
+ * 4. Returns a normalized `RouteObject` payload.
  *
  * Coordinate mapping note:
  * - Input/output points use `[lat, lng]`.
@@ -237,11 +245,6 @@ export async function createSnapshot(routeId: string, params: AddRouteParameters
           .values(newPoints)
           .returning();
       }
-
-      // Set the current version as active
-      await tx.update(routes)
-        .set({ activeSnapshotId: snapshot.id })
-        .where(eq(routes.id, route.id));
 
       return {
         id: snapshot.id,

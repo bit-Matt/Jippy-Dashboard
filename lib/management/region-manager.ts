@@ -14,20 +14,19 @@ import {unwrap} from "@/lib/one-of";
  *
  * @returns A `Promise<Result<RegionObject[]>>` containing the list of regions, or a failure if fetching fails.
  */
-export async function getAllRegions(): Promise<Result<RegionObject[]>> {
+export async function getAllRegions(readyActiveOnly = false): Promise<Result<RegionObject[]>> {
   try {
-    const result = await db
-      .select({
-        id: region.id,
-        activeSnapshotId: regionSnapshots.id,
-        snapshotName: regionSnapshots.versionName,
-        snapshotState: regionSnapshots.snapshotState,
-        regionName: regionSnapshots.name,
-        regionColor: regionSnapshots.color,
-        regionShape: regionSnapshots.shapeType,
-        regionId: region.id,
+    const selectFields = {
+      id: region.id,
+      activeSnapshotId: regionSnapshots.id,
+      snapshotName: regionSnapshots.versionName,
+      snapshotState: regionSnapshots.snapshotState,
+      regionName: regionSnapshots.name,
+      regionColor: regionSnapshots.color,
+      regionShape: regionSnapshots.shapeType,
+      regionId: region.id,
 
-        points: sql<PointObject[]>`(
+      points: sql<PointObject[]>`(
         SELECT COALESCE(
           json_agg(
             json_build_object(
@@ -43,7 +42,7 @@ export async function getAllRegions(): Promise<Result<RegionObject[]>> {
         FROM ${regionSequences}
         WHERE ${regionSequences.regionSnapshotId} = ${regionSnapshots.id})`,
 
-        stations: sql<StationObject[]>`(
+      stations: sql<StationObject[]>`(
         SELECT COALESCE(
           json_agg(
             json_build_object(
@@ -58,10 +57,20 @@ export async function getAllRegions(): Promise<Result<RegionObject[]>> {
         )
         FROM ${regionStations}
         WHERE ${regionStations.regionSnapshotId} = ${regionSnapshots.id})`,
-      })
-      .from(region)
-      .leftJoin(regionSnapshots, eq(region.activeSnapshotId, regionSnapshots.id))
-      .groupBy(region.id, regionSnapshots.id);
+    };
+
+    const result = readyActiveOnly
+      ? await db
+        .select(selectFields)
+        .from(region)
+        .innerJoin(regionSnapshots, eq(region.activeSnapshotId, regionSnapshots.id))
+        .where(eq(regionSnapshots.snapshotState, "ready"))
+        .groupBy(region.id, regionSnapshots.id)
+      : await db
+        .select(selectFields)
+        .from(region)
+        .leftJoin(regionSnapshots, eq(region.activeSnapshotId, regionSnapshots.id))
+        .groupBy(region.id, regionSnapshots.id);
 
     return new Success(result as RegionObject[]);
   } catch (e) {

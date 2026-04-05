@@ -67,7 +67,7 @@ function RegionDashboardContent() {
   const fetchRegions = useCallback(async () => {
     setIsFetchingRegions(true);
 
-    const { data, error } = await $fetch<IApiResponse<AllResponse>>("/api/restricted/management/route", {
+    const { data, error } = await $fetch<IApiResponse<AllResponse["regions"]>>("/api/restricted/management/region", {
       method: "GET",
     });
 
@@ -77,7 +77,7 @@ function RegionDashboardContent() {
       return;
     }
 
-    const nextRegions = data.data.regions;
+    const nextRegions = data.data;
     setRegions(nextRegions);
 
     const currentSelectedRegion = selectedRegionRef.current;
