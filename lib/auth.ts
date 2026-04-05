@@ -29,7 +29,7 @@ export const auth = betterAuth({
 export const session = {
   /**
    * Verifies if the user has the required permissions.
-   * @param {Permissions[]} [permissions] - List of required permissions.
+   * @param {string} [role] - Role that is allowed on this API
    * @returns {Promise<{ session: SessionType, user: User }>}
    */
   verify: async (role?: string): Promise<SessionVerifiedResult> => {

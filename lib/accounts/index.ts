@@ -9,8 +9,11 @@ import { ErrorCodes, Failure, Result, Success } from "@/lib/one-of/types";
 import { InvitationEmailHtml } from "@/lib/mailer/templates/InvitationMail";
 import * as mailer from "@/lib/mailer";
 import { unwrap } from "@/lib/one-of";
-import { invitations, user } from "@/lib/db/schema";
+import { accessToken, invitations, user } from "@/lib/db/schema";
 import { utils } from "@/lib/validator";
+import { string } from "zod";
+import { permanentRedirect } from "next/navigation";
+import { permission } from "node:process";
 
 /**
  * Retrieves a user by their unique identifier.
@@ -411,6 +414,180 @@ export async function revokeInvitation(id: string): Promise<Success<null> | Fail
   }
 }
 
+export async function createAccessToken(userId: string, permission: "r" | "rw"): Promise<Result<AccessToken>> {
+  try {
+    const token = crypto.createHash("sha512")
+      .update(crypto.randomBytes(2048))
+      .digest();
+
+    const [userSelected] = await db
+      .select({ id: user.id, fullName: user.name, email: user.email })
+      .from(user)
+      .where(eq(user.id, userId))
+      .limit(1);
+    if (!userSelected) {
+      return new Failure(ErrorCodes.ResourceNotFound, "No such user found", { userId });
+    }
+
+    const [result] = await db
+      .insert(accessToken)
+      .values({
+        accessToken: `jp_${token}`,
+        permissions: permission,
+        ownerId: userSelected.id,
+      })
+      .returning();
+    if (!result) {
+      return new Failure(ErrorCodes.Fatal, "Unable to create an access token", { userId, permission });
+    }
+
+    return new Success({
+      id: result.id,
+      accessToken: result.accessToken,
+      permission: result.permissions,
+      owner: {
+        id: userSelected.id,
+        fullName: userSelected.fullName,
+        email: userSelected.email,
+      },
+    });
+  } catch (e) {
+    return new Failure(ErrorCodes.Fatal, "Unable to create access token", { userId, permission }, e);
+  }
+}
+
+export async function revokeAccessToken(userId: string, tokenId: string): Promise<Result<string>> {
+  try {
+    const [userSelected] = await db
+      .select({ id: user.id, role: user.role })
+      .from(user)
+      .where(eq(user.id, userId))
+      .limit(1);
+    if (!userSelected) {
+      return new Failure(ErrorCodes.ResourceNotFound, "No such user found", { userId });
+    }
+
+    const [result] = await db
+      .select({ id: accessToken.id, ownerId: accessToken.ownerId })
+      .from(accessToken)
+      .where(eq(accessToken.id, tokenId))
+      .limit(1);
+    if (!result) {
+      return new Failure(ErrorCodes.ResourceNotFound, "No such token found", { userId, tokenId });
+    }
+
+    // Only delete if the user is a root user or the owner of the token
+    if (userSelected.role === "administrator_user" || userSelected.id === result.ownerId) {
+      await db.delete(accessToken).where(eq(accessToken.id, result.id));
+      return new Success(result.id);
+    }
+
+    return new Failure(ErrorCodes.ResourceNotFound, "No such token found", { userId, tokenId });
+  } catch (e) {
+    return new Failure(ErrorCodes.Fatal, "Unable to revoke access token", { userId, tokenId }, e);
+  }
+}
+
+export async function getAllAccessToken(userId: string, asRoot?: boolean) {
+  try {
+    const [userSelected] = await db
+      .select({ id: user.id, name: user.name, email: user.email, role: user.role })
+      .from(user)
+      .where(eq(user.id, userId))
+      .limit(1);
+    if (!userSelected) {
+      return new Failure(ErrorCodes.ResourceNotFound, "No such user found.", { userId });
+    }
+
+    // Check if asRoot is specified
+    if (asRoot && userSelected.role !== "administrator_user") {
+      return new Failure(ErrorCodes.ValidationFailure, "User does not met the criteria", { userId, asRoot });
+    }
+
+    if (asRoot) {
+      const list = await db
+        .select({
+          id: accessToken.id,
+          accessToken: accessToken.accessToken,
+          permission: accessToken.permissions,
+          ownerId: user.id,
+          ownerFullName: user.name,
+          ownerEmail: user.email,
+        })
+        .from(accessToken)
+        .leftJoin(user, eq(accessToken.ownerId, user.id));
+
+      const result: AccessToken[] = list.map(t => ({
+        id: t.id,
+        accessToken: t.accessToken.substring(0, 8),
+        permission: t.permission!,
+        owner: {
+          id: t.ownerId!,
+          fullName: t.ownerFullName!,
+          email: t.ownerEmail!,
+        },
+      }));
+
+      return new Success(result);
+    }
+
+    const list = await db
+      .select({
+        id: accessToken.id,
+        accessToken: accessToken.accessToken,
+        permission: accessToken.permissions,
+      })
+      .from(accessToken);
+
+    const result: AccessToken[] = list.map(t => ({
+      id: t.id,
+      accessToken: t.accessToken.substring(0, 8),
+      permission: t.permission!,
+      owner: {
+        id: userSelected.id,
+        fullName: userSelected.name,
+        email: userSelected.email,
+      },
+    }));
+
+    return new Success(result);
+  } catch (e) {
+    return new Failure(ErrorCodes.Fatal, "Unable to fetch all access tokens", { userId, asRoot }, e);
+  }
+}
+
+export async function getTokenById(token: string): Promise<Result<AccessTokenInfo>> {
+  try {
+    const [selectedToken] = await db
+      .select({
+        id: accessToken.id,
+        permission: accessToken.permissions,
+        ownerId: user.id,
+        ownerFullName: user.name,
+        ownerEmail: user.email,
+      })
+      .from(accessToken)
+      .where(eq(accessToken.accessToken, token))
+      .leftJoin(user, eq(user.id, accessToken.ownerId))
+      .limit(1);
+    if (!selectedToken) {
+      return new Failure(ErrorCodes.ResourceNotFound, "Invalid token", { token });
+    }
+
+    return new Success({
+      id: selectedToken.id,
+      permission: selectedToken.permission!,
+      owner: {
+        id: selectedToken.ownerId!,
+        fullName: selectedToken.ownerFullName!,
+        email: selectedToken.ownerEmail!,
+      },
+    });
+  } catch (e) {
+    return new Failure(ErrorCodes.Fatal, "Unable to fetch token", { token }, e);
+  }
+}
+
 /**
  * Generates an invitation token suitable for use as a one-time code.
  *
@@ -510,3 +687,16 @@ export type Invitation = {
 export type SentInvitation = {
   errors?: object
 } & Invitation;
+
+export type AccessToken = {
+  id: string;
+  accessToken: string;
+  permission: string;
+  owner: {
+    id: string;
+    fullName: string;
+    email: string;
+  }
+}
+
+export type AccessTokenInfo = Omit<AccessToken, "accessToken">;

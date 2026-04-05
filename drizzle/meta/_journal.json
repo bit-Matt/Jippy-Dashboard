@@ -162,6 +162,13 @@
       "when": 1775310519125,
       "tag": "0022_short_cerise",
       "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "7",
+      "when": 1775377775758,
+      "tag": "0023_abandoned_norman_osborn",
+      "breakpoints": true
     }
   ]
 }

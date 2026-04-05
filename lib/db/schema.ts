@@ -1,5 +1,4 @@
-import { ro } from "date-fns/locale";
-import { relations } from "drizzle-orm";
+import { relations, sql } from "drizzle-orm";
 import { pgEnum, pgTable, text, timestamp, boolean, index, integer, geometry } from "drizzle-orm/pg-core";
 import { v7 as uuidv7 } from "uuid";
 
@@ -350,6 +349,24 @@ export const roadClosureSnapshots = pgTable(
       .notNull(),
   },
 );
+
+export const accessTokenPermissions = pgEnum("access_token_permission", ["r", "rw"]);
+export const accessToken = pgTable("access_tokens", {
+  id: text("id")
+    .primaryKey()
+    .$default(() => uuidv7()),
+  accessToken: text("access_token").notNull(),
+  permissions: accessTokenPermissions().notNull(),
+  ownerId: text("owner_id")
+    .references(() => user.id, { onDelete: "cascade" }),
+
+  // Metadata
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at")
+    .defaultNow()
+    .$onUpdate(() => new Date())
+    .notNull(),
+});
 
 export const roadClosurePoints = pgTable("road_closure_points", {
   id: text("id")
