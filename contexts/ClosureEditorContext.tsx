@@ -79,7 +79,7 @@ export function ClosureEditorProvider({ children }: { children: ReactNode }) {
       mode: "editing",
       activeClosureId: closure.id,
       activeSnapshotId: closure.activeSnapshotId,
-      activeClosureTool: "draw-polygon",
+      activeClosureTool: sortedPoints.length >= 3 ? "edit-polygon" : "draw-polygon",
       draft: {
         versionName: closure.versionName ?? "Draft",
         snapshotState: (closure.snapshotState as "wip" | "for_approval" | "ready") ?? "wip",
@@ -148,7 +148,7 @@ export function ClosureEditorProvider({ children }: { children: ReactNode }) {
 
       return {
         ...prev,
-        activeClosureTool: "none",
+        activeClosureTool: "draw-polygon",
         draft: {
           ...prev.draft,
           points: [],

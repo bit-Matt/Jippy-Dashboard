@@ -1,6 +1,5 @@
 import type { NextRequest } from "next/server";
 
-import * as closure from "@/lib/management/closure-manager";
 import { getRoutePolyline } from "@/lib/osm/valhalla";
 import { oneOf, unwrap } from "@/lib/one-of";
 import { ResponseComposer, StatusCodes } from "@/lib/http";
@@ -12,13 +11,9 @@ import { session, SessionCode } from "@/lib/auth";
 export async function GET() {
   try {
     const allRoutes = await unwrap(route.getAllRoutes(false));
-    const allClosures = await unwrap(closure.getAllClosures(false));
 
     return ResponseComposer.compose(StatusCodes.Status200Ok)
-      .setBody({
-        routes: allRoutes,
-        closures: allClosures,
-      })
+      .setBody(allRoutes)
       .orchestrate();
   } catch {
     return ResponseComposer.composeError(StatusCodes.Status500InternalServerError, [{

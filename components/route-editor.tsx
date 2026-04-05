@@ -1,6 +1,6 @@
 "use client";
 
-import { MapPin, Trash2, X } from "lucide-react";
+import { ChevronLeft, MapPin, Trash2 } from "lucide-react";
 import { useState, useEffect, useRef, type DragEvent } from "react";
 import useSWR from "swr";
 
@@ -331,7 +331,7 @@ export default function RouteEditor({ editingRoute, snapshotParentRouteId, onSav
   const isAdministrator = me?.data?.data?.role === "administrator_user";
 
   return (
-    <div className="absolute top-2 left-6 z-9999 w-1/4">
+    <div className="absolute top-2 left-6 z-9999 w-1/4 animate-in slide-in-from-left-6 duration-200">
       <Card>
         <CardHeader className="flex flex-row items-center justify-between">
           <div>
@@ -350,12 +350,13 @@ export default function RouteEditor({ editingRoute, snapshotParentRouteId, onSav
             </Button>
             <Button
               type="button"
-              size="icon"
+              size="sm"
               variant="ghost"
               onClick={handleCloseEditor}
-              aria-label="Close route editor"
+              aria-label="Back from route editor"
             >
-              <X className="h-4 w-4" />
+              <ChevronLeft className="mr-1 h-4 w-4" />
+              Back
             </Button>
           </div>
         </CardHeader>

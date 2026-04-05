@@ -5,7 +5,22 @@ import { oneOf } from "@/lib/one-of";
 import { ResponseComposer, StatusCodes } from "@/lib/http";
 import { session, SessionCode } from "@/lib/auth";
 import { tryParseJson } from "@/lib/http/RequestUtilities";
+import { unwrap } from "@/lib/one-of";
 import { utils, validator } from "@/lib/validator";
+
+export async function GET() {
+  try {
+    const allClosures = await unwrap(closure.getAllClosures(false));
+
+    return ResponseComposer.compose(StatusCodes.Status200Ok)
+      .setBody(allClosures)
+      .orchestrate();
+  } catch {
+    return ResponseComposer.composeError(StatusCodes.Status500InternalServerError, [{
+      message: "Unknown error occurred.",
+    }]).orchestrate();
+  }
+}
 
 export async function POST(req: NextRequest) {
   const currentSession = await session.verify();

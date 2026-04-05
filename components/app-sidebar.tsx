@@ -32,6 +32,12 @@ export function AppSidebar({
         isActive: true,
       },
       {
+        title: "Closure Management",
+        url: "/dashboard/closure",
+        icon: Map,
+        isActive: true,
+      },
+      {
         title: "Region Management",
         url: "/dashboard/region",
         isActive: true,

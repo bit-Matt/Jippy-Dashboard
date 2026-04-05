@@ -4,7 +4,6 @@ import { useState } from "react";
 
 import type { AllResponse } from "@/components/app-sidebar";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
 export default function RouteListCard({
@@ -19,25 +18,20 @@ export default function RouteListCard({
   onRouteSelect,
   onRegionSelect,
   onClosureSelect,
-  onManageSnapshots,
   onAddRoute,
   onAddRegion,
   onAddClosure,
-  onDeleteSelected,
-  deleteSelectedDisabled,
-  isDeletingSelected,
-  deleteSelectedLabel,
-  manageSnapshotsDisabled,
-  selectedItemVersionName,
-  selectedItemSnapshotState,
-  selectedItemModeLabel,
 }: RouteListCardProps) {
   const [viewMode, setViewMode] = useState<"routes" | "regions" | "closures">(
-    mode === "regions" ? "regions" : "routes",
+    mode === "regions"
+      ? "regions"
+      : mode === "closures"
+        ? "closures"
+        : "routes",
   );
-  const allowRoutes = mode === "all" || mode === "route-closures";
+  const allowRoutes = mode === "all" || mode === "route-closures" || mode === "routes";
   const allowRegions = mode === "all" || mode === "regions";
-  const allowClosures = mode === "all" || mode === "route-closures";
+  const allowClosures = mode === "all" || mode === "route-closures" || mode === "closures";
 
   const title = viewMode === "routes"
     ? "Routes"
@@ -52,45 +46,6 @@ export default function RouteListCard({
           <CardTitle className="text-base">
             {title}
           </CardTitle>
-          {onManageSnapshots ? (
-            <div className="mt-2 rounded-md border p-2">
-              <p className="text-xs text-muted-foreground">
-                {selectedItemVersionName
-                  ? `Selected version: ${selectedItemVersionName}`
-                  : "Select an item to manage snapshots."}
-              </p>
-              {selectedItemSnapshotState ? (
-                <Badge className="mt-1" variant={selectedItemSnapshotState === "ready" ? "default" : "secondary"}>
-                  {selectedItemSnapshotState}
-                </Badge>
-              ) : null}
-              {selectedItemModeLabel ? (
-                <p className="mt-1 text-xs text-muted-foreground">{selectedItemModeLabel}</p>
-              ) : null}
-              <Button
-                type="button"
-                className="mt-2 w-full"
-                size="sm"
-                variant="outline"
-                onClick={onManageSnapshots}
-                disabled={manageSnapshotsDisabled}
-              >
-                Manage Snapshots
-              </Button>
-              {onDeleteSelected ? (
-                <Button
-                  type="button"
-                  className="mt-2 w-full"
-                  size="sm"
-                  variant="destructive"
-                  onClick={onDeleteSelected}
-                  disabled={deleteSelectedDisabled || isDeletingSelected}
-                >
-                  {isDeletingSelected ? `Deleting ${deleteSelectedLabel ?? "Item"}...` : `Delete ${deleteSelectedLabel ?? "Selected"}`}
-                </Button>
-              ) : null}
-            </div>
-          ) : null}
           {mode === "all" ? (
             <div className="bg-muted mt-2 inline-flex rounded-md p-0.5">
               <button
@@ -142,7 +97,7 @@ export default function RouteListCard({
                 Closures
               </button>
             </div>
-          ) : null}
+          ) : mode === "routes" || mode === "closures" ? null : null}
         </CardHeader>
         <CardContent className="flex min-h-0 flex-1 flex-col px-4">
           <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto pr-1">
@@ -292,7 +247,7 @@ export default function RouteListCard({
 }
 
 interface RouteListCardProps {
-  mode?: "all" | "route-closures" | "regions";
+  mode?: "all" | "route-closures" | "regions" | "routes" | "closures";
   routes: AllResponse["routes"];
   regions: AllResponse["regions"];
   closures: AllResponse["closures"];
@@ -303,16 +258,7 @@ interface RouteListCardProps {
   onRouteSelect?: (route: AllResponse["routes"][0]) => void;
   onRegionSelect?: (region: AllResponse["regions"][0]) => void;
   onClosureSelect?: (closure: AllResponse["closures"][0]) => void;
-  onManageSnapshots?: () => void;
   onAddRoute?: () => void;
   onAddRegion?: () => void;
   onAddClosure?: () => void;
-  onDeleteSelected?: () => void;
-  deleteSelectedDisabled?: boolean;
-  isDeletingSelected?: boolean;
-  deleteSelectedLabel?: string;
-  manageSnapshotsDisabled?: boolean;
-  selectedItemVersionName?: string | null;
-  selectedItemSnapshotState?: string | null;
-  selectedItemModeLabel?: string | null;
 }

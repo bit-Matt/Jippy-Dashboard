@@ -3,9 +3,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { AppSidebar, type AllResponse } from "@/components/app-sidebar";
+import RegionItemSidebar from "@/components/region-item-sidebar";
 import RegionEditor from "@/components/region-editor";
 import RouteListCard from "@/components/route-list-card";
-import SnapshotManagerDialog, { type SnapshotListItem } from "@/components/snapshot-manager-dialog";
+import { type SnapshotListItem } from "@/components/snapshot-types";
 import {
   SidebarInset,
   SidebarProvider,
@@ -26,12 +27,12 @@ function RegionDashboardContent() {
 
   const [focusedRegionWaypoints, setFocusedRegionWaypoints] = useState<Array<[number, number]> | undefined>(undefined);
   const [regionFocusKey, setRegionFocusKey] = useState<string | number | null>(null);
-  const [isSnapshotDialogOpen, setIsSnapshotDialogOpen] = useState(false);
   const [isSnapshotLoading, setIsSnapshotLoading] = useState(false);
   const [isSnapshotActing, setIsSnapshotActing] = useState(false);
   const [isDeletingRegion, setIsDeletingRegion] = useState(false);
   const [snapshots, setSnapshots] = useState<SnapshotListItem[]>([]);
   const [selectedSnapshotId, setSelectedSnapshotId] = useState<string | null>(null);
+  const [activeRegionSnapshotId, setActiveRegionSnapshotId] = useState<string | null>(null);
 
   const {
     showRegionEditor,
@@ -42,18 +43,12 @@ function RegionDashboardContent() {
     closeRegionEditor,
   } = useRegionEditor();
 
-  const selectedModeLabel = showRegionEditor
-    ? "Edit Mode"
-    : selectedRegion
-      ? "View Mode"
-      : null;
-
   const mapRegions = useMemo(() => {
     if (!selectedRegion) {
       return regions;
     }
 
-    return [selectedRegion, ...regions.filter((region) => region.id !== selectedRegion.id)];
+    return [selectedRegion];
   }, [regions, selectedRegion]);
 
   useEffect(() => {
@@ -92,8 +87,10 @@ function RegionDashboardContent() {
       if (!refreshedRegion) {
         setSelectedRegion(null);
         setSelectedRegionId(null);
-      } else if (currentSelectedRegion.activeSnapshotId === refreshedRegion.activeSnapshotId) {
+        setActiveRegionSnapshotId(null);
+      } else {
         setSelectedRegion(refreshedRegion);
+        setActiveRegionSnapshotId(refreshedRegion.activeSnapshotId);
       }
     }
 
@@ -151,10 +148,10 @@ function RegionDashboardContent() {
     closeRegionEditor();
   };
 
-  const loadSnapshots = async (region: AllResponse["regions"][0]) => {
+  const loadSnapshots = async (regionId: string, activeSnapshotId: string) => {
     setIsSnapshotLoading(true);
 
-    const { data, error } = await $fetch<IApiResponse<SnapshotListItem[]>>(`/api/restricted/management/region/${region.id}/snapshots`, {
+    const { data, error } = await $fetch<IApiResponse<SnapshotListItem[]>>(`/api/restricted/management/region/${regionId}/snapshots`, {
       method: "GET",
     });
 
@@ -165,9 +162,21 @@ function RegionDashboardContent() {
     }
 
     setSnapshots(data.data);
-    setSelectedSnapshotId(region.activeSnapshotId);
+    setActiveRegionSnapshotId(activeSnapshotId);
+    setSelectedSnapshotId((prev) => prev ?? activeSnapshotId);
     setIsSnapshotLoading(false);
   };
+
+  useEffect(() => {
+    if (!selectedRegion) {
+      setSnapshots([]);
+      setSelectedSnapshotId(null);
+      setActiveRegionSnapshotId(null);
+      return;
+    }
+
+    void loadSnapshots(selectedRegion.id, selectedRegion.activeSnapshotId);
+  }, [selectedRegion?.id]);
 
   const fetchRegionSnapshot = async (regionId: string, snapshotId: string) => {
     const { data, error } = await $fetch<IApiResponse<AllResponse["regions"][0]>>(`/api/restricted/management/region/${regionId}/${snapshotId}`, {
@@ -189,14 +198,9 @@ function RegionDashboardContent() {
 
     setSelectedRegionId(region.id);
     setSelectedRegion(region);
+    setActiveRegionSnapshotId(region.activeSnapshotId);
     setFocusedRegionWaypoints(sortedRegionPoints);
     setRegionFocusKey(`${region.id}-${Date.now()}`);
-  };
-
-  const handleManageSnapshots = async () => {
-    if (!selectedRegion) return;
-    setIsSnapshotDialogOpen(true);
-    await loadSnapshots(selectedRegion);
   };
 
   const handleViewSnapshot = async (snapshotId: string) => {
@@ -225,7 +229,6 @@ function RegionDashboardContent() {
 
     applyRegionView(snapshotRegion);
     openRegionEditorForEdit(snapshotRegion);
-    setIsSnapshotDialogOpen(false);
   };
 
   const handleCloneSnapshot = async (snapshotId: string) => {
@@ -247,21 +250,15 @@ function RegionDashboardContent() {
 
     applyRegionView(snapshotRegion);
     openRegionEditorForEdit(snapshotRegion);
-    await loadSnapshots(snapshotRegion);
+    await loadSnapshots(snapshotRegion.id, snapshotRegion.activeSnapshotId);
     setSelectedSnapshotId(data.data.id);
-    setIsSnapshotDialogOpen(false);
   };
 
-  const handleCreateBlankSnapshot = async () => {
+  const handleSetActiveSnapshot = async (snapshotId: string) => {
     if (!selectedRegion) return;
 
-    applyRegionView(selectedRegion);
-    openRegionSnapshotEditor(selectedRegion.id);
-    setIsSnapshotDialogOpen(false);
-  };
-
-  const handleSwitchActiveSnapshot = async (snapshotId: string) => {
-    if (!selectedRegion) return;
+    const selectedSnapshot = snapshots.find((snapshot) => snapshot.id === snapshotId);
+    if (!selectedSnapshot || selectedSnapshot.state !== "ready") return;
 
     setIsSnapshotActing(true);
     const { data, error } = await $fetch<IApiResponse<AllResponse["regions"][0]>>(`/api/restricted/management/region/${selectedRegion.id}`, {
@@ -275,11 +272,19 @@ function RegionDashboardContent() {
       return;
     }
 
+    closeRegionEditor();
     applyRegionView(data.data);
-    await fetchRegions();
     setSelectedSnapshotId(snapshotId);
+    setActiveRegionSnapshotId(snapshotId);
     setIsSnapshotActing(false);
-    setIsSnapshotDialogOpen(false);
+    await loadSnapshots(data.data.id, data.data.activeSnapshotId);
+  };
+
+  const handleCreateBlankSnapshot = async () => {
+    if (!selectedRegion) return;
+
+    applyRegionView(selectedRegion);
+    openRegionSnapshotEditor(selectedRegion.id);
   };
 
   const handleDeleteSnapshot = async (snapshotId: string) => {
@@ -309,6 +314,11 @@ function RegionDashboardContent() {
     await fetchRegions();
   };
 
+  const handleSelectSnapshot = async (snapshotId: string) => {
+    setSelectedSnapshotId(snapshotId);
+    await handleViewSnapshot(snapshotId);
+  };
+
   const handleDeleteSelected = async () => {
     if (!selectedRegion || isDeletingRegion) return;
 
@@ -329,13 +339,23 @@ function RegionDashboardContent() {
     setSelectedRegion(null);
     setSelectedRegionId(null);
     setSelectedSnapshotId(null);
-    setIsSnapshotDialogOpen(false);
+    setActiveRegionSnapshotId(null);
     closeRegionEditor();
     setFocusedRegionWaypoints(undefined);
     setRegionFocusKey(null);
 
     await fetchRegions();
     setIsDeletingRegion(false);
+  };
+
+  const handleClearSelectedRegion = () => {
+    setSelectedRegion(null);
+    setSelectedRegionId(null);
+    setSelectedSnapshotId(null);
+    setActiveRegionSnapshotId(null);
+    setFocusedRegionWaypoints(undefined);
+    setRegionFocusKey(null);
+    closeRegionEditor();
   };
 
   return (
@@ -358,35 +378,34 @@ function RegionDashboardContent() {
             selectedRegionId={selectedRegionId}
             selectedClosureId={null}
             onRegionSelect={handleOpenRegionForEdit}
-            onManageSnapshots={handleManageSnapshots}
-            onDeleteSelected={handleDeleteSelected}
-            deleteSelectedDisabled={!selectedRegionId}
-            isDeletingSelected={isDeletingRegion}
-            deleteSelectedLabel="Region"
             onAddRegion={handleShowRegions}
-            manageSnapshotsDisabled={!selectedRegionId}
-            selectedItemVersionName={selectedRegion?.snapshotName ?? null}
-            selectedItemSnapshotState={selectedRegion?.snapshotState ?? null}
-            selectedItemModeLabel={selectedModeLabel}
           />
+          {selectedRegion ? (
+            <div
+              className={`absolute top-2 left-6 z-9998 w-1/4 transition-all duration-200 ${
+                showRegionEditor ? "pointer-events-none -translate-x-6 opacity-0" : "translate-x-0 opacity-100"
+              }`}
+            >
+              <RegionItemSidebar
+                region={selectedRegion}
+                snapshots={snapshots}
+                selectedSnapshotId={selectedSnapshotId}
+                activeSnapshotId={activeRegionSnapshotId}
+                isSnapshotLoading={isSnapshotLoading}
+                isSnapshotActing={isSnapshotActing}
+                isDeletingRegion={isDeletingRegion}
+                onClose={handleClearSelectedRegion}
+                onDeleteRegion={handleDeleteSelected}
+                onSelectSnapshot={handleSelectSnapshot}
+                onSetActiveSnapshot={handleSetActiveSnapshot}
+                onDeleteSnapshot={handleDeleteSnapshot}
+                onEditSnapshot={handleEditSnapshot}
+                onCloneSnapshot={handleCloneSnapshot}
+                onCreateBlankSnapshot={handleCreateBlankSnapshot}
+              />
+            </div>
+          ) : null}
           {showRegionEditor ? <RegionEditor /> : null}
-          <SnapshotManagerDialog
-            open={isSnapshotDialogOpen}
-            title="Region Snapshots"
-            description="Select a version to view, edit, clone, or switch as active."
-            snapshots={snapshots}
-            selectedSnapshotId={selectedSnapshotId}
-            isLoading={isSnapshotLoading}
-            isActing={isSnapshotActing}
-            onOpenChange={setIsSnapshotDialogOpen}
-            onSelectSnapshot={setSelectedSnapshotId}
-            onViewSnapshot={handleViewSnapshot}
-            onEditSnapshot={handleEditSnapshot}
-            onCloneSnapshot={handleCloneSnapshot}
-            onCreateBlankSnapshot={handleCreateBlankSnapshot}
-            onSwitchActiveSnapshot={handleSwitchActiveSnapshot}
-            onDeleteSnapshot={handleDeleteSnapshot}
-          />
         </div>
       </SidebarInset>
     </SidebarProvider>

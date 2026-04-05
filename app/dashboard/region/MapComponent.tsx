@@ -143,10 +143,13 @@ const RegionDrawingLayer = ({
     setGlobalOptions?: (options: object) => void;
     enableDraw?: (shape: "Polygon" | "Rectangle", options?: object) => void;
     disableDraw?: (shape: "Polygon" | "Rectangle") => void;
+    globalDrawModeEnabled?: () => boolean;
     disableGlobalDrawMode?: () => void;
     enableGlobalEditMode?: (options?: object) => void;
+    globalEditModeEnabled?: () => boolean;
     disableGlobalEditMode?: () => void;
     enableGlobalRemovalMode?: () => void;
+    globalRemovalModeEnabled?: () => boolean;
     disableGlobalRemovalMode?: () => void;
   };
 
@@ -240,9 +243,27 @@ const RegionDrawingLayer = ({
 
     pmMap.pm.disableDraw?.("Polygon");
     pmMap.pm.disableDraw?.("Rectangle");
-    pmMap.pm.disableGlobalDrawMode?.();
-    pmMap.pm.disableGlobalEditMode?.();
-    pmMap.pm.disableGlobalRemovalMode?.();
+    try {
+      if (!pmMap.pm.globalDrawModeEnabled || pmMap.pm.globalDrawModeEnabled()) {
+        pmMap.pm.disableGlobalDrawMode?.();
+      }
+    } catch {
+      // Some Geoman states can throw when disabling a mode that has no listener wiring yet.
+    }
+    try {
+      if (!pmMap.pm.globalEditModeEnabled || pmMap.pm.globalEditModeEnabled()) {
+        pmMap.pm.disableGlobalEditMode?.();
+      }
+    } catch {
+      // Some Geoman states can throw when disabling a mode that has no listener wiring yet.
+    }
+    try {
+      if (!pmMap.pm.globalRemovalModeEnabled || pmMap.pm.globalRemovalModeEnabled()) {
+        pmMap.pm.disableGlobalRemovalMode?.();
+      }
+    } catch {
+      // Some Geoman states can throw when disabling a mode that has no listener wiring yet.
+    }
     disableLayerEditing();
   }, [map, disableLayerEditing]);
 

@@ -1,7 +1,7 @@
 "use client";
 
-import { Check, PenTool, Pencil, Square, Trash2, X } from "lucide-react";
-import { useEffect, useState } from "react";
+import { Check, ChevronLeft, PenTool, Pencil, Square, Trash2 } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
 import useSWR from "swr";
 
 import { Button } from "@/components/ui/button";
@@ -38,6 +38,8 @@ export default function RegionEditor() {
   const [stationAddresses, setStationAddresses] = useState<Record<number, string>>({});
   const [stationAddressCoords, setStationAddressCoords] = useState<Record<number, string>>({});
   const [loadingAddresses, setLoadingAddresses] = useState<Set<number>>(new Set());
+  const initialDraftRef = useRef<string>("");
+  const initialDraftRegionIdRef = useRef<string | null | undefined>(undefined);
 
   const {
     editingRegionId,
@@ -45,6 +47,7 @@ export default function RegionEditor() {
     snapshotState,
     regionName,
     regionColor,
+    regionShape,
     stations,
     activeStationId,
     isAddingStation,
@@ -65,6 +68,21 @@ export default function RegionEditor() {
   } = useRegionEditor();
   const { data: me } = useSWR<MeResponse>("/api/me", $fetch);
   const isAdministrator = me?.data?.data?.role === "administrator_user";
+
+  useEffect(() => {
+    if (initialDraftRegionIdRef.current === editingRegionId) return;
+    initialDraftRegionIdRef.current = editingRegionId;
+
+    initialDraftRef.current = JSON.stringify({
+      editingRegionId,
+      snapshotName,
+      snapshotState,
+      regionName,
+      regionColor,
+      regionShape,
+      stations,
+    });
+  }, [editingRegionId, snapshotName, snapshotState, regionName, regionColor, regionShape, stations]);
 
   useEffect(() => {
     const initialAddresses: Record<number, string> = {};
@@ -142,8 +160,28 @@ export default function RegionEditor() {
     void saveRegionTemplate();
   };
 
+  const handleCloseEditor = () => {
+    const currentDraftState = JSON.stringify({
+      editingRegionId,
+      snapshotName,
+      snapshotState,
+      regionName,
+      regionColor,
+      regionShape,
+      stations,
+    });
+
+    const isDirty = initialDraftRef.current !== "" && currentDraftState !== initialDraftRef.current;
+    if (isDirty) {
+      const shouldDiscard = window.confirm("You have unsaved region changes. Discard and go back?");
+      if (!shouldDiscard) return;
+    }
+
+    closeRegionEditor();
+  };
+
   return (
-    <div className="absolute top-2 left-6 z-9999 w-1/4">
+    <div className="absolute top-2 left-6 z-9999 w-1/4 animate-in slide-in-from-left-6 duration-200">
       <Card>
         <CardHeader className="flex flex-row items-center justify-between">
           <div>
@@ -164,12 +202,13 @@ export default function RegionEditor() {
             </Button>
             <Button
               type="button"
-              size="icon"
+              size="sm"
               variant="ghost"
-              onClick={closeRegionEditor}
-              aria-label="Close region editor"
+              onClick={handleCloseEditor}
+              aria-label="Back from region editor"
             >
-              <X className="h-4 w-4" />
+              <ChevronLeft className="mr-1 h-4 w-4" />
+              Back
             </Button>
           </div>
         </CardHeader>

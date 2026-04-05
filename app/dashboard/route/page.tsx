@@ -3,15 +3,15 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { AppSidebar, type AllResponse } from "@/components/app-sidebar";
-import ClosureRegionEditor from "@/components/closure-region-editor";
+import RouteItemSidebar from "@/components/route-item-sidebar";
 import RouteEditor from "@/components/route-editor";
 import RouteListCard from "@/components/route-list-card";
-import SnapshotManagerDialog, { type SnapshotListItem } from "@/components/snapshot-manager-dialog";
+import { type SnapshotListItem } from "@/components/snapshot-types";
 import {
   SidebarInset,
   SidebarProvider,
 } from "@/components/ui/sidebar";
-import { ClosureEditorProvider, useClosureEditor } from "@/contexts/ClosureEditorContext";
+import { ClosureEditorProvider } from "@/contexts/ClosureEditorContext";
 import { RouteEditorProvider, useRouteEditor } from "@/contexts/RouteEditorContext";
 import { $fetch } from "@/lib/http/client";
 import type { IApiResponse } from "@/lib/http/ResponseComposer";
@@ -24,42 +24,17 @@ function RouteDashboardContent() {
   const [routes, setRoutes] = useState<AllResponse["routes"]>([]);
   const [selectedRoute, setSelectedRoute] = useState<AllResponse["routes"][0] | null>(null);
   const [editingRoute, setEditingRoute] = useState<AllResponse["routes"][0] | null>(null);
-  const [closures, setClosures] = useState<AllResponse["closures"]>([]);
-  const [selectedClosure, setSelectedClosure] = useState<AllResponse["closures"][0] | null>(null);
-  const [selectedClosureId, setSelectedClosureId] = useState<string | null>(null);
   const [routeFocusKey, setRouteFocusKey] = useState<string | number | null>(null);
-  const [isRouteSnapshotDialogOpen, setIsRouteSnapshotDialogOpen] = useState(false);
-  const [isClosureSnapshotDialogOpen, setIsClosureSnapshotDialogOpen] = useState(false);
   const [isSnapshotLoading, setIsSnapshotLoading] = useState(false);
   const [isSnapshotActing, setIsSnapshotActing] = useState(false);
   const [isDeletingRoute, setIsDeletingRoute] = useState(false);
-  const [isDeletingClosure, setIsDeletingClosure] = useState(false);
   const [routeSnapshots, setRouteSnapshots] = useState<SnapshotListItem[]>([]);
-  const [closureSnapshots, setClosureSnapshots] = useState<SnapshotListItem[]>([]);
   const [selectedRouteSnapshotId, setSelectedRouteSnapshotId] = useState<string | null>(null);
-  const [selectedClosureSnapshotId, setSelectedClosureSnapshotId] = useState<string | null>(null);
+  const [activeRouteSnapshotId, setActiveRouteSnapshotId] = useState<string | null>(null);
   const [snapshotCreateParentRouteId, setSnapshotCreateParentRouteId] = useState<string | null>(null);
   const selectedRouteRef = useRef<AllResponse["routes"][0] | null>(null);
-  const selectedClosureRef = useRef<AllResponse["closures"][0] | null>(null);
 
   const { isCreating, startCreating, startEditing, stopCreating } = useRouteEditor();
-  const {
-    mode: closureMode,
-    startCreating: startCreatingClosure,
-    startCreatingSnapshot: startCreatingClosureSnapshot,
-    startEditing: startEditingClosure,
-    stopEditing: stopClosureEditing,
-  } = useClosureEditor();
-
-  const selectedModeLabel = isCreating
-    ? (editingRoute ? "Edit Mode" : "Create Mode")
-    : closureMode === "editing"
-      ? "Edit Mode"
-      : closureMode === "creating"
-        ? "Create Mode"
-        : (selectedRoute || selectedClosure)
-          ? "View Mode"
-          : null;
 
   const persistedRouting = useMemo(
     () => routes.flatMap((route) => [
@@ -78,7 +53,7 @@ function RouteDashboardContent() {
       return persistedRouting;
     }
 
-    const selectedSnapshotRouting = [
+    return [
       selectedRoute.points.polylineGoingTo
         ? { color: selectedRoute.routeColor, polyline: selectedRoute.points.polylineGoingTo }
         : null,
@@ -86,43 +61,36 @@ function RouteDashboardContent() {
         ? { color: selectedRoute.routeColor, polyline: selectedRoute.points.polylineGoingBack }
         : null,
     ].filter((entry): entry is { color: string; polyline: string } => entry !== null);
-
-    const otherRoutesRouting = routes
-      .filter((route) => route.id !== selectedRoute.id)
-      .flatMap((route) => [
-        route.points.polylineGoingTo
-          ? { color: route.routeColor, polyline: route.points.polylineGoingTo }
-          : null,
-        route.points.polylineGoingBack
-          ? { color: route.routeColor, polyline: route.points.polylineGoingBack }
-          : null,
-      ].filter((entry): entry is { color: string; polyline: string } => entry !== null));
-
-    return [...otherRoutesRouting, ...selectedSnapshotRouting];
-  }, [persistedRouting, routes, selectedRoute]);
-
-  const mapClosures = useMemo(() => {
-    if (!selectedClosure) {
-      return closures;
-    }
-
-    return [selectedClosure, ...closures.filter((closure) => closure.id !== selectedClosure.id)];
-  }, [closures, selectedClosure]);
+  }, [persistedRouting, selectedRoute]);
 
   useEffect(() => {
     selectedRouteRef.current = selectedRoute;
   }, [selectedRoute]);
 
-  useEffect(() => {
-    selectedClosureRef.current = selectedClosure;
-  }, [selectedClosure]);
+  const loadRouteSnapshots = useCallback(async (route: AllResponse["routes"][0]) => {
+    setIsSnapshotLoading(true);
+    const { data, error } = await $fetch<IApiResponse<SnapshotListItem[]>>(`/api/restricted/management/route/${route.id}/snapshots`, {
+      method: "GET",
+    });
+
+    if (error) {
+      console.error("Failed to load route snapshots:", error);
+      setIsSnapshotLoading(false);
+      return;
+    }
+
+    setRouteSnapshots(data.data);
+    setSelectedRouteSnapshotId(route.activeSnapshotId);
+    setActiveRouteSnapshotId(route.activeSnapshotId);
+    setIsSnapshotLoading(false);
+  }, []);
 
   const fetchRoutes = useCallback(async () => {
     setIsFetchingRoutes(true);
     setAreRouteLayersReady(false);
     setRoutes([]);
 
-    const { data, error } = await $fetch<IApiResponse<AllResponse>>("/api/restricted/management/route", {
+    const { data, error } = await $fetch<IApiResponse<AllResponse["routes"]>>("/api/restricted/management/route", {
       method: "GET",
     });
 
@@ -133,28 +101,25 @@ function RouteDashboardContent() {
       return;
     }
 
-    const nextRoutes = data.data.routes;
-    const nextClosures = data.data.closures ?? [];
-
+    const nextRoutes = data.data;
     setRoutes(nextRoutes);
-    setClosures(nextClosures);
 
     if (selectedRouteRef.current) {
       const refreshedRoute = nextRoutes.find((route) => route.id === selectedRouteRef.current?.id) ?? null;
       setSelectedRoute(refreshedRoute);
       if (!refreshedRoute) {
         setEditingRoute(null);
+        setRouteSnapshots([]);
+        setSelectedRouteSnapshotId(null);
+        setActiveRouteSnapshotId(null);
+      } else {
+        setActiveRouteSnapshotId(refreshedRoute.activeSnapshotId);
+        void loadRouteSnapshots(refreshedRoute);
       }
     }
 
-    if (selectedClosureRef.current) {
-      const refreshedClosure = nextClosures.find((closure) => closure.id === selectedClosureRef.current?.id) ?? null;
-      setSelectedClosure(refreshedClosure);
-      setSelectedClosureId(refreshedClosure?.id ?? null);
-    }
-
     setIsFetchingRoutes(false);
-  }, []);
+  }, [loadRouteSnapshots]);
 
   const isRoutesLoading = isFetchingRoutes || !areRouteLayersReady;
 
@@ -168,11 +133,20 @@ function RouteDashboardContent() {
     };
   }, [fetchRoutes]);
 
-  const handleShowRoutes = () => {
-    stopClosureEditing();
-    setSelectedClosureId(null);
-    setSelectedClosure(null);
+  const fetchRouteSnapshot = async (routeId: string, snapshotId: string) => {
+    const { data, error } = await $fetch<IApiResponse<AllResponse["routes"][0]>>(`/api/restricted/management/route/${routeId}/${snapshotId}`, {
+      method: "GET",
+    });
 
+    if (error) {
+      console.error("Failed to load route snapshot:", error);
+      return null;
+    }
+
+    return data.data;
+  };
+
+  const handleShowRoutes = () => {
     if (isCreating) {
       stopCreating();
       setEditingRoute(null);
@@ -187,40 +161,21 @@ function RouteDashboardContent() {
     startCreating();
   };
 
-  const handleShowClosureRegion = () => {
-    if (isCreating) {
-      stopCreating();
-      setEditingRoute(null);
-      setSnapshotCreateParentRouteId(null);
-      setRouteFocusKey(null);
-    }
-
-    setSelectedClosureId(null);
-    setSelectedClosure(null);
-    setSelectedRoute(null);
-    startCreatingClosure();
-  };
-
-  const handleSelectClosure = (closure: AllResponse["closures"][0]) => {
-    setRouteFocusKey(null);
-    setEditingRoute(null);
-    setSnapshotCreateParentRouteId(null);
-    stopCreating();
-    stopClosureEditing();
-
-    setSelectedRoute(null);
-    setSelectedClosure(closure);
-    setSelectedClosureId(closure.id);
-  };
-
   const handleSelectRoute = (route: AllResponse["routes"][0]) => {
-    stopClosureEditing();
-    setSelectedClosureId(null);
-    setSelectedClosure(null);
     setRouteFocusKey(`${route.id}-${Date.now()}`);
     setSelectedRoute(route);
     setEditingRoute(null);
     setSnapshotCreateParentRouteId(null);
+    stopCreating();
+    void loadRouteSnapshots(route);
+  };
+
+  const handleClearSelectedRoute = () => {
+    setSelectedRoute(null);
+    setEditingRoute(null);
+    setSelectedRouteSnapshotId(null);
+    setSnapshotCreateParentRouteId(null);
+    setRouteFocusKey(null);
     stopCreating();
   };
 
@@ -241,119 +196,32 @@ function RouteDashboardContent() {
     });
   };
 
-  const openClosureEditor = (closure: AllResponse["closures"][0]) => {
-    setSelectedClosure(closure);
-    setSelectedClosureId(closure.id);
-    startEditingClosure(closure);
-  };
+  const handleDeleteRoute = async () => {
+    if (!selectedRoute || isDeletingRoute) return;
 
-  const fetchRouteSnapshot = async (routeId: string, snapshotId: string) => {
-    const { data, error } = await $fetch<IApiResponse<AllResponse["routes"][0]>>(`/api/restricted/management/route/${routeId}/${snapshotId}`, {
-      method: "GET",
+    const shouldDelete = window.confirm("Delete this route and all its snapshots? This action cannot be undone.");
+    if (!shouldDelete) return;
+
+    setIsDeletingRoute(true);
+    const { error } = await $fetch(`/api/restricted/management/route/${selectedRoute.id}`, {
+      method: "DELETE",
     });
 
     if (error) {
-      console.error("Failed to load route snapshot:", error);
-      return null;
-    }
-
-    return data.data;
-  };
-
-  const fetchClosureSnapshot = async (closureId: string, snapshotId: string) => {
-    const { data, error } = await $fetch<IApiResponse<AllResponse["closures"][0]>>(`/api/restricted/management/closure/${closureId}/${snapshotId}`, {
-      method: "GET",
-    });
-
-    if (error) {
-      console.error("Failed to load closure snapshot:", error);
-      return null;
-    }
-
-    return data.data;
-  };
-
-  const handleManageSnapshots = async () => {
-    if (selectedRoute) {
-      setIsRouteSnapshotDialogOpen(true);
-      setIsSnapshotLoading(true);
-      const { data, error } = await $fetch<IApiResponse<SnapshotListItem[]>>(`/api/restricted/management/route/${selectedRoute.id}/snapshots`, {
-        method: "GET",
-      });
-      if (!error) {
-        setRouteSnapshots(data.data);
-        setSelectedRouteSnapshotId(selectedRoute.activeSnapshotId);
-      }
-      setIsSnapshotLoading(false);
-      return;
-    }
-
-    if (selectedClosure) {
-      setIsClosureSnapshotDialogOpen(true);
-      setIsSnapshotLoading(true);
-      const { data, error } = await $fetch<IApiResponse<SnapshotListItem[]>>(`/api/restricted/management/closure/${selectedClosure.id}/snapshots`, {
-        method: "GET",
-      });
-      if (!error) {
-        setClosureSnapshots(data.data);
-        setSelectedClosureSnapshotId(selectedClosure.activeSnapshotId);
-      }
-      setIsSnapshotLoading(false);
-    }
-  };
-
-  const handleDeleteSelected = async () => {
-    if (selectedRoute && !isDeletingRoute) {
-      const shouldDelete = window.confirm("Delete this route and all its snapshots? This action cannot be undone.");
-      if (!shouldDelete) return;
-
-      setIsDeletingRoute(true);
-      const { error } = await $fetch(`/api/restricted/management/route/${selectedRoute.id}`, {
-        method: "DELETE",
-      });
-
-      if (error) {
-        console.error("Failed to delete route:", error);
-        setIsDeletingRoute(false);
-        return;
-      }
-
-      setSelectedRoute(null);
-      setEditingRoute(null);
-      setSelectedRouteSnapshotId(null);
-      setIsRouteSnapshotDialogOpen(false);
-      stopCreating();
-      setRouteFocusKey(null);
-
-      await fetchRoutes();
+      console.error("Failed to delete route:", error);
       setIsDeletingRoute(false);
       return;
     }
 
-    if (selectedClosure && !isDeletingClosure) {
-      const shouldDelete = window.confirm("Delete this closure and all its snapshots? This action cannot be undone.");
-      if (!shouldDelete) return;
+    setSelectedRoute(null);
+    setEditingRoute(null);
+    setSelectedRouteSnapshotId(null);
+    setActiveRouteSnapshotId(null);
+    stopCreating();
+    setRouteFocusKey(null);
 
-      setIsDeletingClosure(true);
-      const { error } = await $fetch(`/api/restricted/management/closure/${selectedClosure.id}`, {
-        method: "DELETE",
-      });
-
-      if (error) {
-        console.error("Failed to delete closure:", error);
-        setIsDeletingClosure(false);
-        return;
-      }
-
-      setSelectedClosure(null);
-      setSelectedClosureId(null);
-      setSelectedClosureSnapshotId(null);
-      setIsClosureSnapshotDialogOpen(false);
-      stopClosureEditing();
-
-      await fetchRoutes();
-      setIsDeletingClosure(false);
-    }
+    await fetchRoutes();
+    setIsDeletingRoute(false);
   };
 
   const handleViewRouteSnapshot = async (snapshotId: string) => {
@@ -382,7 +250,6 @@ function RouteDashboardContent() {
 
     setRouteFocusKey(`${routeSnapshot.id}-${Date.now()}`);
     openRouteEditor(routeSnapshot);
-    setIsRouteSnapshotDialogOpen(false);
   };
 
   const handleCloneRouteSnapshot = async (snapshotId: string) => {
@@ -405,21 +272,13 @@ function RouteDashboardContent() {
     setRouteFocusKey(`${routeSnapshot.id}-${Date.now()}`);
     openRouteEditor(routeSnapshot);
     setSelectedRouteSnapshotId(data.data.id);
-    setIsRouteSnapshotDialogOpen(false);
   };
 
-  const handleCreateBlankRouteSnapshot = async () => {
+  const handleSetActiveRouteSnapshot = async (snapshotId: string) => {
     if (!selectedRoute) return;
-    setRouteFocusKey(null);
-    setEditingRoute(null);
-    setSnapshotCreateParentRouteId(selectedRoute.id);
-    stopClosureEditing();
-    startCreating();
-    setIsRouteSnapshotDialogOpen(false);
-  };
 
-  const handleSwitchRouteSnapshot = async (snapshotId: string) => {
-    if (!selectedRoute) return;
+    const selectedSnapshot = routeSnapshots.find((snapshot) => snapshot.id === snapshotId);
+    if (!selectedSnapshot || selectedSnapshot.state !== "ready") return;
 
     setIsSnapshotActing(true);
     const { data, error } = await $fetch<IApiResponse<AllResponse["routes"][0]>>(`/api/restricted/management/route/${selectedRoute.id}`, {
@@ -433,12 +292,20 @@ function RouteDashboardContent() {
       return;
     }
 
-    setRouteFocusKey(`${data.data.id}-${Date.now()}`);
     setSelectedRoute(data.data);
     setSelectedRouteSnapshotId(snapshotId);
+    setActiveRouteSnapshotId(snapshotId);
+    setRouteFocusKey(`${data.data.id}-${Date.now()}`);
     setIsSnapshotActing(false);
-    setIsRouteSnapshotDialogOpen(false);
-    await fetchRoutes();
+    void loadRouteSnapshots(data.data);
+  };
+
+  const handleCreateBlankRouteSnapshot = () => {
+    if (!selectedRoute) return;
+    setRouteFocusKey(null);
+    setEditingRoute(null);
+    setSnapshotCreateParentRouteId(selectedRoute.id);
+    startCreating();
   };
 
   const handleDeleteRouteSnapshot = async (snapshotId: string) => {
@@ -468,114 +335,9 @@ function RouteDashboardContent() {
     await fetchRoutes();
   };
 
-  const handleViewClosureSnapshot = async (snapshotId: string) => {
-    if (!selectedClosure) return;
-    setIsSnapshotActing(true);
-    const closureSnapshot = await fetchClosureSnapshot(selectedClosure.id, snapshotId);
-    setIsSnapshotActing(false);
-    if (!closureSnapshot) return;
-
-    setSelectedClosure(closureSnapshot);
-    setSelectedClosureId(closureSnapshot.id);
-    stopClosureEditing();
-  };
-
-  const handleEditClosureSnapshot = async (snapshotId: string) => {
-    if (!selectedClosure) return;
-    const selectedSnapshot = closureSnapshots.find((snapshot) => snapshot.id === snapshotId);
-    if (!selectedSnapshot || selectedSnapshot.state === "ready") return;
-
-    setIsSnapshotActing(true);
-    const closureSnapshot = await fetchClosureSnapshot(selectedClosure.id, snapshotId);
-    setIsSnapshotActing(false);
-    if (!closureSnapshot) return;
-
-    openClosureEditor(closureSnapshot);
-    setIsClosureSnapshotDialogOpen(false);
-  };
-
-  const handleCloneClosureSnapshot = async (snapshotId: string) => {
-    if (!selectedClosure) return;
-
-    setIsSnapshotActing(true);
-    const { data, error } = await $fetch<IApiResponse<SnapshotListItem>>(`/api/restricted/management/closure/${selectedClosure.id}/${snapshotId}`, {
-      method: "PUT",
-    });
-    if (error) {
-      console.error("Failed to clone closure snapshot:", error);
-      setIsSnapshotActing(false);
-      return;
-    }
-
-    const closureSnapshot = await fetchClosureSnapshot(selectedClosure.id, data.data.id);
-    setIsSnapshotActing(false);
-    if (!closureSnapshot) return;
-
-    openClosureEditor(closureSnapshot);
-    setSelectedClosureSnapshotId(data.data.id);
-    setIsClosureSnapshotDialogOpen(false);
-  };
-
-  const handleCreateBlankClosureSnapshot = async () => {
-    if (!selectedClosure) return;
-
-    stopCreating();
-    setEditingRoute(null);
-    setSnapshotCreateParentRouteId(null);
-    setSelectedRoute(null);
-    setSelectedClosureId(selectedClosure.id);
-    startCreatingClosureSnapshot(selectedClosure.id);
-    setIsClosureSnapshotDialogOpen(false);
-  };
-
-  const handleSwitchClosureSnapshot = async (snapshotId: string) => {
-    if (!selectedClosure) return;
-
-    setIsSnapshotActing(true);
-    const { data, error } = await $fetch<IApiResponse<AllResponse["closures"][0]>>(`/api/restricted/management/closure/${selectedClosure.id}`, {
-      method: "PATCH",
-      body: { snapshotId },
-    });
-
-    if (error) {
-      console.error("Failed to switch closure snapshot:", error);
-      setIsSnapshotActing(false);
-      return;
-    }
-
-    setSelectedClosure(data.data);
-    setSelectedClosureId(data.data.id);
-    setSelectedClosureSnapshotId(snapshotId);
-    setIsSnapshotActing(false);
-    setIsClosureSnapshotDialogOpen(false);
-    await fetchRoutes();
-  };
-
-  const handleDeleteClosureSnapshot = async (snapshotId: string) => {
-    if (!selectedClosure) return;
-
-    const selectedSnapshot = closureSnapshots.find((snapshot) => snapshot.id === snapshotId);
-    if (!selectedSnapshot || selectedSnapshot.state === "ready") return;
-
-    const shouldDelete = window.confirm(`Delete snapshot \"${selectedSnapshot.name}\"? This action cannot be undone.`);
-    if (!shouldDelete) return;
-
-    setIsSnapshotActing(true);
-    const { error } = await $fetch(`/api/restricted/management/closure/${selectedClosure.id}/${snapshotId}`, {
-      method: "DELETE",
-    });
-
-    if (error) {
-      console.error("Failed to delete closure snapshot:", error);
-      setIsSnapshotActing(false);
-      return;
-    }
-
-    const nextSnapshots = closureSnapshots.filter((snapshot) => snapshot.id !== snapshotId);
-    setClosureSnapshots(nextSnapshots);
-    setSelectedClosureSnapshotId(nextSnapshots[0]?.id ?? null);
-    setIsSnapshotActing(false);
-    await fetchRoutes();
+  const handleSelectRouteSnapshot = async (snapshotId: string) => {
+    setSelectedRouteSnapshotId(snapshotId);
+    await handleViewRouteSnapshot(snapshotId);
   };
 
   return (
@@ -584,8 +346,6 @@ function RouteDashboardContent() {
       <SidebarInset>
         <div className="relative z-0 mt-4 flex flex-1 flex-col gap-4 overflow-hidden p-4 pt-0">
           <RouteMapComponent
-            closures={mapClosures}
-            onClosureClick={handleSelectClosure}
             isRoutesLoading={isRoutesLoading}
             onRoutesReadyChange={setAreRouteLayersReady}
             routing={mapRouting}
@@ -597,28 +357,43 @@ function RouteDashboardContent() {
             focusKey={routeFocusKey}
           />
           <RouteListCard
-            mode="route-closures"
+            mode="routes"
             routes={routes}
             regions={[]}
-            closures={closures}
+            closures={[]}
             isRoutesLoading={isRoutesLoading}
             selectedRouteId={selectedRoute?.id ?? null}
             selectedRegionId={null}
-            selectedClosureId={selectedClosureId}
+            selectedClosureId={null}
             onRouteSelect={handleSelectRoute}
-            onClosureSelect={handleSelectClosure}
-            onManageSnapshots={handleManageSnapshots}
-            onDeleteSelected={handleDeleteSelected}
-            deleteSelectedDisabled={!selectedRoute && !selectedClosure}
-            isDeletingSelected={isDeletingRoute || isDeletingClosure}
-            deleteSelectedLabel={selectedRoute ? "Route" : selectedClosure ? "Closure" : undefined}
             onAddRoute={handleShowRoutes}
-            onAddClosure={handleShowClosureRegion}
-            manageSnapshotsDisabled={!selectedRoute && !selectedClosure}
-            selectedItemVersionName={selectedRoute?.snapshotName ?? selectedClosure?.versionName ?? null}
-            selectedItemSnapshotState={selectedRoute?.snapshotState ?? selectedClosure?.snapshotState ?? null}
-            selectedItemModeLabel={selectedModeLabel}
           />
+
+          {selectedRoute ? (
+            <div
+              className={`absolute top-2 left-6 z-9998 w-1/4 transition-all duration-200 ${
+                isCreating ? "pointer-events-none -translate-x-6 opacity-0" : "translate-x-0 opacity-100"
+              }`}
+            >
+              <RouteItemSidebar
+                route={selectedRoute}
+                snapshots={routeSnapshots}
+                selectedSnapshotId={selectedRouteSnapshotId}
+                activeSnapshotId={activeRouteSnapshotId}
+                isSnapshotLoading={isSnapshotLoading}
+                isSnapshotActing={isSnapshotActing}
+                isDeletingRoute={isDeletingRoute}
+                onClose={handleClearSelectedRoute}
+                onDeleteRoute={handleDeleteRoute}
+                onSelectSnapshot={handleSelectRouteSnapshot}
+                onSetActiveSnapshot={handleSetActiveRouteSnapshot}
+                onDeleteSnapshot={handleDeleteRouteSnapshot}
+                onEditSnapshot={handleEditRouteSnapshot}
+                onCloneSnapshot={handleCloneRouteSnapshot}
+                onCreateBlankSnapshot={handleCreateBlankRouteSnapshot}
+              />
+            </div>
+          ) : null}
 
           {isCreating ? (
             <RouteEditor
@@ -640,51 +415,6 @@ function RouteDashboardContent() {
               }}
             />
           ) : null}
-          <ClosureRegionEditor onSaved={async () => {
-            await fetchRoutes();
-
-            if (selectedClosure?.id && selectedClosure?.activeSnapshotId) {
-              const refreshedSnapshot = await fetchClosureSnapshot(selectedClosure.id, selectedClosure.activeSnapshotId);
-              if (refreshedSnapshot) {
-                setSelectedClosure(refreshedSnapshot);
-                setSelectedClosureId(refreshedSnapshot.id);
-              }
-            }
-          }} />
-          <SnapshotManagerDialog
-            open={isRouteSnapshotDialogOpen}
-            title="Route Snapshots"
-            description="Select a route snapshot to view, edit, clone, or switch as active."
-            snapshots={routeSnapshots}
-            selectedSnapshotId={selectedRouteSnapshotId}
-            isLoading={isSnapshotLoading}
-            isActing={isSnapshotActing}
-            onOpenChange={setIsRouteSnapshotDialogOpen}
-            onSelectSnapshot={setSelectedRouteSnapshotId}
-            onViewSnapshot={handleViewRouteSnapshot}
-            onEditSnapshot={handleEditRouteSnapshot}
-            onCloneSnapshot={handleCloneRouteSnapshot}
-            onCreateBlankSnapshot={handleCreateBlankRouteSnapshot}
-            onSwitchActiveSnapshot={handleSwitchRouteSnapshot}
-            onDeleteSnapshot={handleDeleteRouteSnapshot}
-          />
-          <SnapshotManagerDialog
-            open={isClosureSnapshotDialogOpen}
-            title="Closure Snapshots"
-            description="Select a closure snapshot to view, edit, clone, or switch as active."
-            snapshots={closureSnapshots}
-            selectedSnapshotId={selectedClosureSnapshotId}
-            isLoading={isSnapshotLoading}
-            isActing={isSnapshotActing}
-            onOpenChange={setIsClosureSnapshotDialogOpen}
-            onSelectSnapshot={setSelectedClosureSnapshotId}
-            onViewSnapshot={handleViewClosureSnapshot}
-            onEditSnapshot={handleEditClosureSnapshot}
-            onCloneSnapshot={handleCloneClosureSnapshot}
-            onCreateBlankSnapshot={handleCreateBlankClosureSnapshot}
-            onSwitchActiveSnapshot={handleSwitchClosureSnapshot}
-            onDeleteSnapshot={handleDeleteClosureSnapshot}
-          />
         </div>
       </SidebarInset>
     </SidebarProvider>
