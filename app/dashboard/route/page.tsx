@@ -7,10 +7,22 @@ import RouteItemSidebar from "@/components/route-item-sidebar";
 import RouteEditor from "@/components/route-editor";
 import RouteListCard from "@/components/route-list-card";
 import { type SnapshotListItem } from "@/components/snapshot-types";
+import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogClose,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
 import {
   SidebarInset,
   SidebarProvider,
 } from "@/components/ui/sidebar";
+import { Switch } from "@/components/ui/switch";
 import { ClosureEditorProvider } from "@/contexts/ClosureEditorContext";
 import { RouteEditorProvider, useRouteEditor } from "@/contexts/RouteEditorContext";
 import { $fetch } from "@/lib/http/client";
@@ -22,9 +34,11 @@ function RouteDashboardContent() {
   const [isFetchingRoutes, setIsFetchingRoutes] = useState(true);
   const [areRouteLayersReady, setAreRouteLayersReady] = useState(false);
   const [routes, setRoutes] = useState<AllResponse["routes"]>([]);
+  const [closures, setClosures] = useState<AllResponse["closures"]>([]);
   const [selectedRoute, setSelectedRoute] = useState<AllResponse["routes"][0] | null>(null);
   const [editingRoute, setEditingRoute] = useState<AllResponse["routes"][0] | null>(null);
   const [routeFocusKey, setRouteFocusKey] = useState<string | number | null>(null);
+  const [showClosuresOnMap, setShowClosuresOnMap] = useState(true);
   const [isSnapshotLoading, setIsSnapshotLoading] = useState(false);
   const [isSnapshotActing, setIsSnapshotActing] = useState(false);
   const [isDeletingRoute, setIsDeletingRoute] = useState(false);
@@ -32,9 +46,15 @@ function RouteDashboardContent() {
   const [selectedRouteSnapshotId, setSelectedRouteSnapshotId] = useState<string | null>(null);
   const [activeRouteSnapshotId, setActiveRouteSnapshotId] = useState<string | null>(null);
   const [snapshotCreateParentRouteId, setSnapshotCreateParentRouteId] = useState<string | null>(null);
+  const [isMapSettingsDialogOpen, setIsMapSettingsDialogOpen] = useState(false);
   const selectedRouteRef = useRef<AllResponse["routes"][0] | null>(null);
 
   const { isCreating, startCreating, startEditing, stopCreating } = useRouteEditor();
+
+  type RouteManagementResponse = {
+    routes: AllResponse["routes"];
+    closures: AllResponse["closures"];
+  };
 
   const persistedRouting = useMemo(
     () => routes.flatMap((route) => [
@@ -90,7 +110,7 @@ function RouteDashboardContent() {
     setAreRouteLayersReady(false);
     setRoutes([]);
 
-    const { data, error } = await $fetch<IApiResponse<AllResponse["routes"]>>("/api/restricted/management/route", {
+    const { data, error } = await $fetch<IApiResponse<RouteManagementResponse>>("/api/restricted/management/route", {
       method: "GET",
     });
 
@@ -101,8 +121,10 @@ function RouteDashboardContent() {
       return;
     }
 
-    const nextRoutes = data.data;
+    const nextRoutes = data.data.routes;
+    const nextClosures = data.data.closures;
     setRoutes(nextRoutes);
+    setClosures(nextClosures);
 
     if (selectedRouteRef.current) {
       const refreshedRoute = nextRoutes.find((route) => route.id === selectedRouteRef.current?.id) ?? null;
@@ -155,6 +177,7 @@ function RouteDashboardContent() {
       return;
     }
 
+    setShowClosuresOnMap(true);
     setEditingRoute(null);
     setSnapshotCreateParentRouteId(null);
     setRouteFocusKey(null);
@@ -180,6 +203,7 @@ function RouteDashboardContent() {
   };
 
   const openRouteEditor = (route: AllResponse["routes"][0]) => {
+    setShowClosuresOnMap(true);
     setSelectedRoute(route);
     setEditingRoute(route);
     setSnapshotCreateParentRouteId(null);
@@ -349,6 +373,8 @@ function RouteDashboardContent() {
             isRoutesLoading={isRoutesLoading}
             onRoutesReadyChange={setAreRouteLayersReady}
             routing={mapRouting}
+            closures={closures}
+            showClosuresOnMap={showClosuresOnMap}
             focusedWaypoints={selectedRoute
               ? [...selectedRoute.points.goingTo]
                 .sort((a, b) => a.sequence - b.sequence)
@@ -367,6 +393,8 @@ function RouteDashboardContent() {
             selectedClosureId={null}
             onRouteSelect={handleSelectRoute}
             onAddRoute={handleShowRoutes}
+            onOpenRouteMapSettings={() => setIsMapSettingsDialogOpen(true)}
+            routeMapSettingsLabel="Map Settings"
           />
 
           {selectedRoute ? (
@@ -415,6 +443,39 @@ function RouteDashboardContent() {
               }}
             />
           ) : null}
+
+          <Dialog open={isMapSettingsDialogOpen} onOpenChange={setIsMapSettingsDialogOpen}>
+            <DialogContent className="sm:max-w-md">
+              <DialogHeader>
+                <DialogTitle>Map Settings</DialogTitle>
+                <DialogDescription>
+                  Control route-editor map overlays.
+                </DialogDescription>
+              </DialogHeader>
+
+              <div className="flex items-center justify-between rounded-md border p-3">
+                <div className="space-y-1">
+                  <Label htmlFor="show-road-closures">Show road closures on map</Label>
+                  <p className="text-muted-foreground text-xs">
+                    Displays active, ready closures while editing this route.
+                  </p>
+                </div>
+                <Switch
+                  id="show-road-closures"
+                  checked={showClosuresOnMap}
+                  onCheckedChange={setShowClosuresOnMap}
+                />
+              </div>
+
+              <DialogFooter>
+                <DialogClose asChild>
+                  <Button type="button" variant="outline">
+                    Close
+                  </Button>
+                </DialogClose>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
         </div>
       </SidebarInset>
     </SidebarProvider>

@@ -89,7 +89,12 @@ const getErrorMessage = (error: unknown, fallbackMessage: string) => {
   return fallbackMessage;
 };
 
-export default function RouteEditor({ editingRoute, snapshotParentRouteId, onSaved, onClosed }: RouteEditorProps) {
+export default function RouteEditor({
+  editingRoute,
+  snapshotParentRouteId,
+  onSaved,
+  onClosed,
+}: RouteEditorProps) {
   const [snapshotName, setSnapshotName] = useState("v1");
   const [snapshotState, setSnapshotState] = useState<"wip" | "for_approval" | "ready">("wip");
   const [routeNumber, setRouteNumber] = useState("");
@@ -567,6 +572,7 @@ export default function RouteEditor({ editingRoute, snapshotParentRouteId, onSav
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
     </div>
   );
 }

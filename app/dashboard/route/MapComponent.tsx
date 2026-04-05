@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { MapContainer, Marker, Polyline, useMap, useMapEvents } from "react-leaflet";
+import { MapContainer, Marker, Polygon, Polyline, Tooltip, useMap, useMapEvents } from "react-leaflet";
 import L from "leaflet";
 
 import "@maplibre/maplibre-gl-leaflet";
@@ -438,8 +438,46 @@ const DirectionArrows = ({ routeCoordinates }: DirectionArrowsProps) => {
   );
 };
 
+const ClosureRegionsLayer = ({ closures }: ClosureRegionsLayerProps) => {
+  return (
+    <>
+      {closures.map((closure) => {
+        const sortedPoints = [...closure.points]
+          .sort((a, b) => a.sequence - b.sequence)
+          .map((point) => [Number(point.point[0]), Number(point.point[1])] as [number, number])
+          .filter(([lat, lng]) => Number.isFinite(lat) && Number.isFinite(lng));
+
+        if (sortedPoints.length < 3) {
+          return null;
+        }
+
+        return (
+          <Polygon
+            key={closure.id}
+            positions={sortedPoints}
+            pathOptions={{
+              color: "#e81123",
+              fillColor: "#e81123",
+              fillOpacity: 0.25,
+              weight: 2,
+            }}
+          >
+            {closure.closureName ? (
+              <Tooltip permanent direction="center" opacity={1} className="region-name-label">
+                {closure.closureName}
+              </Tooltip>
+            ) : null}
+          </Polygon>
+        );
+      })}
+    </>
+  );
+};
+
 export default function RouteMapComponent({
   routing,
+  closures,
+  showClosuresOnMap = true,
   focusedWaypoints,
   focusKey,
   isRoutesLoading = false,
@@ -491,6 +529,7 @@ export default function RouteMapComponent({
   }, [routing, isCreating, onRoutesReadyChange]);
 
   const shouldRenderDirectionArrows = isCreating && activeRoutingWaypoints.length >= 2;
+  const shouldRenderClosureOverlay = showClosuresOnMap;
   const showRouteLoadingOverlay = isRoutesLoading || isPreparingRoutes;
 
   return (
@@ -521,6 +560,10 @@ export default function RouteMapComponent({
             />
           ))
           : null}
+
+        {shouldRenderClosureOverlay && closures?.length
+          ? <ClosureRegionsLayer closures={closures} />
+          : null}
       </MapContainer>
 
       {showRouteLoadingOverlay ? (
@@ -547,10 +590,24 @@ interface DirectionArrowsProps {
 
 export interface RouteMapProps {
   routing?: Array<{ polyline: string; color: string }>;
+  closures?: Array<{
+    id: string;
+    closureName: string;
+    points: Array<{
+      id: string;
+      sequence: number;
+      point: [number, number];
+    }>;
+  }>;
+  showClosuresOnMap?: boolean;
   focusedWaypoints?: Array<[number, number]>;
   focusKey?: string | number | null;
   isRoutesLoading?: boolean;
   onRoutesReadyChange?: (isReady: boolean) => void;
+}
+
+interface ClosureRegionsLayerProps {
+  closures: NonNullable<RouteMapProps["closures"]>;
 }
 
 interface FocusRouteViewProps {

@@ -5,6 +5,7 @@ import { useState } from "react";
 import type { AllResponse } from "@/components/app-sidebar";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Separator } from "@/components/ui/separator";
 
 export default function RouteListCard({
   mode = "all",
@@ -21,6 +22,8 @@ export default function RouteListCard({
   onAddRoute,
   onAddRegion,
   onAddClosure,
+  onOpenRouteMapSettings,
+  routeMapSettingsLabel,
 }: RouteListCardProps) {
   const [viewMode, setViewMode] = useState<"routes" | "regions" | "closures">(
     mode === "regions"
@@ -237,6 +240,15 @@ export default function RouteListCard({
                     Add Region
                   </Button>
                 ) : null}
+
+                {onOpenRouteMapSettings && viewMode === "routes" ? (
+                  <>
+                    <Separator />
+                    <Button type="button" size="sm" variant="secondary" onClick={onOpenRouteMapSettings}>
+                      {routeMapSettingsLabel ?? "Map Settings"}
+                    </Button>
+                  </>
+                ) : null}
               </div>
             </div>
           ) : null}
@@ -261,4 +273,6 @@ interface RouteListCardProps {
   onAddRoute?: () => void;
   onAddRegion?: () => void;
   onAddClosure?: () => void;
+  onOpenRouteMapSettings?: () => void;
+  routeMapSettingsLabel?: string;
 }
