@@ -41,6 +41,7 @@ export interface RegionStationDraft {
 }
 
 export type ActiveRegionTool = "none" | "draw-polygon" | "draw-rectangle" | "edit-region";
+export type RegionEditorPage = "main" | "stations";
 
 const getErrorMessage = (error: unknown, fallbackMessage: string) => {
   if (error instanceof Error && error.message) {
@@ -92,6 +93,7 @@ interface RegionEditorContextType {
   stations: RegionStationDraft[];
   activeStationId: number | null;
   isAddingStation: boolean;
+  editorPage: RegionEditorPage;
   activeRegionTool: ActiveRegionTool;
   hasDefinedPolygon: boolean;
   mutationVersion: number;
@@ -106,6 +108,7 @@ interface RegionEditorContextType {
   setRegionColor: (color: string) => void;
   setRegionShape: (shape: RegionDraftShape | null) => void;
   setActiveStationId: (id: number | null) => void;
+  setEditorPage: (page: RegionEditorPage) => void;
   setActiveRegionTool: (tool: ActiveRegionTool) => void;
   finishRegionToolEditing: () => void;
   startAddingStation: () => void;
@@ -133,6 +136,7 @@ export function RegionEditorProvider({ children }: { children: React.ReactNode }
   const [activeStationId, setActiveStationId] = useState<number | null>(null);
   const [stationCounter, setStationCounter] = useState(0);
   const [isAddingStation, setIsAddingStation] = useState(false);
+  const [editorPage, setEditorPage] = useState<RegionEditorPage>("main");
   const [activeRegionTool, setActiveRegionToolState] = useState<ActiveRegionTool>("none");
   const [mutationVersion, setMutationVersion] = useState(0);
 
@@ -153,6 +157,7 @@ export function RegionEditorProvider({ children }: { children: React.ReactNode }
     setActiveStationId(null);
     setStationCounter(0);
     setIsAddingStation(false);
+    setEditorPage("main");
     setActiveRegionToolState("none");
   };
 
@@ -169,6 +174,7 @@ export function RegionEditorProvider({ children }: { children: React.ReactNode }
     setActiveStationId(null);
     setStationCounter(0);
     setIsAddingStation(false);
+    setEditorPage("main");
     setActiveRegionToolState("none");
   };
 
@@ -202,6 +208,7 @@ export function RegionEditorProvider({ children }: { children: React.ReactNode }
     setActiveStationId(mappedStations.length > 0 ? mappedStations[0].id : null);
     setStationCounter(mappedStations.length);
     setIsAddingStation(false);
+    setEditorPage("main");
     setActiveRegionToolState("none");
   };
 
@@ -216,6 +223,7 @@ export function RegionEditorProvider({ children }: { children: React.ReactNode }
     setActiveStationId(null);
     setStationCounter(0);
     setIsAddingStation(false);
+    setEditorPage("main");
     setActiveRegionToolState("none");
   };
 
@@ -262,7 +270,6 @@ export function RegionEditorProvider({ children }: { children: React.ReactNode }
     setStations((prev) => [...prev, newStation]);
     setStationCounter((prev) => prev + 1);
     setActiveStationId(newStation.id);
-    setIsAddingStation(false);
   }, [stationCounter]);
 
   const updateStation = useCallback((id: number, lat: number, lng: number) => {
@@ -393,6 +400,7 @@ export function RegionEditorProvider({ children }: { children: React.ReactNode }
     stations,
     activeStationId,
     isAddingStation,
+    editorPage,
     activeRegionTool,
     hasDefinedPolygon: regionShape !== null,
     mutationVersion,
@@ -406,6 +414,7 @@ export function RegionEditorProvider({ children }: { children: React.ReactNode }
     setRegionColor,
     setRegionShape: handleSetRegionShape,
     setActiveStationId,
+    setEditorPage,
     setActiveRegionTool,
     finishRegionToolEditing,
     startAddingStation,

@@ -12,6 +12,7 @@ export interface Waypoint {
 }
 
 export type RouteDirection = "goingTo" | "goingBack";
+export type RouteEditorPage = "main" | "waypoints";
 
 export interface RouteDirectionalWaypoints {
   goingTo: Waypoint[];
@@ -23,6 +24,8 @@ export interface RouteEditorContextType {
   isCreating: boolean;
   selectedColor: string;
   activeDirection: RouteDirection;
+  editorPage: RouteEditorPage;
+  waypointsByDirection: RouteDirectionalWaypoints;
   waypointCounts: Record<RouteDirection, number>;
   waypoints: Waypoint[];
   activePointIndex: number | null;
@@ -39,6 +42,7 @@ export interface RouteEditorContextType {
   stopCreating: () => void;
   setSelectedColor: (color: string) => void;
   setActiveDirection: (direction: RouteDirection) => void;
+  setEditorPage: (page: RouteEditorPage) => void;
   addWaypoint: (lat: number, lng: number) => void;
   removeWaypoint: (id: number) => void;
   reorderWaypoints: (draggedId: number, targetId: number) => void;
@@ -71,6 +75,7 @@ export function RouteEditorProvider({
   const [isCreating, setIsCreating] = useState(false);
   const [selectedColor, setSelectedColor] = useState("#fff100");
   const [activeDirection, setActiveDirection] = useState<RouteDirection>("goingTo");
+  const [editorPage, setEditorPage] = useState<RouteEditorPage>("main");
   const [waypointsByDirection, setWaypointsByDirection] = useState<RouteDirectionalWaypoints>({
     goingTo: [],
     goingBack: [],
@@ -92,6 +97,7 @@ export function RouteEditorProvider({
   const startCreating = useCallback(() => {
     setIsCreating(true);
     setActiveDirection("goingTo");
+    setEditorPage("main");
     setWaypointsByDirection({ goingTo: [], goingBack: [] });
     setWaypointCounter(0);
     setActivePointByDirection({ goingTo: null, goingBack: null });
@@ -124,6 +130,7 @@ export function RouteEditorProvider({
 
     setIsCreating(true);
     setActiveDirection("goingTo");
+    setEditorPage("main");
     setSelectedColor(payload.color);
     setWaypointsByDirection({
       goingTo: mappedGoingTo,
@@ -139,6 +146,7 @@ export function RouteEditorProvider({
   const stopCreating = useCallback(() => {
     setIsCreating(false);
     setActiveDirection("goingTo");
+    setEditorPage("main");
     setWaypointsByDirection({ goingTo: [], goingBack: [] });
     setActivePointByDirection({ goingTo: null, goingBack: null });
     setWaypointCounter(0);
@@ -278,6 +286,8 @@ export function RouteEditorProvider({
     isCreating,
     selectedColor,
     activeDirection,
+    editorPage,
+    waypointsByDirection,
     waypointCounts,
     waypoints: activeWaypoints,
     activePointIndex: activePointByDirection[activeDirection],
@@ -288,6 +298,7 @@ export function RouteEditorProvider({
     stopCreating,
     setSelectedColor,
     setActiveDirection,
+    setEditorPage,
     addWaypoint,
     removeWaypoint,
     reorderWaypoints,

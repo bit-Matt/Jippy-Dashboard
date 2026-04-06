@@ -111,9 +111,11 @@ export default function RouteEditor({
   const {
     selectedColor,
     activeDirection,
+    editorPage,
     waypointCounts,
     setSelectedColor,
     setActiveDirection,
+    setEditorPage,
     waypoints,
     activePointIndex,
     setActivePointIndex,
@@ -306,8 +308,18 @@ export default function RouteEditor({
     setAvailableFrom("00:00");
     setAvailableTo("23:59");
     clearAllWaypoints();
+    setEditorPage("main");
     stopCreating();
     onClosed?.();
+  };
+
+  const handleOpenWaypointEditor = () => {
+    setEditorPage("waypoints");
+  };
+
+  const handleCloseWaypointEditor = () => {
+    cleanupDragPreview();
+    setEditorPage("main");
   };
 
   const handleWaypointDragStart = (
@@ -356,9 +368,11 @@ export default function RouteEditor({
   return (
     <div className="absolute top-2 left-6 z-9999 w-1/4 animate-in slide-in-from-left-6 duration-200">
       <Card>
-        <CardHeader className="flex flex-row items-center justify-between">
+        <CardHeader className="flex flex-row items-center justify-between px-3 pt-1.5 pb-2">
           <div>
-            <h2 className="text-base font-semibold">{editingRoute ? "Edit Route" : "Add Route"}</h2>
+            <h2 className="text-base font-semibold">
+              {editorPage === "waypoints" ? "Manage Waypoints" : editingRoute ? "Edit Route" : "Add Route"}
+            </h2>
             <Badge className="mt-1" variant={editingRoute ? "default" : "secondary"}>
               {editingRoute ? "Edit Mode" : "Create Mode"}
             </Badge>
@@ -375,222 +389,247 @@ export default function RouteEditor({
               type="button"
               size="sm"
               variant="ghost"
-              onClick={handleCloseEditor}
-              aria-label="Back from route editor"
+              onClick={editorPage === "waypoints" ? handleCloseWaypointEditor : handleCloseEditor}
+              aria-label={editorPage === "waypoints" ? "Back from waypoint manager" : "Back from route editor"}
             >
               <ChevronLeft className="mr-1 h-4 w-4" />
               Back
             </Button>
           </div>
         </CardHeader>
-        <CardContent className="flex max-h-[75vh] flex-col space-y-5 overflow-hidden">
-          <div className="space-y-3">
-            <div className="flex items-end gap-3">
-              <div className="w-28 shrink-0 space-y-2">
-                <Label htmlFor="route-version">Version</Label>
-                <Input
-                  id="route-version"
-                  placeholder="e.g., v1"
-                  value={snapshotName}
-                  onChange={(e) => setSnapshotName(e.target.value)}
-                />
+        <CardContent className="max-h-[75vh] overflow-hidden p-1">
+          <div
+            className={`flex w-[200%] items-start transition-transform duration-300 ease-out ${
+              editorPage === "waypoints" ? "-translate-x-1/2" : "translate-x-0"
+            }`}
+          >
+            <div className="flex w-1/2 shrink-0 flex-col space-y-3 overflow-y-auto p-2">
+              <div className="space-y-2">
+                <div className="flex items-end gap-3">
+                  <div className="w-28 shrink-0 space-y-2">
+                    <Label htmlFor="route-version">Version</Label>
+                    <Input
+                      id="route-version"
+                      placeholder="e.g., v1"
+                      value={snapshotName}
+                      onChange={(e) => setSnapshotName(e.target.value)}
+                    />
+                  </div>
+                  <div className="grow shrink-0 space-y-2">
+                    <Label>Snapshot State</Label>
+                    <Select value={snapshotState} onValueChange={(value) => setSnapshotState(value as "wip" | "for_approval" | "ready")}>
+                      <SelectTrigger className="w-full">
+                        <SelectValue placeholder="Select state" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="wip">WIP</SelectItem>
+                        <SelectItem value="for_approval">For Approval</SelectItem>
+                        {isAdministrator ? <SelectItem value="ready">Ready</SelectItem> : null}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+                <div className="flex items-end gap-3">
+                  <div className="w-20 shrink-0 space-y-2">
+                    <Label htmlFor="route-number">Route No.</Label>
+                    <Input
+                      id="route-number"
+                      placeholder="e.g., 101"
+                      value={routeNumber}
+                      onChange={(e) => setRouteNumber(e.target.value)}
+                    />
+                  </div>
+                  <div className="min-w-0 flex-1 space-y-2">
+                    <Label htmlFor="route-name">Route Name</Label>
+                    <Input
+                      id="route-name"
+                      placeholder="e.g., Downtown Express"
+                      value={routeName}
+                      onChange={(e) => setRouteName(e.target.value)}
+                    />
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <Label>Route Details</Label>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="w-full justify-start"
+                    onClick={handleOpenRouteDetails}
+                  >
+                    Add Route Details
+                  </Button>
+                  <p className="text-xs text-muted-foreground">
+                    {routeDetails.trim().length > 0
+                      ? `Details saved (${routeDetails.trim().length} characters).`
+                      : "No route details added yet."}
+                  </p>
+                </div>
+                <div className="space-y-2">
+                  <Label>Availability Window</Label>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div className="space-y-1">
+                      <Label htmlFor="route-available-from" className="text-xs">Available From</Label>
+                      <Input
+                        id="route-available-from"
+                        type="time"
+                        value={availableFrom}
+                        onChange={(e) => setAvailableFrom(e.target.value)}
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <Label htmlFor="route-available-to" className="text-xs">Available To</Label>
+                      <Input
+                        id="route-available-to"
+                        type="time"
+                        value={availableTo}
+                        onChange={(e) => setAvailableTo(e.target.value)}
+                      />
+                    </div>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Default full-day service is 00:00 to 23:59.
+                  </p>
+                  {!isRouteAvailabilityValid ? (
+                    <p className="text-xs text-destructive">
+                      Availability range is invalid. Available From must be earlier than or equal to Available To.
+                    </p>
+                  ) : null}
+                </div>
               </div>
-              <div className="grow shrink-0 space-y-2">
-                <Label>Snapshot State</Label>
-                <Select value={snapshotState} onValueChange={(value) => setSnapshotState(value as "wip" | "for_approval" | "ready")}>
+
+              <div className="space-y-2">
+                <Label>Route Color</Label>
+                <Select value={selectedColor} onValueChange={setSelectedColor}>
                   <SelectTrigger className="w-full">
-                    <SelectValue placeholder="Select state" />
+                    <SelectValue placeholder="Select route color" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="wip">WIP</SelectItem>
-                    <SelectItem value="for_approval">For Approval</SelectItem>
-                    {isAdministrator ? <SelectItem value="ready">Ready</SelectItem> : null}
+                    {ROUTE_COLORS.map((color) => (
+                      <SelectItem key={color.value} value={color.value}>
+                        <span className="flex items-center gap-2">
+                          <span
+                            aria-hidden="true"
+                            className="h-2.5 w-2.5 rounded-full"
+                            style={{ backgroundColor: color.value }}
+                          />
+                          {color.label}
+                        </span>
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </div>
-            </div>
-            <div className="flex items-end gap-3">
-              <div className="w-20 shrink-0 space-y-2">
-                <Label htmlFor="route-number">Route No.</Label>
-                <Input
-                  id="route-number"
-                  placeholder="e.g., 101"
-                  value={routeNumber}
-                  onChange={(e) => setRouteNumber(e.target.value)}
-                />
-              </div>
-              <div className="min-w-0 flex-1 space-y-2">
-                <Label htmlFor="route-name">Route Name</Label>
-                <Input
-                  id="route-name"
-                  placeholder="e.g., Downtown Express"
-                  value={routeName}
-                  onChange={(e) => setRouteName(e.target.value)}
-                />
+
+              <div className="space-y-2">
+                <Label>Waypoints</Label>
+                <Button
+                  type="button"
+                  className="w-full"
+                  variant="outline"
+                  onClick={handleOpenWaypointEditor}
+                >
+                  Manage Waypoints
+                </Button>
               </div>
             </div>
-            <div className="space-y-2">
-              <Label>Route Details</Label>
-              <Button
-                type="button"
-                variant="outline"
-                className="w-full justify-start"
-                onClick={handleOpenRouteDetails}
-              >
-                Add Route Details
-              </Button>
-              <p className="text-xs text-muted-foreground">
-                {routeDetails.trim().length > 0
-                  ? `Details saved (${routeDetails.trim().length} characters).`
-                  : "No route details added yet."}
-              </p>
-            </div>
-            <div className="space-y-2">
-              <Label>Availability Window</Label>
-              <div className="grid grid-cols-2 gap-2">
-                <div className="space-y-1">
-                  <Label htmlFor="route-available-from" className="text-xs">Available From</Label>
-                  <Input
-                    id="route-available-from"
-                    type="time"
-                    value={availableFrom}
-                    onChange={(e) => setAvailableFrom(e.target.value)}
-                  />
-                </div>
-                <div className="space-y-1">
-                  <Label htmlFor="route-available-to" className="text-xs">Available To</Label>
-                  <Input
-                    id="route-available-to"
-                    type="time"
-                    value={availableTo}
-                    onChange={(e) => setAvailableTo(e.target.value)}
-                  />
-                </div>
-              </div>
-              <p className="text-xs text-muted-foreground">
-                Default full-day service is 00:00 to 23:59.
-              </p>
-              {!isRouteAvailabilityValid ? (
-                <p className="text-xs text-destructive">
-                  Availability range is invalid. Available From must be earlier than or equal to Available To.
-                </p>
-              ) : null}
-            </div>
-          </div>
 
-          <div className="space-y-2">
-            <Label>Route Color</Label>
-            <Select value={selectedColor} onValueChange={setSelectedColor}>
-              <SelectTrigger className="w-full">
-                <SelectValue placeholder="Select route color" />
-              </SelectTrigger>
-              <SelectContent>
-                {ROUTE_COLORS.map((color) => (
-                  <SelectItem key={color.value} value={color.value}>
-                    <span className="flex items-center gap-2">
-                      <span
-                        aria-hidden="true"
-                        className="h-2.5 w-2.5 rounded-full"
-                        style={{ backgroundColor: color.value }}
-                      />
-                      {color.label}
-                    </span>
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
+            <div className="flex w-1/2 shrink-0 flex-col space-y-2 overflow-y-auto p-2">
 
-          <div className="space-y-2">
-            <Label>Direction</Label>
-            <div className="bg-muted inline-flex rounded-md p-0.5 w-full">
-              <button
-                type="button"
-                onClick={() => setActiveDirection("goingTo")}
-                className={`grow rounded px-2 py-1 text-xs transition-colors ${
-                  activeDirection === "goingTo" ? "bg-background text-foreground shadow-xs" : "text-muted-foreground"
-                }`}
-              >
-                Going To City ({waypointCounts.goingTo})
-              </button>
-              <button
-                type="button"
-                onClick={() => setActiveDirection("goingBack")}
-                className={`grow rounded px-2 py-1 text-xs transition-colors ${
-                  activeDirection === "goingBack" ? "bg-background text-foreground shadow-xs" : "text-muted-foreground"
-                }`}
-              >
-                Going Back ({waypointCounts.goingBack})
-              </button>
-            </div>
-          </div>
-
-          <div className="flex-1 space-y-3 overflow-y-auto pr-1 max-h-72.5">
-            {waypoints.map((waypoint, index) => (
-              <div
-                key={waypoint.id}
-                draggable
-                className={`space-y-3 rounded-lg border bg-background p-3 ${
-                  activePointIndex === waypoint.id ? "border-primary" : "border-border"
-                }`}
-                onDragStart={(event) => handleWaypointDragStart(event, waypoint.id)}
-                onDragOver={(event) => event.preventDefault()}
-                onDrop={(event) => {
-                  event.preventDefault();
-
-                  if (draggedWaypointId === null) return;
-                  reorderWaypoints(draggedWaypointId, waypoint.id);
-                  cleanupDragPreview();
-                }}
-                onDragEnd={cleanupDragPreview}
-                onClick={() => setActivePointIndex(waypoint.id)}
-              >
-                <div className="flex items-center justify-between">
-                  <span className="text-sm font-medium">
-                    {activeDirection === "goingTo" ? "Going To" : "Going Back"} Waypoint {index + 1}
-                  </span>
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      removeWaypoint(waypoint.id);
-                    }}
+              <div className="space-y-2">
+                <Label>Direction</Label>
+                <div className="bg-muted inline-flex rounded-md p-0.5 w-full">
+                  <button
+                    type="button"
+                    onClick={() => setActiveDirection("goingTo")}
+                    className={`grow rounded px-2 py-1 text-xs transition-colors ${
+                      activeDirection === "goingTo" ? "bg-background text-foreground shadow-xs" : "text-muted-foreground"
+                    }`}
                   >
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
+                    Going To City ({waypointCounts.goingTo})
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setActiveDirection("goingBack")}
+                    className={`grow rounded px-2 py-1 text-xs transition-colors ${
+                      activeDirection === "goingBack" ? "bg-background text-foreground shadow-xs" : "text-muted-foreground"
+                    }`}
+                  >
+                    Going Back ({waypointCounts.goingBack})
+                  </button>
                 </div>
-                <InputGroup>
-                  <InputGroupInput
-                    readOnly
-                    value={waypoint.address || (loadingAddresses.has(waypoint.id) ? "Loading address..." : "Click on map to add waypoint")}
-                    placeholder="Address"
-                    title={waypoint.address}
-                  />
-                  <InputGroupAddon align="inline-end" className="pr-2">
-                    <InputGroupButton aria-label={`Pin waypoint ${index + 1}`}>
-                      <MapPin />
-                    </InputGroupButton>
-                  </InputGroupAddon>
-                </InputGroup>
               </div>
-            ))}
+
+              <div className="max-h-[22rem] space-y-2 overflow-y-auto pr-1">
+                {waypoints.map((waypoint, index) => (
+                  <div
+                    key={waypoint.id}
+                    draggable
+                    className={`space-y-3 rounded-lg border bg-background p-3 ${
+                      activePointIndex === waypoint.id ? "border-primary" : "border-border"
+                    }`}
+                    onDragStart={(event) => handleWaypointDragStart(event, waypoint.id)}
+                    onDragOver={(event) => event.preventDefault()}
+                    onDrop={(event) => {
+                      event.preventDefault();
+
+                      if (draggedWaypointId === null) return;
+                      reorderWaypoints(draggedWaypointId, waypoint.id);
+                      cleanupDragPreview();
+                    }}
+                    onDragEnd={cleanupDragPreview}
+                    onClick={() => setActivePointIndex(waypoint.id)}
+                  >
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm font-medium">
+                        {activeDirection === "goingTo" ? "Going To" : "Going Back"} Waypoint {index + 1}
+                      </span>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          removeWaypoint(waypoint.id);
+                        }}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
+                    <InputGroup>
+                      <InputGroupInput
+                        readOnly
+                        value={waypoint.address || (loadingAddresses.has(waypoint.id) ? "Loading address..." : "Click on map to add waypoint")}
+                        placeholder="Address"
+                        title={waypoint.address}
+                      />
+                      <InputGroupAddon align="inline-end" className="pr-2">
+                        <InputGroupButton aria-label={`Pin waypoint ${index + 1}`}>
+                          <MapPin />
+                        </InputGroupButton>
+                      </InputGroupAddon>
+                    </InputGroup>
+                  </div>
+                ))}
+              </div>
+
+              <div className="space-y-1.5 pt-0.5">
+                <Button
+                  className="w-full"
+                  variant="outline"
+                  onClick={() => {
+                    clearWaypoints();
+                  }}
+                  disabled={waypoints.length === 0}
+                >
+                  Clear Active Direction
+                </Button>
+
+                <p className="text-xs text-muted-foreground">
+                  Use the direction tabs to edit each path independently. New map clicks are added to the active direction. Each direction needs at least 2 waypoints to save.
+                </p>
+              </div>
+            </div>
           </div>
-
-          <Button
-            className="w-full"
-            variant="outline"
-            onClick={() => {
-              clearWaypoints();
-            }}
-            disabled={waypoints.length === 0}
-          >
-            Clear Active Direction
-          </Button>
-
-          <p className="text-xs text-muted-foreground">
-            Use the direction tabs to edit each path independently. New map clicks are added to the active direction. Each direction needs at least 2 waypoints to save.
-          </p>
         </CardContent>
       </Card>
 

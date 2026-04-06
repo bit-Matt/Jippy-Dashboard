@@ -104,6 +104,7 @@ const isPointInsideRegion = (shape: RegionDraftShape, point: [number, number]) =
 const MapClickHandler = () => {
   const {
     showRegionEditor,
+    editorPage,
     regionShape,
     isAddingStation,
     addStation,
@@ -111,7 +112,7 @@ const MapClickHandler = () => {
 
   useMapEvents({
     click: (e) => {
-      if (!showRegionEditor || !regionShape || !isAddingStation) {
+      if (!showRegionEditor || editorPage !== "stations" || !regionShape || !isAddingStation) {
         return;
       }
 

@@ -52,11 +52,11 @@ const fixLeafletIcons = () => {
 };
 
 const MapClickHandler = () => {
-  const { isCreating, addWaypoint } = useRouteEditor();
+  const { isCreating, editorPage, addWaypoint } = useRouteEditor();
 
   useMapEvents({
     click: (e) => {
-      if (!isCreating) return;
+      if (!isCreating || editorPage !== "waypoints") return;
       addWaypoint(e.latlng.lat, e.latlng.lng);
     },
   });
@@ -308,23 +308,30 @@ const projectPointByBearing = (
   return [lat2 * (180 / Math.PI), lng2 * (180 / Math.PI)];
 };
 
-const WaypointMarkers = () => {
-  const {
-    waypoints,
-    activePointIndex,
-    updateWaypoint,
-  } = useRouteEditor();
+const WaypointMarkers = ({
+  waypoints,
+  markerPrefix,
+  activePointIndex,
+  draggable,
+}: {
+  waypoints: Array<{ id: number; lat: number; lng: number }>;
+  markerPrefix?: string;
+  activePointIndex?: number | null;
+  draggable?: boolean;
+}) => {
+  const { updateWaypoint } = useRouteEditor();
 
   return (
     <>
       {waypoints.map((waypoint, index) => {
-        const isDraggable = waypoint.id === activePointIndex;
+        const isDraggable = Boolean(draggable) && waypoint.id === activePointIndex;
+        const markerLabel = markerPrefix ? `${markerPrefix}${index + 1}` : `${index + 1}`;
 
         return (
           <Marker
-            key={waypoint.id}
+            key={`${markerPrefix ?? "wp"}-${waypoint.id}`}
             position={[waypoint.lat, waypoint.lng]}
-            icon={createSequenceIcon(index + 1, isDraggable)}
+            icon={createSequenceIcon(markerLabel, isDraggable)}
             draggable={isDraggable}
             autoPan={true}
             eventHandlers={{
@@ -341,12 +348,18 @@ const WaypointMarkers = () => {
   );
 };
 
-const DirectionArrows = ({ routeCoordinates }: DirectionArrowsProps) => {
-  const { waypoints, selectedColor } = useRouteEditor();
+const DirectionArrows = ({
+  routeCoordinates,
+  fallbackWaypoints,
+  color,
+}: {
+  routeCoordinates: Array<[number, number]>;
+  fallbackWaypoints: Array<[number, number]>;
+  color: string;
+}) => {
 
   const arrows = useMemo(() => {
-    const fallbackCoordinates: Array<[number, number]> = waypoints.map((waypoint) => [waypoint.lat, waypoint.lng]);
-    const coordinates = routeCoordinates.length >= 2 ? routeCoordinates : fallbackCoordinates;
+    const coordinates = routeCoordinates.length >= 2 ? routeCoordinates : fallbackWaypoints;
     if (coordinates.length < 2) return [] as Array<{ key: string; lat: number; lng: number; bearing: number }>;
 
     const spacingMeters = 55;
@@ -421,7 +434,7 @@ const DirectionArrows = ({ routeCoordinates }: DirectionArrowsProps) => {
     }
 
     return results;
-  }, [waypoints, routeCoordinates]);
+  }, [fallbackWaypoints, routeCoordinates]);
 
   return (
     <>
@@ -429,7 +442,7 @@ const DirectionArrows = ({ routeCoordinates }: DirectionArrowsProps) => {
         <Marker
           key={arrow.key}
           position={[arrow.lat, arrow.lng]}
-          icon={createDirectionArrowIcon(arrow.bearing, selectedColor)}
+          icon={createDirectionArrowIcon(arrow.bearing, color)}
           interactive={false}
           keyboard={false}
         />
@@ -483,10 +496,27 @@ export default function RouteMapComponent({
   isRoutesLoading = false,
   onRoutesReadyChange,
 }: RouteMapProps) {
-  const { isCreating, waypoints, selectedColor } = useRouteEditor();
+  const {
+    isCreating,
+    editorPage,
+    waypoints,
+    waypointsByDirection,
+    activePointIndex,
+    selectedColor,
+  } = useRouteEditor();
   const [activeRouteCoordinates, setActiveRouteCoordinates] = useState<Array<[number, number]>>([]);
   const [preparedRouting, setPreparedRouting] = useState<Array<{ coordinates: Array<[number, number]>; color: string }>>([]);
   const [isPreparingRoutes, setIsPreparingRoutes] = useState(false);
+  const goingToWaypoints = useMemo(
+    () => waypointsByDirection.goingTo.map((waypoint) => [waypoint.lat, waypoint.lng] as [number, number]),
+    [waypointsByDirection.goingTo],
+  );
+  const goingBackWaypoints = useMemo(
+    () => waypointsByDirection.goingBack.map((waypoint) => [waypoint.lat, waypoint.lng] as [number, number]),
+    [waypointsByDirection.goingBack],
+  );
+  const isWaypointEditor = editorPage === "waypoints";
+  const isRouteMainEditor = editorPage === "main";
   const activeRoutingWaypoints = useMemo(
     () => waypoints.map((waypoint) => [waypoint.lat, waypoint.lng] as [number, number]),
     [waypoints],
@@ -528,7 +558,7 @@ export default function RouteMapComponent({
     };
   }, [routing, isCreating, onRoutesReadyChange]);
 
-  const shouldRenderDirectionArrows = isCreating && activeRoutingWaypoints.length >= 2;
+  const shouldRenderDirectionArrows = isCreating && isWaypointEditor && activeRoutingWaypoints.length >= 2;
   const shouldRenderClosureOverlay = showClosuresOnMap;
   const showRouteLoadingOverlay = isRoutesLoading || isPreparingRoutes;
 
@@ -540,10 +570,50 @@ export default function RouteMapComponent({
         <MapClickHandler />
         <FocusRouteView focusKey={focusKey} focusedWaypoints={focusedWaypoints} />
 
-        {isCreating ? <WaypointMarkers /> : null}
-        {shouldRenderDirectionArrows ? <DirectionArrows routeCoordinates={activeRouteCoordinates} /> : null}
+        {isCreating && isWaypointEditor ? (
+          <WaypointMarkers
+            waypoints={waypoints}
+            activePointIndex={activePointIndex}
+            draggable
+          />
+        ) : null}
 
-        {isCreating && activeRoutingWaypoints.length >= 2 ? (
+        {isCreating && isRouteMainEditor ? (
+          <>
+            <WaypointMarkers
+              waypoints={waypointsByDirection.goingTo}
+              markerPrefix="T"
+              draggable={false}
+            />
+            <WaypointMarkers
+              waypoints={waypointsByDirection.goingBack}
+              markerPrefix="B"
+              draggable={false}
+            />
+            {goingToWaypoints.length >= 2 ? (
+              <RoutingMachine
+                waypoints={goingToWaypoints}
+                color={selectedColor}
+              />
+            ) : null}
+            {goingBackWaypoints.length >= 2 ? (
+              <RoutingMachine
+                waypoints={goingBackWaypoints}
+                color={selectedColor}
+              />
+            ) : null}
+          </>
+        ) : null}
+
+        {shouldRenderDirectionArrows ? (
+          <DirectionArrows
+            routeCoordinates={activeRouteCoordinates}
+            fallbackWaypoints={activeRoutingWaypoints}
+            color={selectedColor}
+          />
+        ) : null}
+
+        {isCreating && isWaypointEditor && activeRoutingWaypoints.length >= 2 ? (
           <RoutingMachine
             waypoints={activeRoutingWaypoints}
             color={selectedColor}
@@ -582,10 +652,6 @@ export interface RoutingMachineProps {
   waypoints: Array<[number, number]>;
   color: string;
   onRouteCoordinatesChange?: (coordinates: Array<[number, number]>) => void;
-}
-
-interface DirectionArrowsProps {
-  routeCoordinates: Array<[number, number]>;
 }
 
 export interface RouteMapProps {
