@@ -191,7 +191,7 @@ export async function getRouteById(routeId: string, snapshotId?: string): Promis
  * - `Failure` with `ErrorCodes.ResourceNotFound` if the route does not exist.
  * - `Failure` with `ErrorCodes.Fatal` if an unexpected error occurs.
  */
-export async function createSnapshot(routeId: string, params: AddRouteParameters): Promise<Result<RouteObject>> {
+export async function createSnapshot(routeId: string, params: AddRouteParameters, ownerId: string): Promise<Result<RouteObject>> {
   try {
     const [route] = await db
       .select({ id: routes.id })
@@ -207,6 +207,7 @@ export async function createSnapshot(routeId: string, params: AddRouteParameters
       const [snapshot] = await tx
         .insert(routeSnapshots)
         .values({
+          ownerId,
           versionName: params.snapshotName,
           snapshotState: params.snapshotState ?? "wip",
           routeId: route.id,
@@ -303,7 +304,7 @@ export async function createSnapshot(routeId: string, params: AddRouteParameters
  * - `Failure` with `ErrorCodes.ResourceNotFound` if the source snapshot is not found.
  * - `Failure` with `ErrorCodes.Fatal` if cloning fails unexpectedly.
  */
-export async function copySnapshot(routeId: string, sourceSnapshotId: string): Promise<Result<SnapshotItem>> {
+export async function copySnapshot(routeId: string, sourceSnapshotId: string, ownerId: string): Promise<Result<SnapshotItem>> {
   try {
     const [snapshot] = await db
       .select()
@@ -330,6 +331,7 @@ export async function copySnapshot(routeId: string, sourceSnapshotId: string): P
       const [newSnapshot] = await tx
         .insert(routeSnapshots)
         .values({
+          ownerId,
           snapshotState: "wip",
           routeId: snapshot.routeId,
           versionName: snapshot.versionName + " (Copy)",
@@ -514,12 +516,13 @@ export async function switchSnapshot(routeId: string, snapshotId: string): Promi
  * @param params - Route data to create, including metadata, optional polylines, and route points.
  * @returns A `Result<RouteObject>` containing the newly created route, or a failure if creation fails.
  */
-export async function addRoute(params: AddRouteParameters): Promise<Result<RouteObject>> {
+export async function addRoute(params: AddRouteParameters, ownerId: string): Promise<Result<RouteObject>> {
   try {
     const [route] = await db
       .insert(routes)
       .values({
         activeSnapshotId: "unset",
+        ownerId,
       })
       .returning();
     if (!route) {
@@ -527,7 +530,7 @@ export async function addRoute(params: AddRouteParameters): Promise<Result<Route
     }
 
     // Create the snapshot
-    const snapshot = await unwrap(createSnapshot(route.id, params));
+    const snapshot = await unwrap(createSnapshot(route.id, params, ownerId));
 
     // Apply the snapshot as the active state:
     await db.update(routes)

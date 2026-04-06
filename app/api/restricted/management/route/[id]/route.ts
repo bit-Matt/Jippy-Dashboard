@@ -99,7 +99,7 @@ export async function POST(
     ...data,
     polylineGoingTo,
     polylineGoingBack,
-  });
+  }, currentSession.user!.id);
 
   return oneOf(result).match(
     s => {

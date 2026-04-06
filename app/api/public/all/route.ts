@@ -12,11 +12,15 @@ export async function GET() {
       unwrap(closure.getAllClosures(true)),
     ]);
 
+    const routes = allRoutes.map(({ activeSnapshotId, snapshotName, snapshotState, ...rest }) => rest);
+    const regions = allRegions.map(({ activeSnapshotId, snapshotName, snapshotState, ...rest }) => rest);
+    const closures = allClosures.map(({ activeSnapshotId, versionName, snapshotState, ...rest }) => rest);
+
     return ResponseComposer.compose(StatusCodes.Status200Ok)
       .setBody({
-        routes: allRoutes,
-        regions: allRegions,
-        closures: allClosures,
+        routes,
+        regions,
+        closures,
       })
       .orchestrate();
   } catch {

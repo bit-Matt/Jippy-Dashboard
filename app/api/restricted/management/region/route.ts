@@ -124,7 +124,7 @@ export async function POST(req: NextRequest) {
       .orchestrate();
   }
 
-  const result = await region.createRegion(data);
+  const result = await region.createRegion(data, currentSession.user!.id);
   return oneOf(result).match(
     s => {
       void logActivity({

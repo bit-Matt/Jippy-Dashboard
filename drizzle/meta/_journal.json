@@ -176,6 +176,13 @@
       "when": 1775446564450,
       "tag": "0024_narrow_malice",
       "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1775448389179,
+      "tag": "0025_milky_ricochet",
+      "breakpoints": true
     }
   ]
 }

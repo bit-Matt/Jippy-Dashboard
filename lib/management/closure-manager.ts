@@ -96,7 +96,7 @@ export async function getClosureById(closureId: string, snapshotId?: string): Pr
   }
 }
 
-export async function createSnapshot(closureId: string, params: ClosureAddParameters): Promise<Result<ClosureObject>> {
+export async function createSnapshot(closureId: string, params: ClosureAddParameters, ownerId: string): Promise<Result<ClosureObject>> {
   try {
     const [closureTarget] = await db
       .select({ id: roadClosures.id })
@@ -112,6 +112,7 @@ export async function createSnapshot(closureId: string, params: ClosureAddParame
       const [snapshot] = await tx
         .insert(roadClosureSnapshots)
         .values({
+          ownerId,
           versionName: params.versionName,
           snapshotState: params.snapshotState ?? "wip",
           name: params.closureName,
@@ -185,7 +186,7 @@ export async function deleteSnapshot(closureId: string, snapshotId: string): Pro
   }
 }
 
-export async function copySnapshot(closureId: string, snapshotId: string): Promise<Result<SnapshotItem>> {
+export async function copySnapshot(closureId: string, snapshotId: string, ownerId: string): Promise<Result<SnapshotItem>> {
   try {
     const [snapshot] = await db
       .select()
@@ -212,6 +213,7 @@ export async function copySnapshot(closureId: string, snapshotId: string): Promi
       const [newSnapshot] = await tx
         .insert(roadClosureSnapshots)
         .values({
+          ownerId,
           snapshotState: "wip",
           roadClosureId: snapshot.roadClosureId,
           versionName: snapshot.versionName + " (Copy)",
@@ -320,12 +322,13 @@ export async function getAllSnapshots(closureId: string): Promise<Result<Snapsho
   }
 }
 
-export async function createClosure(payload: ClosureAddParameters): Promise<Result<ClosureObject>> {
+export async function createClosure(payload: ClosureAddParameters, ownerId: string): Promise<Result<ClosureObject>> {
   try {
     const [newClosure] = await db
       .insert(roadClosures)
       .values({
         activeSnapshotId: "unset",
+        ownerId,
       })
       .returning();
     if (!newClosure) {
@@ -333,7 +336,7 @@ export async function createClosure(payload: ClosureAddParameters): Promise<Resu
     }
 
     // Create the snapshot
-    const snapshot = await unwrap(createSnapshot(newClosure.id, payload));
+    const snapshot = await unwrap(createSnapshot(newClosure.id, payload, ownerId));
 
     // Update the active snapshot
     await db

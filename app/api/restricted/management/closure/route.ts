@@ -105,7 +105,7 @@ export async function POST(req: NextRequest) {
       .orchestrate();
   }
 
-  const result = await closure.createClosure(data);
+  const result = await closure.createClosure(data, currentSession.user!.id);
   return oneOf(result).match(
     s => {
       void logActivity({

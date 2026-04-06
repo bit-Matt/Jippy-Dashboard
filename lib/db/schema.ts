@@ -88,6 +88,8 @@ export const invitations = pgTable("invitations", {
   token: text("token").notNull().unique(),
   role: roles().notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
+  ownerId: text("owner_id")
+    .references(() => user.id, { onDelete: "set null" }),
   updatedAt: timestamp("updated_at")
     .$onUpdate(() => /* @__PURE__ */ new Date())
     .notNull(),
@@ -102,6 +104,8 @@ export const routes = pgTable(
 
     activeSnapshotId: text("active_snapshot_id")
       .notNull(),
+    ownerId: text("owner_id")
+      .references(() => user.id, { onDelete: "set null" }),
 
     // Meta
     createdAt: timestamp("created_at")
@@ -131,6 +135,8 @@ export const routeSnapshots = pgTable(
     routeId: text("route_id")
       .notNull()
       .references(() => routes.id, { onDelete: "cascade" }),
+    ownerId: text("owner_id")
+      .references(() => user.id, { onDelete: "set null" }),
 
     // Versioning
     versionName: text("version_name")
@@ -204,6 +210,8 @@ export const region = pgTable(
       .$default(() => uuidv7()),
 
     activeSnapshotId: text("active_snapshot_id").notNull(),
+    ownerId: text("owner_id")
+      .references(() => user.id, { onDelete: "set null" }),
 
     createdAt: timestamp("created_at").defaultNow().notNull(),
     updatedAt: timestamp("updated_at")
@@ -223,6 +231,8 @@ export const regionSnapshots = pgTable(
     snapshotState: snapshotState()
       .notNull()
       .default("wip"),
+    ownerId: text("owner_id")
+      .references(() => user.id, { onDelete: "set null" }),
 
     versionName: text("version_name").notNull(),
 
@@ -309,6 +319,8 @@ export const roadClosures = pgTable("road_closure", {
     .$default(() => uuidv7()),
 
   activeSnapshotId: text("active_snapshot_id").notNull(),
+  ownerId: text("owner_id")
+    .references(() => user.id, { onDelete: "set null" }),
 
   // Metadata
   createdAt: timestamp("created_at").defaultNow().notNull(),
@@ -328,6 +340,8 @@ export const roadClosureSnapshots = pgTable(
     snapshotState: snapshotState()
       .notNull()
       .default("wip"),
+    ownerId: text("owner_id")
+      .references(() => user.id, { onDelete: "set null" }),
 
     // Snapshot
     roadClosureId: text("road_closure_id")

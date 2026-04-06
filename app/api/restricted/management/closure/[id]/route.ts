@@ -85,7 +85,7 @@ export async function POST(
       .orchestrate();
   }
 
-  const result = await closure.createSnapshot(id, data);
+  const result = await closure.createSnapshot(id, data, currentSession.user!.id);
   return oneOf(result).match(
     s => {
       void logActivity({

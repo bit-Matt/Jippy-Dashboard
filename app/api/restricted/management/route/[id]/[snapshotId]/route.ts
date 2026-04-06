@@ -54,7 +54,7 @@ export async function PUT(
       .orchestrate();
   }
 
-  const result = await route.copySnapshot(id, snapshotId);
+  const result = await route.copySnapshot(id, snapshotId, currentSession.user!.id);
   return oneOf(result).match(
     s => {
       void logActivity({

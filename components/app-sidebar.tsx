@@ -87,11 +87,11 @@ export function AppSidebar({
         </SidebarMenu>
       </SidebarHeader>
       <SidebarContent>
-        <NavMain items={navData.navMain} />
+        <NavMain label="Editors" items={navData.navMain} />
         {currentUser?.role === "administrator_user" ? (
           <>
             <div className="grow" />
-            <NavMain items={navData.administration} />
+            <NavMain label="Administrator" items={navData.administration} />
           </>
         ) : null}
       </SidebarContent>

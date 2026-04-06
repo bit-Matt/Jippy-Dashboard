@@ -125,7 +125,7 @@ export async function POST(req: NextRequest) {
     ...data,
     polylineGoingTo,
     polylineGoingBack,
-  });
+  }, currentSession.user!.id);
 
   return oneOf(result).match(
     s => {

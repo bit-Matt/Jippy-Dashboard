@@ -1,10 +1,14 @@
 import "dotenv/config";
 
-import { addRoute } from "@/lib/management/route-manager";
-import { getRoutePolyline } from "@/lib/osm/valhalla";
+import { eq } from "drizzle-orm";
 import fs from "node:fs";
 import fsp from "node:fs/promises";
 import path from "node:path";
+
+import { addRoute } from "@/lib/management/route-manager";
+import { db } from "@/lib/db";
+import { getRoutePolyline } from "@/lib/osm/valhalla";
+import { user } from "@/lib/db/schema";
 
 const jsonPath = path.join(__dirname, "route-seed-data.json");
 if (!fs.existsSync(jsonPath)) {
@@ -38,6 +42,17 @@ async function map<T, K>(data: T[], fn: (item: T, index: number, array: T[]) => 
 async function main() {
   const data = await fsp.readFile(jsonPath, "utf-8");
   const routes: Route[] = JSON.parse(data);
+
+  // Fetch the user account
+  const [adminUser] = await db
+    .select({ id: user.id, email: user.email })
+    .from(user)
+    .where(eq(user.email, "admin@jippy.local"))
+    .limit(1);
+  if (!adminUser) {
+    console.error("Admin user cannot be found! Are you sure did you setup the administrator account?");
+    process.exit(1);
+  }
 
   for (const route of routes) {
     console.log("inserting: %s - %s", route.route_id, route.route_short_name);
@@ -143,7 +158,7 @@ async function main() {
       };
 
       /* eslint-disable-next-line */
-      await addRoute(routePayload as any);
+      await addRoute(routePayload as any, adminUser.id);
     } catch (e) {
       console.warn(`Failed for route ${route.route_id}:`, e);
     }

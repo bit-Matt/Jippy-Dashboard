@@ -179,7 +179,7 @@ export async function getRegionById(regionId: string, snapshotId?: string): Prom
  * - `Failure` with `ErrorCodes.ResourceNotFound` if the region does not exist.
  * - `Failure` with `ErrorCodes.Fatal` if snapshot creation fails unexpectedly.
  */
-export async function createSnapshot(regionId: string, params: RegionAddParameters): Promise<Result<RegionObject>> {
+export async function createSnapshot(regionId: string, params: RegionAddParameters, ownerId: string): Promise<Result<RegionObject>> {
   try {
     const [regionTarget] = await db
       .select({ id: region.id })
@@ -195,6 +195,7 @@ export async function createSnapshot(regionId: string, params: RegionAddParamete
       const [snapshot] = await tx
         .insert(regionSnapshots)
         .values({
+          ownerId,
           versionName: params.snapshotName,
           snapshotState: params.snapshotState ?? "wip",
           regionId: regionTarget.id,
@@ -277,7 +278,7 @@ export async function createSnapshot(regionId: string, params: RegionAddParamete
  * - `Failure` with `ErrorCodes.ResourceNotFound` if the source snapshot is missing.
  * - `Failure` with `ErrorCodes.Fatal` if cloning fails unexpectedly.
  */
-export async function copySnapshot(regionId: string, sourceSnapshotId: string): Promise<Result<SnapshotItem>> {
+export async function copySnapshot(regionId: string, sourceSnapshotId: string, ownerId: string): Promise<Result<SnapshotItem>> {
   try {
     const [snapshot] = await db
       .select()
@@ -309,6 +310,7 @@ export async function copySnapshot(regionId: string, sourceSnapshotId: string): 
       const [newSnapshot] = await tx
         .insert(regionSnapshots)
         .values({
+          ownerId,
           snapshotState: "wip",
           regionId: snapshot.regionId,
           versionName: snapshot.versionName + " (Copy)",
@@ -468,12 +470,13 @@ export async function getAllSnapshots(closureId: string): Promise<Result<Snapsho
  * @param payload - Region data to create, including metadata, points, and optional stations.
  * @returns A `Result<RegionObject>` containing the created region, or a failure if creation fails.
  */
-export async function createRegion(payload: RegionAddParameters): Promise<Result<RegionObject>> {
+export async function createRegion(payload: RegionAddParameters, ownerId: string): Promise<Result<RegionObject>> {
   try {
     const [newRegion] = await db
       .insert(region)
       .values({
         activeSnapshotId: "unset",
+        ownerId,
       })
       .returning();
     if (!newRegion) {
@@ -481,7 +484,7 @@ export async function createRegion(payload: RegionAddParameters): Promise<Result
     }
 
     // Create snapshot
-    const snapshot = await unwrap(createSnapshot(newRegion.id, payload));
+    const snapshot = await unwrap(createSnapshot(newRegion.id, payload, ownerId));
 
     // Update the active snapshot
     await db
