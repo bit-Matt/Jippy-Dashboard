@@ -64,7 +64,8 @@ export async function POST(
   const { id } = await params;
   if (!utils.isUuid(id)) {
     return ResponseComposer
-      .composeError(StatusCodes.Status400BadRequest, "Invalid ID.");
+      .composeError(StatusCodes.Status400BadRequest, "Invalid ID.")
+      .orchestrate();
   }
 
   const result = await accounts.resendInvitation(id);
