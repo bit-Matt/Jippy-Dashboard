@@ -1,7 +1,7 @@
 "use client";
 
 import { type ComponentProps } from "react";
-import { Activity, Command, Map, ShieldCheck, SquareDashed } from "lucide-react";
+import { Command, Map, ShieldCheck, SquareDashed } from "lucide-react";
 import useSWR from "swr";
 
 import { NavMain } from "@/components/nav-main";
