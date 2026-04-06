@@ -166,6 +166,8 @@ function renderCategory(category: string) {
   switch (category) {
   case "dashboard_visit":
     return <Badge variant="secondary">Visit</Badge>;
+  case "security_event":
+    return <Badge variant="destructive">Security</Badge>;
   case "snapshot_state_changed":
     return <Badge variant="outline">Snapshot State</Badge>;
   case "active_snapshot_changed":

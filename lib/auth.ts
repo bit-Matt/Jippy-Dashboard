@@ -7,6 +7,7 @@ import { unwrap } from "@/lib/one-of";
 
 import { db } from "@/lib/db";
 import { getUserById, type User } from "@/lib/accounts";
+import { logBannedAccessAttempt } from "@/lib/management/activity-logger";
 import { utils } from "./validator";
 
 export const auth = betterAuth({
@@ -48,7 +49,7 @@ export const session = {
           code: SessionCode.SessionInvalid,
           session: null,
           user: null,
-          redirectTo: "/auth/signin",
+          redirectTo: "/",
         };
       }
 
@@ -63,8 +64,29 @@ export const session = {
 
       // Check if the user is banned.
       if (user.banned) {
+        const routePath =
+          nextHeaders.get("x-invoke-path")
+          ?? nextHeaders.get("x-pathname")
+          ?? nextHeaders.get("next-url")
+          ?? readPathFromReferer(nextHeaders.get("referer"))
+          ?? "/unknown";
+
+        // Best-effort method for server component and route-handler contexts.
+        const method =
+          nextHeaders.get("x-http-method-override")
+          ?? nextHeaders.get(":method")
+          ?? "GET";
+
+        void logBannedAccessAttempt({
+          actorUserId: user.id,
+          actorRole: user.role,
+          routePath,
+          httpMethod: method,
+          source: "session.verify",
+        });
+
         result.code = SessionCode.Banned;
-        result.redirectTo = "/banned";
+        result.redirectTo = "/error/banned";
       }
 
       // Otherwise, check the required roles specified
@@ -85,7 +107,7 @@ export const session = {
         code: SessionCode.SessionInvalid,
         session: null,
         user: null,
-        redirectTo: "/auth/signin",
+        redirectTo: "/",
       };
     }
   },
@@ -107,4 +129,17 @@ export enum SessionCode {
   ShadowBanned = 3,
   InsufficientPermissions = 4,
   SessionInvalid = 5,
+}
+
+function readPathFromReferer(referer: string | null): string | null {
+  if (!referer) {
+    return null;
+  }
+
+  try {
+    const url = new URL(referer);
+    return `${url.pathname}${url.search}`;
+  } catch {
+    return null;
+  }
 }

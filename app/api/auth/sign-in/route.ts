@@ -1,7 +1,11 @@
 import { NextRequest } from "next/server";
 import * as Sentry from "@sentry/nextjs";
+import { eq } from "drizzle-orm";
 
 import { auth } from "@/lib/auth";
+import { db } from "@/lib/db";
+import { user } from "@/lib/db/schema";
+import { logBannedSignIn } from "@/lib/management/activity-logger";
 import {
   ResponseComposer,
   StatusCodes,
@@ -38,6 +42,24 @@ export async function POST(req: NextRequest) {
         rememberMe: body.rememberMe ?? false,
       },
     });
+
+    // Security telemetry for banned accounts that successfully authenticate.
+    const [account] = await db
+      .select({
+        id: user.id,
+        role: user.role,
+        banned: user.banned,
+      })
+      .from(user)
+      .where(eq(user.email, body.email.toLowerCase()))
+      .limit(1);
+
+    if (account?.banned) {
+      void logBannedSignIn({
+        actorUserId: account.id,
+        actorRole: account.role,
+      });
+    }
 
     return ResponseComposer.compose<null>(StatusCodes.Status204NoContent)
       .setBody(null)

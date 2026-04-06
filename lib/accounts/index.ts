@@ -1,4 +1,4 @@
-import { and, eq, gt } from "drizzle-orm";
+import { and, eq, gt, not } from "drizzle-orm";
 import crypto from "node:crypto";
 import { DateTime } from "luxon";
 import * as Sentry from "@sentry/nextjs";
@@ -11,9 +11,6 @@ import * as mailer from "@/lib/mailer";
 import { unwrap } from "@/lib/one-of";
 import { accessToken, invitations, user } from "@/lib/db/schema";
 import { utils } from "@/lib/validator";
-import { string } from "zod";
-import { permanentRedirect } from "next/navigation";
-import { permission } from "node:process";
 
 /**
  * Retrieves a user by their unique identifier.
@@ -590,6 +587,73 @@ export async function getTokenById(token: string): Promise<Result<AccessTokenInf
     });
   } catch (e) {
     return new Failure(ErrorCodes.Fatal, "Unable to fetch token", { token }, e);
+  }
+}
+
+export async function toggleBan(id: string): Promise<Result<User>> {
+  try {
+    const [userSelected] = await db
+      .select({
+        id: user.id,
+        banned: user.banned,
+      })
+      .from(user)
+      .where(
+        and(
+          eq(user.id, id),
+          not(eq(user.email, "admin@jippy.local")), // Exclude administrators
+        ),
+      )
+      .limit(1);
+    if (!userSelected) {
+      return new Failure(ErrorCodes.ResourceNotFound, "User not found.", { id });
+    }
+
+    // toggle ban
+    await db
+      .update(user)
+      .set({ banned: !userSelected.banned })
+      .where(eq(user.id, userSelected.id));
+
+    // Refetch for final output
+    const u = await unwrap(getUserById(id));
+    return new Success(u);
+  } catch (e) {
+    return new Failure(ErrorCodes.Fatal, "An exception occurred during user lookup.", {}, e);
+  }
+}
+
+export async function getAllAccounts(): Promise<Result<Array<User>>> {
+  try {
+    // Return
+    const users = await db
+      .select({
+        id: user.id,
+        fullName: user.name,
+        email: user.email,
+        activated: user.emailVerified,
+        banned: user.banned,
+        createdAt: user.createdAt,
+        role: user.role,
+      })
+      .from(user)
+      .where(not(eq(user.email, "admin@jippy.local"))); // Exclude administrators
+
+    const mapped: Array<User> = users.map(a => ({
+      id: a.id,
+      fullName: a.fullName,
+      email: a.email,
+      activated: a.activated,
+      banned: a.banned,
+      registrationDate: DateTime
+        .fromJSDate(a.createdAt)
+        .toFormat("MM/dd/yyyy HH:mm"),
+      role: a.role,
+    }));
+
+    return new Success(mapped);
+  } catch (e) {
+    return new Failure(ErrorCodes.Fatal, "An exception occurred during user lookup.", {}, e);
   }
 }
 

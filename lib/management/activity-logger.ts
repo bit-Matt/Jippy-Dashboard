@@ -20,7 +20,8 @@ export type ActivityCategory =
   | "dashboard_visit"
   | "write_operation"
   | "snapshot_state_changed"
-  | "active_snapshot_changed";
+  | "active_snapshot_changed"
+  | "security_event";
 
 export type ActivityWriteInput = {
   actorUserId?: string;
@@ -118,6 +119,106 @@ export async function logDashboardVisit(params: {
       httpMethod: "GET",
       statusCode: 200,
       payload: {},
+      metadata: {},
+    });
+  } catch (error) {
+    Sentry.captureException(error);
+  }
+}
+
+export async function logBannedAccessAttempt(params: {
+  actorUserId: string;
+  actorRole?: string;
+  routePath: string;
+  httpMethod?: string;
+  statusCode?: number;
+  source?: string;
+}): Promise<void> {
+  try {
+    const dedupeThreshold = new Date(Date.now() - 2 * 60 * 1000);
+
+    const [existing] = await db
+      .select({ id: activityLogs.id })
+      .from(activityLogs)
+      .where(
+        and(
+          eq(activityLogs.category, "security_event"),
+          eq(activityLogs.action, "banned_access_attempt"),
+          eq(activityLogs.actorUserId, params.actorUserId),
+          eq(activityLogs.routePath, params.routePath),
+          eq(activityLogs.httpMethod, params.httpMethod ?? "GET"),
+          gte(activityLogs.createdAt, dedupeThreshold),
+        ),
+      )
+      .orderBy(desc(activityLogs.createdAt))
+      .limit(1);
+
+    if (existing) {
+      return;
+    }
+
+    await logActivity({
+      actorUserId: params.actorUserId,
+      actorRole: params.actorRole,
+      category: "security_event",
+      action: "banned_access_attempt",
+      summary: `Banned account attempted to access ${params.routePath}`,
+      routePath: params.routePath,
+      httpMethod: params.httpMethod ?? "GET",
+      statusCode: params.statusCode ?? 403,
+      entityType: "account",
+      entityId: params.actorUserId,
+      payload: {
+        reason: "account_banned",
+        source: params.source ?? "session.verify",
+      },
+      metadata: {},
+    });
+  } catch (error) {
+    Sentry.captureException(error);
+  }
+}
+
+export async function logBannedSignIn(params: {
+  actorUserId: string;
+  actorRole?: string;
+  routePath?: string;
+}): Promise<void> {
+  try {
+    const dedupeThreshold = new Date(Date.now() - 15 * 60 * 1000);
+
+    const [existing] = await db
+      .select({ id: activityLogs.id })
+      .from(activityLogs)
+      .where(
+        and(
+          eq(activityLogs.category, "security_event"),
+          eq(activityLogs.action, "banned_sign_in"),
+          eq(activityLogs.actorUserId, params.actorUserId),
+          gte(activityLogs.createdAt, dedupeThreshold),
+        ),
+      )
+      .orderBy(desc(activityLogs.createdAt))
+      .limit(1);
+
+    if (existing) {
+      return;
+    }
+
+    await logActivity({
+      actorUserId: params.actorUserId,
+      actorRole: params.actorRole,
+      category: "security_event",
+      action: "banned_sign_in",
+      summary: "Banned account successfully authenticated.",
+      routePath: params.routePath ?? "/api/auth/sign-in",
+      httpMethod: "POST",
+      statusCode: 204,
+      entityType: "account",
+      entityId: params.actorUserId,
+      payload: {
+        reason: "account_banned",
+      },
       metadata: {},
     });
   } catch (error) {

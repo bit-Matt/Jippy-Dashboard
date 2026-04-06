@@ -59,6 +59,10 @@ export function AppSidebar({
             url: "/dashboard/invitations",
           },
           {
+            title: "Accounts",
+            url: "/dashboard/accounts",
+          },
+          {
             title: "Audits",
             url: "/dashboard/logs",
           },
