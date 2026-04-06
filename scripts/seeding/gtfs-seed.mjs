@@ -25,6 +25,10 @@ for (const shape of shapes) {
   const [routeId, direction] = shape.shape_id.split("_");
   shape.shape_direction = direction;
   shape.shape_route_id = routeId;
+
+  if (utils.str.isEmpty(routeId) || utils.str.isEmpty(direction)) {
+    continue;
+  }
 }
 
 for (const route of routes) {
@@ -33,4 +37,10 @@ for (const route of routes) {
     .toSorted((a, b) => a.shape_pt_sequence - b.shape_pt_sequence);
 }
 
-fs.writeFileSync(path.join(__dirname, "./route-seed-data.json"), JSON.stringify(routes, null, 2) + "\n", "utf-8");
+const data = JSON.stringify(
+  routes.filter(r => !utils.str.isEmpty(r.route_id)),
+  null,
+  2,
+);
+
+fs.writeFileSync(path.join(__dirname, "./route-seed-data.json"), data + "\n", "utf-8");

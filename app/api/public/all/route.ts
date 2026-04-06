@@ -7,16 +7,25 @@ import { unwrap } from "@/lib/one-of";
 export async function GET() {
   try {
     const [allRoutes, allRegions, allClosures] = await Promise.all([
-      unwrap(route.getAllRoutes()),
-      unwrap(region.getAllRegions()),
-      unwrap(closure.getAllClosures()),
+      unwrap(route.getAllRoutes(true)),
+      unwrap(region.getAllRegions(true)),
+      unwrap(closure.getAllClosures(true)),
     ]);
+
+    /* eslint-disable-next-line */
+    const routes = allRoutes.map(({ activeSnapshotId, snapshotName, snapshotState, vehicleTypeRequiresRoute, ...rest }) => rest);
+
+    /* eslint-disable-next-line */
+    const regions = allRegions.map(({ activeSnapshotId, snapshotName, snapshotState, ...rest }) => rest);
+
+    /* eslint-disable-next-line */
+    const closures = allClosures.map(({ activeSnapshotId, versionName, snapshotState, ...rest }) => rest);
 
     return ResponseComposer.compose(StatusCodes.Status200Ok)
       .setBody({
-        routes: allRoutes,
-        regions: allRegions,
-        closures: allClosures,
+        routes,
+        regions,
+        closures,
       })
       .orchestrate();
   } catch {

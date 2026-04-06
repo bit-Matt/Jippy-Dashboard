@@ -11,6 +11,7 @@ export const user = pgTable("user", {
   emailVerified: boolean("email_verified").default(false).notNull(),
   image: text("image"),
   role: roles().default("regular_user").notNull(),
+  banned: boolean("banned").default(false).notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at")
     .defaultNow()
@@ -77,26 +78,124 @@ export const verification = pgTable(
   (table) => [index("verification_identifier_idx").on(table.identifier)],
 );
 
+export const invitations = pgTable("invitations", {
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => uuidv7()),
+  email: text("email").notNull().unique(),
+  validUntil: timestamp("valid_until").notNull(),
+  consumed: boolean("consumed").default(false).notNull(),
+  token: text("token").notNull().unique(),
+  role: roles().notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  ownerId: text("owner_id")
+    .references(() => user.id, { onDelete: "set null" }),
+  updatedAt: timestamp("updated_at")
+    .$onUpdate(() => /* @__PURE__ */ new Date())
+    .notNull(),
+});
+
+export const vehicleTypes = pgTable("vehicle_types", {
+  id: text("id")
+    .primaryKey()
+    .$default(() => uuidv7()),
+
+  name: text("name")
+    .notNull()
+    .unique(),
+  requiresRoute: boolean("requires_route")
+    .default(true)
+    .notNull(),
+
+  ownerId: text("owner_id")
+    .references(() => user.id, { onDelete: "set null" }),
+
+  createdAt: timestamp("created_at")
+    .defaultNow()
+    .notNull(),
+  updatedAt: timestamp("updated_at")
+    .defaultNow()
+    .$onUpdate(() => new Date())
+    .notNull(),
+});
+
 export const routes = pgTable(
   "routes",
   {
     id: text("id")
       .primaryKey()
       .$default(() => uuidv7()),
-    routeNumber: text("route_number").notNull(),
-    routeName: text("route_name").notNull(),
-    routeColor: text("route_color").notNull().default("#FFF000"),
-    routeDetails: text("route_details").default("").notNull(),
-    createdAt: timestamp("created_at").defaultNow().notNull(),
+
+    activeSnapshotId: text("active_snapshot_id")
+      .notNull(),
+    ownerId: text("owner_id")
+      .references(() => user.id, { onDelete: "set null" }),
+
+    // Meta
+    createdAt: timestamp("created_at")
+      .defaultNow()
+      .notNull(),
     updatedAt: timestamp("updated_at")
       .defaultNow()
       .$onUpdate(() => new Date())
       .notNull(),
-    polylineGoingTo: text("polyline_going_to")
+  },
+);
+
+export const snapshotState = pgEnum("snapshot_state", ["ready", "wip", "for_approval"]);
+
+export const routeSnapshots = pgTable(
+  "route_snapshots",
+  {
+    id: text("id")
+      .primaryKey()
+      .$default(() => uuidv7()),
+
+    snapshotState: snapshotState()
+      .notNull()
+      .default("wip"),
+
+    // Snapshot for
+    routeId: text("route_id")
+      .notNull()
+      .references(() => routes.id, { onDelete: "cascade" }),
+    vehicleTypeId: text("vehicle_type_id")
+      .notNull()
+      .references(() => vehicleTypes.id),
+    ownerId: text("owner_id")
+      .references(() => user.id, { onDelete: "set null" }),
+
+    // Versioning
+    versionName: text("version_name")
+      .notNull(),
+
+    // Route details
+    routeNumber: text("route_number")
+      .notNull(),
+    routeName: text("route_name")
+      .notNull(),
+    routeColor: text("route_color")
+      .notNull()
+      .default("#FFF000"),
+    routeDetails: text("route_details")
       .default("")
       .notNull(),
+    availableFrom: text("available_from")
+      .notNull()
+      .default("00:00"),
+    availableTo: text("available_to")
+      .notNull()
+      .default("23:59"),
+    polylineGoingTo: text("polyline_going_to")
+      .notNull(),
     polylineGoingBack: text("polyline_going_back")
-      .default("")
+      .notNull(),
+
+    // Metadata
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at")
+      .defaultNow()
+      .$onUpdate(() => new Date())
       .notNull(),
   },
 );
@@ -109,9 +208,13 @@ export const routeSequences = pgTable(
     id: text("id")
       .primaryKey()
       .$default(() => uuidv7()),
-    routeId: text("route_id")
+
+    // Sequence where this route belongs to
+    routeSnapshotId: text("route_snapshot_id")
       .notNull()
-      .references(() => routes.id, { onDelete: "cascade" }),
+      .references(() => routeSnapshots.id, { onDelete: "cascade" }),
+
+    // Sequence info
     sequenceType: sequenceType("sequence_type")
       .default("going_to")
       .notNull(),
@@ -128,7 +231,7 @@ export const routeSequences = pgTable(
   },
   (t) => [
     index("spatial_index").using("gist", t.point),
-    index("route_seq_idx").on(t.routeId, t.sequenceNumber),
+    index("route_seq_idx").on(t.routeSnapshotId, t.sequenceNumber),
   ],
 );
 
@@ -138,6 +241,40 @@ export const region = pgTable(
     id: text("id")
       .primaryKey()
       .$default(() => uuidv7()),
+
+    activeSnapshotId: text("active_snapshot_id").notNull(),
+    ownerId: text("owner_id")
+      .references(() => user.id, { onDelete: "set null" }),
+
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at")
+      .defaultNow()
+      .$onUpdate(() => new Date())
+      .notNull(),
+  },
+);
+
+export const regionSnapshots = pgTable(
+  "region_snapshots",
+  {
+    id: text("id")
+      .primaryKey()
+      .$default(() => uuidv7()),
+
+    snapshotState: snapshotState()
+      .notNull()
+      .default("wip"),
+    ownerId: text("owner_id")
+      .references(() => user.id, { onDelete: "set null" }),
+
+    versionName: text("version_name").notNull(),
+
+    // Snapshot for
+    regionId: text("region_id")
+      .notNull()
+      .references(() => region.id, { onDelete: "cascade" }),
+
+    // Region info
     name: text("region_name")
       .notNull(),
     color: text("color")
@@ -145,6 +282,8 @@ export const region = pgTable(
       .notNull(),
     shapeType: text("shape")
       .notNull(),
+
+    // Metadata
     createdAt: timestamp("created_at").defaultNow().notNull(),
     updatedAt: timestamp("updated_at")
       .defaultNow()
@@ -159,9 +298,11 @@ export const regionSequences = pgTable(
     id: text("id")
       .primaryKey()
       .$default(() => uuidv7()),
-    regionId: text("region_id")
+    regionSnapshotId: text("region_snapshot_id")
       .notNull()
-      .references(() => region.id, { onDelete: "cascade" }),
+      .references(() => regionSnapshots.id, { onDelete: "cascade" }),
+
+    // Region data
     sequenceNumber: integer("sequence_number").notNull(),
     point: geometry("point", { type: "point", mode: "tuple", srid: 4326 }).notNull(),
     createdAt: timestamp("created_at").defaultNow().notNull(),
@@ -172,7 +313,7 @@ export const regionSequences = pgTable(
   },
   (t) => [
     index("spatial_index_region").using("gist", t.point),
-    index("region_seq_idx").on(t.regionId, t.sequenceNumber),
+    index("region_seq_idx").on(t.regionSnapshotId, t.sequenceNumber),
   ],
 );
 
@@ -182,13 +323,23 @@ export const regionStations = pgTable(
     id: text("id")
       .primaryKey()
       .$default(() => uuidv7()),
-    regionId: text("region_id")
+    regionSnapshotId: text("region_snapshot_id")
       .notNull()
-      .references(() => region.id, { onDelete: "cascade" }),
+      .references(() => regionSnapshots.id, { onDelete: "cascade" }),
+
+    // Station data
     address: text("address")
       .notNull()
       .default("Unknown"),
+    availableFrom: text("available_from")
+      .notNull()
+      .default("00:00"),
+    availableTo: text("available_to")
+      .notNull()
+      .default("23:59"),
     point: geometry("point", { type: "point", mode: "tuple", srid: 4326 }).notNull(),
+
+    // Metadata
     createdAt: timestamp("created_at").defaultNow().notNull(),
     updatedAt: timestamp("updated_at")
       .defaultNow()
@@ -197,7 +348,7 @@ export const regionStations = pgTable(
   },
   (t) => [
     index("spatial_index_region_station").using("gist", t.point),
-    index("region_station_ref_idx").on(t.regionId),
+    index("region_station_ref_idx").on(t.regionSnapshotId),
   ],
 );
 
@@ -205,8 +356,12 @@ export const roadClosures = pgTable("road_closure", {
   id: text("id")
     .primaryKey()
     .$default(() => uuidv7()),
-  name: text("name").notNull(),
-  description: text("description").notNull(),
+
+  activeSnapshotId: text("active_snapshot_id").notNull(),
+  ownerId: text("owner_id")
+    .references(() => user.id, { onDelete: "set null" }),
+
+  // Metadata
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at")
     .defaultNow()
@@ -214,15 +369,100 @@ export const roadClosures = pgTable("road_closure", {
     .notNull(),
 });
 
-export const roadClosureRegions = pgTable("road_closure_regions", {
+export const roadClosureSnapshots = pgTable(
+  "road_closure_snapshot",
+  {
+    id: text("id")
+      .primaryKey()
+      .$default(() => uuidv7()),
+
+    snapshotState: snapshotState()
+      .notNull()
+      .default("wip"),
+    ownerId: text("owner_id")
+      .references(() => user.id, { onDelete: "set null" }),
+
+    // Snapshot
+    roadClosureId: text("road_closure_id")
+      .notNull()
+      .references(() => roadClosures.id, { onDelete: "cascade" }),
+
+    versionName: text("version_name").notNull(),
+
+    // Closure details
+    name: text("name").notNull(),
+    description: text("description").notNull(),
+    shape: text("shape").notNull(),
+
+    // Metadata
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at")
+      .defaultNow()
+      .$onUpdate(() => new Date())
+      .notNull(),
+  },
+);
+
+export const accessTokenPermissions = pgEnum("access_token_permission", ["r", "rw"]);
+export const accessToken = pgTable("access_tokens", {
   id: text("id")
     .primaryKey()
     .$default(() => uuidv7()),
-  roadClosureId: text("road_closure_id")
+  accessToken: text("access_token").notNull(),
+  permissions: accessTokenPermissions().notNull(),
+  ownerId: text("owner_id")
+    .references(() => user.id, { onDelete: "cascade" }),
+
+  // Metadata
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at")
+    .defaultNow()
+    .$onUpdate(() => new Date())
+    .notNull(),
+});
+
+export const activityLogs = pgTable(
+  "activity_logs",
+  {
+    id: text("id")
+      .primaryKey()
+      .$default(() => uuidv7()),
+    actorUserId: text("actor_user_id")
+      .references(() => user.id, { onDelete: "set null" }),
+    actorRole: text("actor_role"),
+    category: text("category").notNull(),
+    action: text("action").notNull(),
+    entityType: text("entity_type"),
+    entityId: text("entity_id"),
+    httpMethod: text("http_method"),
+    routePath: text("route_path"),
+    statusCode: integer("status_code"),
+    summary: text("summary").notNull(),
+    payload: text("payload").notNull().default("{}"),
+    metadata: text("metadata").notNull().default("{}"),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (table) => [
+    index("activity_logs_actor_idx").on(table.actorUserId, table.createdAt),
+    index("activity_logs_action_idx").on(table.action, table.createdAt),
+    index("activity_logs_entity_idx").on(table.entityType, table.entityId, table.createdAt),
+    index("activity_logs_created_at_idx").on(table.createdAt),
+  ],
+);
+
+export const roadClosurePoints = pgTable("road_closure_points", {
+  id: text("id")
+    .primaryKey()
+    .$default(() => uuidv7()),
+  roadClosureSnapshotId: text("road_closure_snapshot_id")
     .notNull()
-    .references(() => roadClosures.id, { onDelete: "cascade" }),
+    .references(() => roadClosureSnapshots.id, { onDelete: "cascade" }),
+
+  // Data
   sequenceNumber: integer("sequence_number").notNull(),
   point: geometry("point", { type: "point", mode: "tuple", srid: 4326 }).notNull(),
+
+  // Metadata
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at")
     .defaultNow()
@@ -230,12 +470,26 @@ export const roadClosureRegions = pgTable("road_closure_regions", {
     .notNull(),
 }, (t) => [
   index("spatial_index_road_closure_region").using("gist", t.point),
-  index("road_closure_region_ref_idx").on(t.roadClosureId),
+  index("road_closure_region_ref_idx").on(t.roadClosureSnapshotId),
 ]);
+
+// ============================================================================
+// BETTER AUTH RELATIONS
+// ============================================================================
 
 export const userRelations = relations(user, ({ many }) => ({
   sessions: many(session),
   accounts: many(account),
+  activityLogs: many(activityLogs),
+  vehicleTypes: many(vehicleTypes),
+}));
+
+export const vehicleTypesRelations = relations(vehicleTypes, ({ one, many }) => ({
+  owner: one(user, {
+    fields: [vehicleTypes.ownerId],
+    references: [user.id],
+  }),
+  routeSnapshots: many(routeSnapshots),
 }));
 
 export const sessionRelations = relations(session, ({ one }) => ({
@@ -252,30 +506,66 @@ export const accountRelations = relations(account, ({ one }) => ({
   }),
 }));
 
-export const routeRelations = relations(routeSequences, ({ one }) => ({
-  route: one(routes, {
-    fields: [routeSequences.routeId],
-    references: [routes.id],
+export const activityLogsRelations = relations(activityLogs, ({ one }) => ({
+  actorUser: one(user, {
+    fields: [activityLogs.actorUserId],
+    references: [user.id],
   }),
 }));
 
-export const regionRelations = relations(regionSequences, ({ one }) => ({
+// ============================================================================
+// JIPPY
+// ============================================================================
+
+export const routeSnapshotRelations = relations(routeSnapshots, ({ one }) => ({
+  route: one(routes, {
+    fields: [routeSnapshots.routeId],
+    references: [routes.id],
+  }),
+  vehicleType: one(vehicleTypes, {
+    fields: [routeSnapshots.vehicleTypeId],
+    references: [vehicleTypes.id],
+  }),
+}));
+
+export const routeSequencesRelations = relations(routeSequences, ({ one }) => ({
+  route: one(routeSnapshots, {
+    fields: [routeSequences.routeSnapshotId],
+    references: [routeSnapshots.id],
+  }),
+}));
+
+export const regionSnapshotRelations = relations(regionSnapshots, ({ one }) => ({
   region: one(region, {
-    fields: [regionSequences.regionId],
+    fields: [regionSnapshots.regionId],
     references: [region.id],
+  }),
+}));
+
+export const regionSequencesRelations = relations(regionSequences, ({ one }) => ({
+  region: one(regionSnapshots, {
+    fields: [regionSequences.regionSnapshotId],
+    references: [regionSnapshots.id],
   }),
 }));
 
 export const regionStationRelations = relations(regionStations, ({ one }) => ({
-  region: one(region, {
-    fields: [regionStations.regionId],
-    references: [region.id],
+  region: one(regionSnapshots, {
+    fields: [regionStations.regionSnapshotId],
+    references: [regionSnapshots.id],
   }),
 }));
 
-export const roadClosureRegionsRelations = relations(roadClosureRegions, ({ one }) => ({
+export const roadClosureSnapshotRelations = relations(roadClosureSnapshots, ({ one }) => ({
   roadClosures: one(roadClosures, {
-    fields: [roadClosureRegions.roadClosureId],
+    fields: [roadClosureSnapshots.roadClosureId],
     references: [roadClosures.id],
+  }),
+}));
+
+export const roadClosureRegionsRelations = relations(roadClosurePoints, ({ one }) => ({
+  roadClosures: one(roadClosureSnapshots, {
+    fields: [roadClosurePoints.roadClosureSnapshotId],
+    references: [roadClosureSnapshots.id],
   }),
 }));

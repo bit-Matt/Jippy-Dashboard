@@ -14,7 +14,7 @@ async function main() {
   }
 
   if (flags.has("--container-up")) {
-    await utils.process.spawnAsync("docker", ["compose", "up", "-d"], {
+    await utils.process.spawnAsync("docker", ["compose", "up", "-d", "--wait"], {
       cwd: root,
     });
 

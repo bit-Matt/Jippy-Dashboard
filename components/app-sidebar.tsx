@@ -1,8 +1,12 @@
+"use client";
+
 import { type ComponentProps } from "react";
-import { Command, Map, SquareDashed, TriangleAlert } from "lucide-react";
+import { Command, Map, ShieldCheck, SquareDashed } from "lucide-react";
+import useSWR from "swr";
 
 import { NavMain } from "@/components/nav-main";
 import { NavUser } from "@/components/nav-user";
+import { $fetch } from "@/lib/http/client";
 import {
   Sidebar,
   SidebarContent,
@@ -14,49 +18,57 @@ import {
 } from "@/components/ui/sidebar";
 
 export function AppSidebar({
-  onAddRouteClick,
-  onAddRegionClick,
-  onAddClosureRegionClick,
   ...props
 }: SidebarProps) {
-  const data = {
-    navMain: [
+  const { data: meResponse, error, isLoading } = useSWR<BetterFetchMeResult>("/api/me", $fetch);
+  const currentUser = meResponse?.data?.data;
+
+  const navMain = [
+    {
+      title: "Route Management",
+      url: "/dashboard/route",
+      icon: Map,
+      isActive: true,
+    },
+    {
+      title: "Closure Management",
+      url: "/dashboard/closure",
+      icon: Map,
+      isActive: true,
+    },
+    {
+      title: "Region Management",
+      url: "/dashboard/region",
+      isActive: true,
+      icon: SquareDashed,
+    },
+  ];
+
+  const navData = {
+    navMain,
+
+    administration: [
       {
-        title: "Route Management",
+        title: "Administration",
         url: "#",
-        icon: Map,
+        icon: ShieldCheck,
         isActive: true,
         items: [
           {
-            title: "Add a new Route",
-            url: "#",
-            onClick: onAddRouteClick,
+            title: "Invitations",
+            url: "/dashboard/invitations",
           },
-        ],
-      },
-      {
-        title: "Region Management",
-        url: "#",
-        isActive: true,
-        icon: SquareDashed,
-        items: [
           {
-            title: "Add a new Region",
-            url: "#",
-            onClick: onAddRegionClick,
+            title: "Accounts",
+            url: "/dashboard/accounts",
           },
-        ],
-      },
-      {
-        title: "Road Closure",
-        url: "#",
-        isActive: true,
-        icon: TriangleAlert,
-        items: [
           {
-            title: "Add closure",
-            url: "#",
-            onClick: onAddClosureRegionClick,
+            title: "Audits",
+            url: "/dashboard/logs",
+          },
+          {
+            title: "Vehicle Types",
+            url: "/dashboard/vehicle",
           },
         ],
       },
@@ -83,29 +95,54 @@ export function AppSidebar({
         </SidebarMenu>
       </SidebarHeader>
       <SidebarContent>
-        <NavMain items={data.navMain} />
+        <NavMain label="Editors" items={navData.navMain} />
+        {currentUser?.role === "administrator_user" ? (
+          <>
+            <div className="grow" />
+            <NavMain label="Administrator" items={navData.administration} />
+          </>
+        ) : null}
       </SidebarContent>
       <SidebarFooter>
-        <NavUser />
+        <NavUser
+          user={currentUser}
+          isLoading={isLoading}
+          hasError={Boolean(error || meResponse?.error)}
+        />
       </SidebarFooter>
     </Sidebar>
   );
 }
 
-interface SidebarProps extends ComponentProps<typeof Sidebar> {
-  onAddRouteClick?: () => void
-  onAddRegionClick?: () => void
-  onSimulationClick?: () => void
-  onAddClosureRegionClick?: () => void
-}
+type SidebarProps = ComponentProps<typeof Sidebar>;
+
+type BetterFetchMeResult = {
+  data: {
+    ok: boolean;
+    data: {
+      fullName: string;
+      email: string;
+      role: string;
+    }
+  },
+  error: unknown;
+};
 
 export interface AllResponse {
   routes: Array<{
     id: string
+    activeSnapshotId: string
+    snapshotName: string
+    snapshotState: string
     routeNumber: string
     routeName: string
     routeColor: string
     routeDetails: string
+    availableFrom: string
+    availableTo: string
+    vehicleTypeId: string
+    vehicleTypeName?: string
+    vehicleTypeRequiresRoute?: boolean
     points: {
       polylineGoingTo: string;
       goingTo: Array<{
@@ -125,6 +162,9 @@ export interface AllResponse {
   }>;
   regions: Array<{
     id: string;
+    activeSnapshotId: string;
+    snapshotName: string;
+    snapshotState: string;
     regionName: string;
     regionColor: string;
     regionShape: string;
@@ -136,13 +176,19 @@ export interface AllResponse {
     stations: Array<{
       id: string;
       address: string;
+      availableFrom: string;
+      availableTo: string;
       point: [number, number];
     }>;
   }>;
   closures: Array<{
     id: string;
+    activeSnapshotId: string;
+    versionName: string;
+    snapshotState: string;
     closureName: string;
     closureDescription: string;
+    shape: string;
     points: Array<{
       id: string;
       sequence: number;

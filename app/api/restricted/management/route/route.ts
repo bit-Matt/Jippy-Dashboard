@@ -1,24 +1,59 @@
 import type { NextRequest } from "next/server";
 
-import * as closure from "@/lib/management/closure-manager";
 import { getRoutePolyline } from "@/lib/osm/valhalla";
 import { oneOf, unwrap } from "@/lib/one-of";
 import { ResponseComposer, StatusCodes } from "@/lib/http";
-import * as region from "@/lib/management/region-manager";
+import * as closure from "@/lib/management/closure-manager";
 import * as route from "@/lib/management/route-manager";
 import { tryParseJson } from "@/lib/http/RequestUtilities";
 import { utils, validator } from "@/lib/validator";
+import { session, SessionCode } from "@/lib/auth";
+import { logActivity, logDashboardVisit } from "@/lib/management/activity-logger";
+
+const TIME_PATTERN = /^([01]\d|2[0-3]):([0-5]\d)$/;
+
+const validateTimeRange = (availableFrom?: string, availableTo?: string) => {
+  const from = availableFrom ?? "00:00";
+  const to = availableTo ?? "23:59";
+
+  if (!TIME_PATTERN.test(from)) {
+    return { ok: false as const, error: "Invalid availableFrom time. Use HH:mm format." };
+  }
+
+  if (!TIME_PATTERN.test(to)) {
+    return { ok: false as const, error: "Invalid availableTo time. Use HH:mm format." };
+  }
+
+  if (from > to) {
+    return { ok: false as const, error: "availableFrom must be earlier than or equal to availableTo." };
+  }
+
+  return { ok: true as const };
+};
 
 export async function GET() {
+  const currentSession = await session.verify();
+  if (currentSession.code !== SessionCode.Ok) {
+    return ResponseComposer.composeFromSessionValidation(currentSession)
+      .orchestrate();
+  }
+
+  void logDashboardVisit({
+    actorUserId: currentSession.user!.id,
+    actorRole: currentSession.user!.role,
+    routePath: "/dashboard/route",
+    summary: "Visited route dashboard",
+  });
+
   try {
-    const allRoutes = await unwrap(route.getAllRoutes());
-    const allRegions = await unwrap(region.getAllRegions());
-    const allClosures = await unwrap(closure.getAllClosures());
+    const [allRoutes, allClosures] = await Promise.all([
+      unwrap(route.getAllRoutes(false)),
+      unwrap(closure.getAllClosures(true)),
+    ]);
 
     return ResponseComposer.compose(StatusCodes.Status200Ok)
       .setBody({
         routes: allRoutes,
-        regions: allRegions,
         closures: allClosures,
       })
       .orchestrate();
@@ -30,6 +65,12 @@ export async function GET() {
 }
 
 export async function POST(req: NextRequest) {
+  const currentSession = await session.verify();
+  if (currentSession.code !== SessionCode.Ok) {
+    return ResponseComposer.composeFromSessionValidation(currentSession)
+      .orchestrate();
+  }
+
   const data = await tryParseJson<RequestBody>(req);
 
   // Body is unparseable.
@@ -41,10 +82,30 @@ export async function POST(req: NextRequest) {
   // Validate the body first.
   const validation = await validator.validate<RequestBody>(data, {
     properties: {
+      snapshotName: { type: "string", formatter: "non-empty-string" },
+      snapshotState: {
+        type: "string",
+        formatterFn: async (value) => {
+          if (value === undefined) return { ok: true };
+          if (["wip", "for_approval", "ready"].includes(value)) return { ok: true };
+          return { ok: false, error: "Invalid snapshot state." };
+        },
+      },
       routeNumber: { type: "string", formatter: "non-empty-string" },
       routeName: { type: "string", formatter: "non-empty-string" },
       routeColor: { type: "string", formatter: "hex-color" },
       routeDetails: { type: "string", formatter: "non-empty-string" },
+      vehicleTypeId: { type: "string", formatter: "uuid" },
+      availableFrom: { type: "string", formatterFn: async (value) => {
+        if (value === undefined) return { ok: true };
+        if (!TIME_PATTERN.test(value)) return { ok: false, error: "Invalid availableFrom time. Use HH:mm format." };
+        return { ok: true };
+      } },
+      availableTo: { type: "string", formatterFn: async (value) => {
+        if (value === undefined) return { ok: true };
+        if (!TIME_PATTERN.test(value)) return { ok: false, error: "Invalid availableTo time. Use HH:mm format." };
+        return { ok: true };
+      } },
       points: {
         type: "object",
         formatterFn: async (values) => {
@@ -74,11 +135,22 @@ export async function POST(req: NextRequest) {
         },
       },
     },
-    requiredProperties: ["routeNumber", "routeName", "routeColor", "routeDetails", "points"],
+    requiredProperties: ["routeNumber", "routeName", "routeColor", "routeDetails", "vehicleTypeId", "points"],
     allowUnvalidatedProperties: false,
   });
   if (!validation.ok) {
     return ResponseComposer.composeError(StatusCodes.Status400BadRequest, [validation.errors!])
+      .orchestrate();
+  }
+
+  const timeRangeValidation = validateTimeRange(data.availableFrom, data.availableTo);
+  if (!timeRangeValidation.ok) {
+    return ResponseComposer.composeError(StatusCodes.Status400BadRequest, [{ message: timeRangeValidation.error }])
+      .orchestrate();
+  }
+
+  if (data.snapshotState === "ready" && currentSession.user?.role !== "administrator_user") {
+    return ResponseComposer.composeError(StatusCodes.Status403Forbidden, [{ message: "Insufficient permissions to set ready state." }])
       .orchestrate();
   }
 
@@ -91,19 +163,40 @@ export async function POST(req: NextRequest) {
     ...data,
     polylineGoingTo,
     polylineGoingBack,
-  });
+  }, currentSession.user!.id);
 
   return oneOf(result).match(
-    s => ResponseComposer.compose(StatusCodes.Status201Created).setBody(s).orchestrate(),
+    s => {
+      void logActivity({
+        actorUserId: currentSession.user!.id,
+        actorRole: currentSession.user!.role,
+        category: "write_operation",
+        action: "route_created",
+        summary: `Created route ${s.routeNumber} - ${s.routeName}`,
+        routePath: "/api/restricted/management/route",
+        httpMethod: "POST",
+        statusCode: StatusCodes.Status201Created,
+        entityType: "route",
+        entityId: s.id,
+        payload: data,
+      });
+
+      return ResponseComposer.compose(StatusCodes.Status201Created).setBody(s).orchestrate();
+    },
     e => ResponseComposer.composeFromFailure(e).orchestrate(),
   );
 }
 
 type RequestBody = {
+  snapshotName: string;
+  snapshotState?: "wip" | "for_approval" | "ready";
   routeNumber: string;
   routeName: string;
   routeColor: string;
   routeDetails: string;
+  vehicleTypeId: string;
+  availableFrom?: string;
+  availableTo?: string;
   points: {
     goingTo: Array<{
       sequence: number;

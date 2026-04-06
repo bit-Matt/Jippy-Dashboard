@@ -1,20 +1,19 @@
 import { headers } from "next/headers";
 
+import * as accounts from "@/lib/accounts";
 import { auth } from "@/lib/auth";
 import { ResponseComposer, StatusCodes } from "@/lib/http";
-import { getUser } from "@/lib/accounts";
+import { session, SessionCode } from "@/lib/auth";
 import { oneOf } from "@/lib/one-of";
 
 export async function GET() {
-  const session = await auth.api.getSession({
-    headers: await headers(),
-  });
-  if (!session) {
-    return ResponseComposer.composeError(StatusCodes.Status401Unauthorized, [{ message: "Unauthorized." }])
+  const currentSession = await session.verify();
+  if (currentSession.code !== SessionCode.Ok) {
+    return ResponseComposer.composeFromSessionValidation(currentSession)
       .orchestrate();
   }
 
-  const result = await getUser(session.user.id);
+  const result = await accounts.getUserById(currentSession.user!.id);
   return oneOf(result).match(
     success => {
       return ResponseComposer.compose(StatusCodes.Status200Ok)

@@ -120,6 +120,83 @@
       "when": 1773807662379,
       "tag": "0016_curved_onslaught",
       "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1774614210434,
+      "tag": "0017_petite_meggan",
+      "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1774620603996,
+      "tag": "0018_parallel_sleepwalker",
+      "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1774620661286,
+      "tag": "0019_living_mathemanic",
+      "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1775292005899,
+      "tag": "0020_dashing_emma_frost",
+      "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1775303617622,
+      "tag": "0021_broken_young_avengers",
+      "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "7",
+      "when": 1775310519125,
+      "tag": "0022_short_cerise",
+      "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "7",
+      "when": 1775377775758,
+      "tag": "0023_abandoned_norman_osborn",
+      "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1775446564450,
+      "tag": "0024_narrow_malice",
+      "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1775448389179,
+      "tag": "0025_milky_ricochet",
+      "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "7",
+      "when": 1775454869546,
+      "tag": "0026_overrated_stature",
+      "breakpoints": true
+    },
+    {
+      "idx": 27,
+      "version": "7",
+      "when": 1775460410857,
+      "tag": "0027_past_celestials",
+      "breakpoints": true
     }
   ]
 }

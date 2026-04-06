@@ -1,10 +1,12 @@
 "use client";
 
-import { MapPin, Trash2, X } from "lucide-react";
+import { ChevronLeft, MapPin, Trash2 } from "lucide-react";
 import { useState, useEffect, useRef, type DragEvent } from "react";
+import useSWR from "swr";
 
 import { Card, CardContent, CardHeader} from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import {
@@ -87,21 +89,35 @@ const getErrorMessage = (error: unknown, fallbackMessage: string) => {
   return fallbackMessage;
 };
 
-export default function RouteEditor({ editingRoute, onSaved, onClosed }: RouteEditorProps) {
+export default function RouteEditor({
+  editingRoute,
+  snapshotParentRouteId,
+  onSaved,
+  onClosed,
+}: RouteEditorProps) {
+  const [snapshotName, setSnapshotName] = useState("v1");
+  const [snapshotState, setSnapshotState] = useState<"wip" | "for_approval" | "ready">("wip");
   const [routeNumber, setRouteNumber] = useState("");
   const [routeName, setRouteName] = useState("");
   const [routeDetails, setRouteDetails] = useState("");
+  const [vehicleTypeId, setVehicleTypeId] = useState("");
+  const [availableFrom, setAvailableFrom] = useState("00:00");
+  const [availableTo, setAvailableTo] = useState("23:59");
   const [isDetailsDialogOpen, setIsDetailsDialogOpen] = useState(false);
   const [draftRouteDetails, setDraftRouteDetails] = useState("");
   const [draggedWaypointId, setDraggedWaypointId] = useState<number | null>(null);
   const dragPreviewRef = useRef<HTMLElement | null>(null);
   const [loadingAddresses, setLoadingAddresses] = useState<Set<number>>(new Set());
+  const { data: me } = useSWR<MeResponse>("/api/me", $fetch);
+  const { data: vehicleTypesResponse } = useSWR<VehicleTypesResponse>("/api/restricted/management/vehicle", $fetch);
   const {
     selectedColor,
     activeDirection,
+    editorPage,
     waypointCounts,
     setSelectedColor,
     setActiveDirection,
+    setEditorPage,
     waypoints,
     activePointIndex,
     setActivePointIndex,
@@ -115,12 +131,38 @@ export default function RouteEditor({ editingRoute, onSaved, onClosed }: RouteEd
   } = useRouteEditor();
 
   useEffect(() => {
-    if (!editingRoute) return;
+    if (!editingRoute) {
+      setSnapshotName("v1");
+      setSnapshotState("wip");
+      setRouteNumber("");
+      setRouteName("");
+      setRouteDetails("");
+      setVehicleTypeId("");
+      setAvailableFrom("00:00");
+      setAvailableTo("23:59");
+      return;
+    }
 
+    setSnapshotName(editingRoute.snapshotName ?? "Draft");
+    setSnapshotState((editingRoute.snapshotState as "wip" | "for_approval" | "ready") ?? "wip");
     setRouteNumber(editingRoute.routeNumber);
     setRouteName(editingRoute.routeName);
     setRouteDetails(editingRoute.routeDetails ?? "");
+    setVehicleTypeId(editingRoute.vehicleTypeId ?? "");
+    setAvailableFrom(editingRoute.availableFrom ?? "00:00");
+    setAvailableTo(editingRoute.availableTo ?? "23:59");
   }, [editingRoute]);
+
+  useEffect(() => {
+    if (vehicleTypeId) {
+      return;
+    }
+
+    const firstVehicleTypeId = vehicleTypesResponse?.data?.data?.[0]?.id;
+    if (firstVehicleTypeId) {
+      setVehicleTypeId(firstVehicleTypeId);
+    }
+  }, [vehicleTypeId, vehicleTypesResponse]);
 
   // Reverse geocode waypoints to get addresses
   useEffect(() => {
@@ -184,6 +226,11 @@ export default function RouteEditor({ editingRoute, onSaved, onClosed }: RouteEd
   }, [waypoints]);
 
   const handleSaveRoute = async () => {
+    if (!availableFrom || !availableTo || availableFrom > availableTo) {
+      alert("Route availability is invalid. Ensure Available From is earlier than or equal to Available To.");
+      return;
+    }
+
     if (!routeNumber.trim() || !routeName.trim()) {
       console.warn("Route number and name are required");
       return;
@@ -194,23 +241,34 @@ export default function RouteEditor({ editingRoute, onSaved, onClosed }: RouteEd
       return;
     }
 
-    const endpoint = editingRoute
-      ? `/api/restricted/management/route/${editingRoute.id}`
-      : "/api/restricted/management/route";
+    const isSnapshotEdit = !!editingRoute?.id && !!editingRoute?.activeSnapshotId;
+    const isSnapshotCreate = !isSnapshotEdit && !!snapshotParentRouteId;
+    const endpoint = isSnapshotEdit
+      ? `/api/restricted/management/route/${editingRoute.id}/${editingRoute.activeSnapshotId}`
+      : isSnapshotCreate
+        ? `/api/restricted/management/route/${snapshotParentRouteId}`
+        : "/api/restricted/management/route";
 
-    const method = editingRoute ? "PATCH" : "POST";
-    const fallbackMessage = editingRoute
-      ? "Failed to update route."
-      : "Failed to create route.";
+    const method = isSnapshotEdit ? "PATCH" : "POST";
+    const fallbackMessage = isSnapshotEdit
+      ? "Failed to update route snapshot."
+      : isSnapshotCreate
+        ? "Failed to create route snapshot."
+        : "Failed to create route.";
 
     try {
       const { error } = await $fetch(endpoint, {
         method,
         body: {
+          snapshotName,
+          snapshotState,
           routeNumber: routeNumber,
           routeName: routeName,
           routeColor: selectedColor,
           routeDetails: routeDetails,
+          vehicleTypeId,
+          availableFrom,
+          availableTo,
           points: {
             goingTo: route.goingTo.map(x => ({
               sequence: x.sequence,
@@ -234,7 +292,12 @@ export default function RouteEditor({ editingRoute, onSaved, onClosed }: RouteEd
 
       setRouteNumber("");
       setRouteName("");
+      setSnapshotName("v1");
+      setSnapshotState("wip");
       setRouteDetails("");
+      setVehicleTypeId(vehicleTypesResponse?.data?.data?.[0]?.id ?? "");
+      setAvailableFrom("00:00");
+      setAvailableTo("23:59");
       clearAllWaypoints();
       stopCreating();
       onSaved?.();
@@ -256,38 +319,25 @@ export default function RouteEditor({ editingRoute, onSaved, onClosed }: RouteEd
 
     setRouteNumber("");
     setRouteName("");
+    setSnapshotName("v1");
+    setSnapshotState("wip");
     setRouteDetails("");
+    setVehicleTypeId(vehicleTypesResponse?.data?.data?.[0]?.id ?? "");
+    setAvailableFrom("00:00");
+    setAvailableTo("23:59");
     clearAllWaypoints();
+    setEditorPage("main");
     stopCreating();
     onClosed?.();
   };
 
-  const handleDeleteRoute = async () => {
-    if (!editingRoute) return;
+  const handleOpenWaypointEditor = () => {
+    setEditorPage("waypoints");
+  };
 
-    const shouldDelete = window.confirm("Are you sure you want to delete this route?");
-    if (!shouldDelete) return;
-
-    try {
-      const { error } = await $fetch(`/api/restricted/management/route/${editingRoute.id}`, {
-        method: "DELETE",
-      });
-
-      if (error) {
-        console.error("Error deleting route:", error);
-        return;
-      }
-
-      setRouteNumber("");
-      setRouteName("");
-      setRouteDetails("");
-      clearAllWaypoints();
-      stopCreating();
-      onSaved?.();
-      onClosed?.();
-    } catch (e) {
-      console.error("Error deleting route:", e);
-    }
+  const handleCloseWaypointEditor = () => {
+    cleanupDragPreview();
+    setEditorPage("main");
   };
 
   const handleWaypointDragStart = (
@@ -329,197 +379,296 @@ export default function RouteEditor({ editingRoute, onSaved, onClosed }: RouteEd
     setIsDetailsDialogOpen(false);
   };
 
-  const canSave = waypointCounts.goingTo >= 2 && waypointCounts.goingBack >= 2;
+  const isRouteAvailabilityValid = Boolean(availableFrom) && Boolean(availableTo) && availableFrom <= availableTo;
+  const canSave = waypointCounts.goingTo >= 2 && waypointCounts.goingBack >= 2 && Boolean(vehicleTypeId);
+  const isAdministrator = me?.data?.data?.role === "administrator_user";
+  const selectedVehicle = vehicleTypesResponse?.data?.data?.find((vehicle) => vehicle.id === vehicleTypeId);
 
   return (
-    <div className="absolute top-2 left-6 z-9999 w-1/4">
+    <div className="absolute top-2 left-6 z-9999 w-1/4 animate-in slide-in-from-left-6 duration-200">
       <Card>
-        <CardHeader className="flex flex-row items-center justify-between">
-          <h2 className="text-base font-semibold">{editingRoute ? "Edit Route" : "Add Route"}</h2>
+        <CardHeader className="flex flex-row items-center justify-between px-3 pt-1.5 pb-2">
+          <div>
+            <h2 className="text-base font-semibold">
+              {editorPage === "waypoints" ? "Manage Waypoints" : editingRoute ? "Edit Route" : "Add Route"}
+            </h2>
+            <Badge className="mt-1" variant={editingRoute ? "default" : "secondary"}>
+              {editingRoute ? "Edit Mode" : "Create Mode"}
+            </Badge>
+          </div>
           <div className="flex items-center gap-2">
             <Button
               size="sm"
               onClick={handleSaveRoute}
-              disabled={!canSave || !routeNumber.trim() || !routeName.trim()}
+              disabled={!canSave || !routeNumber.trim() || !routeName.trim() || !isRouteAvailabilityValid}
             >
               Save
             </Button>
             <Button
               type="button"
-              size="icon"
+              size="sm"
               variant="ghost"
-              onClick={handleCloseEditor}
-              aria-label="Close route editor"
+              onClick={editorPage === "waypoints" ? handleCloseWaypointEditor : handleCloseEditor}
+              aria-label={editorPage === "waypoints" ? "Back from waypoint manager" : "Back from route editor"}
             >
-              <X className="h-4 w-4" />
+              <ChevronLeft className="mr-1 h-4 w-4" />
+              Back
             </Button>
           </div>
         </CardHeader>
-        <CardContent className="flex max-h-[75vh] flex-col space-y-5 overflow-hidden">
-          <div className="space-y-3">
-            <div className="flex items-end gap-3">
-              <div className="w-20 shrink-0 space-y-2">
-                <Label htmlFor="route-number">Route No.</Label>
-                <Input
-                  id="route-number"
-                  placeholder="e.g., 101"
-                  value={routeNumber}
-                  onChange={(e) => setRouteNumber(e.target.value)}
-                />
-              </div>
-              <div className="min-w-0 flex-1 space-y-2">
-                <Label htmlFor="route-name">Route Name</Label>
-                <Input
-                  id="route-name"
-                  placeholder="e.g., Downtown Express"
-                  value={routeName}
-                  onChange={(e) => setRouteName(e.target.value)}
-                />
-              </div>
-            </div>
-            <div className="space-y-2">
-              <Label>Route Details</Label>
-              <Button
-                type="button"
-                variant="outline"
-                className="w-full justify-start"
-                onClick={handleOpenRouteDetails}
-              >
-                Add Route Details
-              </Button>
-              <p className="text-xs text-muted-foreground">
-                {routeDetails.trim().length > 0
-                  ? `Details saved (${routeDetails.trim().length} characters).`
-                  : "No route details added yet."}
-              </p>
-            </div>
-          </div>
-
-          <div className="space-y-2">
-            <Label>Route Color</Label>
-            <Select value={selectedColor} onValueChange={setSelectedColor}>
-              <SelectTrigger className="w-full">
-                <SelectValue placeholder="Select route color" />
-              </SelectTrigger>
-              <SelectContent>
-                {ROUTE_COLORS.map((color) => (
-                  <SelectItem key={color.value} value={color.value}>
-                    <span className="flex items-center gap-2">
-                      <span
-                        aria-hidden="true"
-                        className="h-2.5 w-2.5 rounded-full"
-                        style={{ backgroundColor: color.value }}
-                      />
-                      {color.label}
-                    </span>
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div className="space-y-2">
-            <Label>Direction</Label>
-            <div className="bg-muted inline-flex rounded-md p-0.5 w-full">
-              <button
-                type="button"
-                onClick={() => setActiveDirection("goingTo")}
-                className={`grow rounded px-2 py-1 text-xs transition-colors ${
-                  activeDirection === "goingTo" ? "bg-background text-foreground shadow-xs" : "text-muted-foreground"
-                }`}
-              >
-                Going To City ({waypointCounts.goingTo})
-              </button>
-              <button
-                type="button"
-                onClick={() => setActiveDirection("goingBack")}
-                className={`grow rounded px-2 py-1 text-xs transition-colors ${
-                  activeDirection === "goingBack" ? "bg-background text-foreground shadow-xs" : "text-muted-foreground"
-                }`}
-              >
-                Going Back ({waypointCounts.goingBack})
-              </button>
-            </div>
-          </div>
-
-          <div className="flex-1 space-y-3 overflow-y-auto pr-1 max-h-72.5">
-            {waypoints.map((waypoint, index) => (
-              <div
-                key={waypoint.id}
-                draggable
-                className={`space-y-3 rounded-lg border bg-background p-3 ${
-                  activePointIndex === waypoint.id ? "border-primary" : "border-border"
-                }`}
-                onDragStart={(event) => handleWaypointDragStart(event, waypoint.id)}
-                onDragOver={(event) => event.preventDefault()}
-                onDrop={(event) => {
-                  event.preventDefault();
-
-                  if (draggedWaypointId === null) return;
-                  reorderWaypoints(draggedWaypointId, waypoint.id);
-                  cleanupDragPreview();
-                }}
-                onDragEnd={cleanupDragPreview}
-                onClick={() => setActivePointIndex(waypoint.id)}
-              >
-                <div className="flex items-center justify-between">
-                  <span className="text-sm font-medium">
-                    {activeDirection === "goingTo" ? "Going To" : "Going Back"} Waypoint {index + 1}
-                  </span>
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      removeWaypoint(waypoint.id);
-                    }}
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
+        <CardContent className="max-h-[75vh] overflow-hidden p-1">
+          <div
+            className={`flex w-[200%] items-start transition-transform duration-300 ease-out ${
+              editorPage === "waypoints" ? "-translate-x-1/2" : "translate-x-0"
+            }`}
+          >
+            <div className="flex w-1/2 shrink-0 flex-col space-y-3 overflow-y-auto p-2">
+              <div className="space-y-2">
+                <div className="flex items-end gap-3">
+                  <div className="w-28 shrink-0 space-y-2">
+                    <Label htmlFor="route-version">Version</Label>
+                    <Input
+                      id="route-version"
+                      placeholder="e.g., v1"
+                      value={snapshotName}
+                      onChange={(e) => setSnapshotName(e.target.value)}
+                    />
+                  </div>
+                  <div className="grow shrink-0 space-y-2">
+                    <Label>Snapshot State</Label>
+                    <Select value={snapshotState} onValueChange={(value) => setSnapshotState(value as "wip" | "for_approval" | "ready")}>
+                      <SelectTrigger className="w-full">
+                        <SelectValue placeholder="Select state" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="wip">WIP</SelectItem>
+                        <SelectItem value="for_approval">For Approval</SelectItem>
+                        {isAdministrator ? <SelectItem value="ready">Ready</SelectItem> : null}
+                      </SelectContent>
+                    </Select>
+                  </div>
                 </div>
-                <InputGroup>
-                  <InputGroupInput
-                    readOnly
-                    value={waypoint.address || (loadingAddresses.has(waypoint.id) ? "Loading address..." : "Click on map to add waypoint")}
-                    placeholder="Address"
-                    title={waypoint.address}
-                  />
-                  <InputGroupAddon align="inline-end" className="pr-2">
-                    <InputGroupButton aria-label={`Pin waypoint ${index + 1}`}>
-                      <MapPin />
-                    </InputGroupButton>
-                  </InputGroupAddon>
-                </InputGroup>
+                <div className="flex items-end gap-3">
+                  <div className="w-20 shrink-0 space-y-2">
+                    <Label htmlFor="route-number">Route No.</Label>
+                    <Input
+                      id="route-number"
+                      placeholder="e.g., 101"
+                      value={routeNumber}
+                      onChange={(e) => setRouteNumber(e.target.value)}
+                    />
+                  </div>
+                  <div className="min-w-0 flex-1 space-y-2">
+                    <Label htmlFor="route-name">Route Name</Label>
+                    <Input
+                      id="route-name"
+                      placeholder="e.g., Downtown Express"
+                      value={routeName}
+                      onChange={(e) => setRouteName(e.target.value)}
+                    />
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <Label>Route Details</Label>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="w-full justify-start"
+                    onClick={handleOpenRouteDetails}
+                  >
+                    Add Route Details
+                  </Button>
+                  <p className="text-xs text-muted-foreground">
+                    {routeDetails.trim().length > 0
+                      ? `Details saved (${routeDetails.trim().length} characters).`
+                      : "No route details added yet."}
+                  </p>
+                </div>
+                <div className="space-y-2">
+                  <Label>Vehicle Type</Label>
+                  <Select value={vehicleTypeId} onValueChange={setVehicleTypeId}>
+                    <SelectTrigger className="w-full">
+                      <SelectValue placeholder="Select vehicle type" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {vehicleTypesResponse?.data?.data?.map((vehicleType) => (
+                        <SelectItem key={vehicleType.id} value={vehicleType.id}>
+                          {vehicleType.name} ({vehicleType.requiresRoute ? "Requires Route" : "Freeform"})
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  {!selectedVehicle ? (
+                    <p className="text-xs text-destructive">
+                      Vehicle type is required.
+                    </p>
+                  ) : null}
+                </div>
+                <div className="space-y-2">
+                  <Label>Availability Window</Label>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div className="space-y-1">
+                      <Label htmlFor="route-available-from" className="text-xs">Available From</Label>
+                      <Input
+                        id="route-available-from"
+                        type="time"
+                        value={availableFrom}
+                        onChange={(e) => setAvailableFrom(e.target.value)}
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <Label htmlFor="route-available-to" className="text-xs">Available To</Label>
+                      <Input
+                        id="route-available-to"
+                        type="time"
+                        value={availableTo}
+                        onChange={(e) => setAvailableTo(e.target.value)}
+                      />
+                    </div>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Default full-day service is 00:00 to 23:59.
+                  </p>
+                  {!isRouteAvailabilityValid ? (
+                    <p className="text-xs text-destructive">
+                      Availability range is invalid. Available From must be earlier than or equal to Available To.
+                    </p>
+                  ) : null}
+                </div>
               </div>
-            ))}
+
+              <div className="space-y-2">
+                <Label>Route Color</Label>
+                <Select value={selectedColor} onValueChange={setSelectedColor}>
+                  <SelectTrigger className="w-full">
+                    <SelectValue placeholder="Select route color" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {ROUTE_COLORS.map((color) => (
+                      <SelectItem key={color.value} value={color.value}>
+                        <span className="flex items-center gap-2">
+                          <span
+                            aria-hidden="true"
+                            className="h-2.5 w-2.5 rounded-full"
+                            style={{ backgroundColor: color.value }}
+                          />
+                          {color.label}
+                        </span>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-2">
+                <Label>Waypoints</Label>
+                <Button
+                  type="button"
+                  className="w-full"
+                  variant="outline"
+                  onClick={handleOpenWaypointEditor}
+                >
+                  Manage Waypoints
+                </Button>
+              </div>
+            </div>
+
+            <div className="flex w-1/2 shrink-0 flex-col space-y-2 overflow-y-auto p-2">
+
+              <div className="space-y-2">
+                <Label>Direction</Label>
+                <div className="bg-muted inline-flex rounded-md p-0.5 w-full">
+                  <button
+                    type="button"
+                    onClick={() => setActiveDirection("goingTo")}
+                    className={`grow rounded px-2 py-1 text-xs transition-colors ${
+                      activeDirection === "goingTo" ? "bg-background text-foreground shadow-xs" : "text-muted-foreground"
+                    }`}
+                  >
+                    Going To City ({waypointCounts.goingTo})
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setActiveDirection("goingBack")}
+                    className={`grow rounded px-2 py-1 text-xs transition-colors ${
+                      activeDirection === "goingBack" ? "bg-background text-foreground shadow-xs" : "text-muted-foreground"
+                    }`}
+                  >
+                    Going Back ({waypointCounts.goingBack})
+                  </button>
+                </div>
+              </div>
+
+              <div className="max-h-[22rem] space-y-2 overflow-y-auto pr-1">
+                {waypoints.map((waypoint, index) => (
+                  <div
+                    key={waypoint.id}
+                    draggable
+                    className={`space-y-3 rounded-lg border bg-background p-3 ${
+                      activePointIndex === waypoint.id ? "border-primary" : "border-border"
+                    }`}
+                    onDragStart={(event) => handleWaypointDragStart(event, waypoint.id)}
+                    onDragOver={(event) => event.preventDefault()}
+                    onDrop={(event) => {
+                      event.preventDefault();
+
+                      if (draggedWaypointId === null) return;
+                      reorderWaypoints(draggedWaypointId, waypoint.id);
+                      cleanupDragPreview();
+                    }}
+                    onDragEnd={cleanupDragPreview}
+                    onClick={() => setActivePointIndex(waypoint.id)}
+                  >
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm font-medium">
+                        {activeDirection === "goingTo" ? "Going To" : "Going Back"} Waypoint {index + 1}
+                      </span>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          removeWaypoint(waypoint.id);
+                        }}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
+                    <InputGroup>
+                      <InputGroupInput
+                        readOnly
+                        value={waypoint.address || (loadingAddresses.has(waypoint.id) ? "Loading address..." : "Click on map to add waypoint")}
+                        placeholder="Address"
+                        title={waypoint.address}
+                      />
+                      <InputGroupAddon align="inline-end" className="pr-2">
+                        <InputGroupButton aria-label={`Pin waypoint ${index + 1}`}>
+                          <MapPin />
+                        </InputGroupButton>
+                      </InputGroupAddon>
+                    </InputGroup>
+                  </div>
+                ))}
+              </div>
+
+              <div className="space-y-1.5 pt-0.5">
+                <Button
+                  className="w-full"
+                  variant="outline"
+                  onClick={() => {
+                    clearWaypoints();
+                  }}
+                  disabled={waypoints.length === 0}
+                >
+                  Clear Active Direction
+                </Button>
+
+                <p className="text-xs text-muted-foreground">
+                  Use the direction tabs to edit each path independently. New map clicks are added to the active direction. Each direction needs at least 2 waypoints to save.
+                </p>
+              </div>
+            </div>
           </div>
-
-          {editingRoute ? (
-            <Button
-              className="w-full"
-              variant="destructive"
-              onClick={() => {
-                void handleDeleteRoute();
-              }}
-            >
-              Delete Route
-            </Button>
-          ) : (
-            <Button
-              className="w-full"
-              variant="outline"
-              onClick={() => {
-                clearWaypoints();
-              }}
-              disabled={waypoints.length === 0}
-            >
-              Clear Active Direction
-            </Button>
-          )}
-
-          <p className="text-xs text-muted-foreground">
-            Use the direction tabs to edit each path independently. New map clicks are added to the active direction. Each direction needs at least 2 waypoints to save.
-          </p>
         </CardContent>
       </Card>
 
@@ -550,12 +699,36 @@ export default function RouteEditor({ editingRoute, onSaved, onClosed }: RouteEd
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
     </div>
   );
 }
 
 interface RouteEditorProps {
   editingRoute?: AllResponse["routes"][0] | null
+  snapshotParentRouteId?: string | null
   onSaved?: () => void
   onClosed?: () => void
+}
+
+type MeResponse = {
+  data: {
+    ok: boolean;
+    data: {
+      role: string;
+    };
+  };
+  error?: unknown;
+}
+
+type VehicleTypesResponse = {
+  data: {
+    ok: boolean;
+    data: Array<{
+      id: string;
+      name: string;
+      requiresRoute: boolean;
+    }>;
+  };
+  error?: unknown;
 }

@@ -16,8 +16,12 @@ interface ClosureDraftPoint {
 interface ClosureEditorState {
   mode: ClosureMode;
   activeClosureId: string | null;
+  activeSnapshotId: string | null;
   activeClosureTool: ActiveClosureTool;
   draft: {
+    versionName: string;
+    snapshotState: "wip" | "for_approval" | "ready";
+    shape: string;
     closureName: string;
     closureDescription: string;
     points: ClosureDraftPoint[];
@@ -27,6 +31,7 @@ interface ClosureEditorState {
 interface ClosureEditorContextValue extends ClosureEditorState {
   hasDefinedPolygon: boolean;
   startCreating: () => void;
+  startCreatingSnapshot: (closureId: string) => void;
   startEditing: (closure: ClosureObject) => void;
   stopEditing: () => void;
   setPolygonPoints: (points: Array<[number, number]>) => void;
@@ -35,6 +40,8 @@ interface ClosureEditorContextValue extends ClosureEditorState {
   finishClosureToolEditing: () => void;
   setClosureName: (name: string) => void;
   setClosureDescription: (description: string) => void;
+  setVersionName: (name: string) => void;
+  setSnapshotState: (state: "wip" | "for_approval" | "ready") => void;
 }
 
 const ClosureEditorContext = createContext<ClosureEditorContextValue | undefined>(undefined);
@@ -43,6 +50,7 @@ export function ClosureEditorProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<ClosureEditorState>({
     mode: "idle",
     activeClosureId: null,
+    activeSnapshotId: null,
     activeClosureTool: "none",
     draft: null,
   });
@@ -51,8 +59,12 @@ export function ClosureEditorProvider({ children }: { children: ReactNode }) {
     setState({
       mode: "creating",
       activeClosureId: null,
+      activeSnapshotId: null,
       activeClosureTool: "draw-polygon",
       draft: {
+        versionName: "v1",
+        snapshotState: "wip",
+        shape: "polygon",
         closureName: "",
         closureDescription: "",
         points: [],
@@ -66,8 +78,12 @@ export function ClosureEditorProvider({ children }: { children: ReactNode }) {
     setState({
       mode: "editing",
       activeClosureId: closure.id,
-      activeClosureTool: "draw-polygon",
+      activeSnapshotId: closure.activeSnapshotId,
+      activeClosureTool: sortedPoints.length >= 3 ? "edit-polygon" : "draw-polygon",
       draft: {
+        versionName: closure.versionName ?? "Draft",
+        snapshotState: (closure.snapshotState as "wip" | "for_approval" | "ready") ?? "wip",
+        shape: closure.shape || "polygon",
         closureName: closure.closureName,
         closureDescription: closure.closureDescription,
         points: sortedPoints.map((point, index) => ({
@@ -79,10 +95,28 @@ export function ClosureEditorProvider({ children }: { children: ReactNode }) {
     });
   }, []);
 
+  const startCreatingSnapshot = useCallback((closureId: string) => {
+    setState({
+      mode: "creating",
+      activeClosureId: closureId,
+      activeSnapshotId: null,
+      activeClosureTool: "draw-polygon",
+      draft: {
+        versionName: "v1",
+        snapshotState: "wip",
+        shape: "polygon",
+        closureName: "",
+        closureDescription: "",
+        points: [],
+      },
+    });
+  }, []);
+
   const stopEditing = useCallback(() => {
     setState({
       mode: "idle",
       activeClosureId: null,
+      activeSnapshotId: null,
       activeClosureTool: "none",
       draft: null,
     });
@@ -114,7 +148,7 @@ export function ClosureEditorProvider({ children }: { children: ReactNode }) {
 
       return {
         ...prev,
-        activeClosureTool: "none",
+        activeClosureTool: "draw-polygon",
         draft: {
           ...prev.draft,
           points: [],
@@ -163,11 +197,40 @@ export function ClosureEditorProvider({ children }: { children: ReactNode }) {
       : prev));
   }, []);
 
+  const setVersionName = useCallback((versionName: string) => {
+    setState((prev) => {
+      if (!prev.draft) return prev;
+
+      return {
+        ...prev,
+        draft: {
+          ...prev.draft,
+          versionName,
+        },
+      };
+    });
+  }, []);
+
+  const setSnapshotState = useCallback((snapshotState: "wip" | "for_approval" | "ready") => {
+    setState((prev) => {
+      if (!prev.draft) return prev;
+
+      return {
+        ...prev,
+        draft: {
+          ...prev.draft,
+          snapshotState,
+        },
+      };
+    });
+  }, []);
+
   const value = useMemo<ClosureEditorContextValue>(
     () => ({
       ...state,
       hasDefinedPolygon: (state.draft?.points.length ?? 0) >= 3,
       startCreating,
+      startCreatingSnapshot,
       startEditing,
       stopEditing,
       setPolygonPoints,
@@ -176,10 +239,13 @@ export function ClosureEditorProvider({ children }: { children: ReactNode }) {
       finishClosureToolEditing,
       setClosureName,
       setClosureDescription,
+      setVersionName,
+      setSnapshotState,
     }),
     [
       state,
       startCreating,
+      startCreatingSnapshot,
       startEditing,
       stopEditing,
       setPolygonPoints,
@@ -188,6 +254,8 @@ export function ClosureEditorProvider({ children }: { children: ReactNode }) {
       finishClosureToolEditing,
       setClosureName,
       setClosureDescription,
+      setVersionName,
+      setSnapshotState,
     ],
   );
 

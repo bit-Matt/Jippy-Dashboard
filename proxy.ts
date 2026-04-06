@@ -1,7 +1,7 @@
 import { LRUCache } from "lru-cache";
 import { NextResponse, type NextRequest } from "next/server";
 
-import { ResponseComposer, StatusCodes, utils } from "@/lib/http";
+import { ResponseComposer, StatusCodes } from "@/lib/http";
 
 const tokenCache = new LRUCache<string, number>({
   max: 5000,
@@ -21,15 +21,6 @@ export async function proxy(request: NextRequest) {
 
     // Increment and set
     tokenCache.set(ip, tokenCount + 1);
-  }
-
-  if (request.nextUrl.pathname.startsWith("/api/restricted")) {
-    const isAllowed = await utils.verifyAPIKeyOrSession(request);
-
-    if (!isAllowed) {
-      return ResponseComposer.composeError(StatusCodes.Status401Unauthorized, [{ message: "Unauthorized" }])
-        .orchestrate();
-    }
   }
 
   return NextResponse.next();

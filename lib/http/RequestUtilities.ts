@@ -18,33 +18,3 @@ export async function tryParseJson<T>(req: NextRequest): Promise<T | null> {
     return null;
   }
 }
-
-/**
- * Retrieves the API key or session details from the given request.
- * This method handles the extraction of authentication information based on the request structure.
- *
- * @param {NextRequest} req - The incoming request object containing the necessary headers or cookies to identify the
- *                            API key or session.
- * @return {Promise<boolean>} A promise that resolves to the API key, session identifier, or null if neither is found.
- */
-export async function verifyAPIKeyOrSession(req: NextRequest): Promise<boolean> {
-  // Check for session first
-  const session = await auth.api.getSession({
-    headers: await headers(),
-  });
-
-  // If session found, grant access.
-  if (session) {
-    return session.user.role === "administrator_user";
-  }
-
-  const APPLICATION_ID = req.headers.get("X-Application-Id");
-  const APPLICATION_SECRET = req.headers.get("X-Application-Secret");
-
-  // No such keys found on the header
-  if (!APPLICATION_ID || !APPLICATION_SECRET) return false;
-
-  // TODO: Check for API key
-
-  return false;
-}

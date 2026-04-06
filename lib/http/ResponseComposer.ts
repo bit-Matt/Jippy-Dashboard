@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { ErrorCodes, Failure } from "@/lib/one-of";
+import { SessionCode, type SessionVerifiedResult } from "@/lib/auth";
 import { StatusCodes } from "@/lib/http/StatusCodes";
 
 export class ResponseComposer<TResponse> implements IResponseComposer<TResponse> {
@@ -280,6 +281,29 @@ export class ResponseComposer<TResponse> implements IResponseComposer<TResponse>
     default:
       return ResponseComposer
         .composeError(StatusCodes.Status500InternalServerError, { message: failure.message });
+    }
+  }
+
+  static composeFromSessionValidation(result: Optional<SessionVerifiedResult>): IResponseComposer<IApiResponseError<{ message: string; }>> {
+    if (!result) {
+      return ResponseComposer
+        .composeError(StatusCodes.Status401Unauthorized, { message: "Invalid session." });
+    }
+
+    switch (result.code) {
+    case SessionCode.Banned:
+      return ResponseComposer
+        .composeError(StatusCodes.Status403Forbidden, { message: "Your account has been banned." });
+    case SessionCode.ShadowBanned:
+    case SessionCode.Pending:
+      return ResponseComposer
+        .composeError(StatusCodes.Status403Forbidden, { message: "Your account is pending verification." });
+    case SessionCode.InsufficientPermissions:
+      return ResponseComposer
+        .composeError(StatusCodes.Status403Forbidden, { message: "You don't have permission to perform this action." });
+    default:
+      return ResponseComposer
+        .composeError(StatusCodes.Status401Unauthorized, { message: "Invalid session." });
     }
   }
 }

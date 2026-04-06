@@ -1,8 +1,9 @@
-import { eq, sql } from "drizzle-orm";
+import {and, eq, sql} from "drizzle-orm";
 
-import { db } from "@/lib/db";
-import { region, regionSequences, regionStations } from "@/lib/db/schema";
-import { ErrorCodes, Failure, Result, Success } from "@/lib/one-of/types";
+import {db} from "@/lib/db";
+import {region, regionSequences, regionSnapshots, regionStations} from "@/lib/db/schema";
+import {ErrorCodes, Failure, Result, Success} from "@/lib/one-of/types";
+import {unwrap} from "@/lib/one-of";
 
 /**
  * Fetches all regions with their metadata, ordered points, and stations.
@@ -13,14 +14,102 @@ import { ErrorCodes, Failure, Result, Success } from "@/lib/one-of/types";
  *
  * @returns A `Promise<Result<RegionObject[]>>` containing the list of regions, or a failure if fetching fails.
  */
-export async function getAllRegions(): Promise<Result<RegionObject[]>> {
+export async function getAllRegions(readyActiveOnly = false): Promise<Result<RegionObject[]>> {
   try {
-    const result = await db
+    const selectFields = {
+      id: region.id,
+      activeSnapshotId: regionSnapshots.id,
+      snapshotName: regionSnapshots.versionName,
+      snapshotState: regionSnapshots.snapshotState,
+      regionName: regionSnapshots.name,
+      regionColor: regionSnapshots.color,
+      regionShape: regionSnapshots.shapeType,
+      regionId: region.id,
+
+      points: sql<PointObject[]>`(
+        SELECT COALESCE(
+          json_agg(
+            json_build_object(
+              'id', ${regionSequences.id},
+              'sequence', ${regionSequences.sequenceNumber},
+              'point', json_build_array(
+                ST_Y(${regionSequences.point}),
+                ST_X(${regionSequences.point})
+              )
+            ) ORDER BY ${regionSequences.sequenceNumber} ASC
+          ), '[]'::json
+        )
+        FROM ${regionSequences}
+        WHERE ${regionSequences.regionSnapshotId} = ${regionSnapshots.id})`,
+
+      stations: sql<StationObject[]>`(
+        SELECT COALESCE(
+          json_agg(
+            json_build_object(
+              'id', ${regionStations.id},
+              'address', ${regionStations.address},
+              'availableFrom', ${regionStations.availableFrom},
+              'availableTo', ${regionStations.availableTo},
+              'point', json_build_array(
+                ST_Y(${regionStations.point}),
+                ST_X(${regionStations.point})
+              )
+            )
+          ), '[]'::json
+        )
+        FROM ${regionStations}
+        WHERE ${regionStations.regionSnapshotId} = ${regionSnapshots.id})`,
+    };
+
+    const result = readyActiveOnly
+      ? await db
+        .select(selectFields)
+        .from(region)
+        .innerJoin(regionSnapshots, eq(region.activeSnapshotId, regionSnapshots.id))
+        .where(eq(regionSnapshots.snapshotState, "ready"))
+        .groupBy(region.id, regionSnapshots.id)
+      : await db
+        .select(selectFields)
+        .from(region)
+        .leftJoin(regionSnapshots, eq(region.activeSnapshotId, regionSnapshots.id))
+        .groupBy(region.id, regionSnapshots.id);
+
+    return new Success(result as RegionObject[]);
+  } catch (e) {
+    return new Failure(ErrorCodes.Fatal, "Failed to fetch regions.", {}, e);
+  }
+}
+
+/**
+ * Fetches a region by its ID, including active snapshot metadata, ordered boundary points,
+ * and associated station markers.
+ *
+ * The result contains:
+ * - region identifiers and display metadata (`regionName`, `regionColor`, `regionShape`)
+ * - `points`: ordered region geometry points
+ * - `stations`: station list with address and coordinates
+ *
+ * Coordinates are returned in `[latitude, longitude]` format.
+ *
+ * @param regionId - The unique identifier of the region to retrieve.
+ * @param [snapshotId] - The unique identifier of the snapshot to use. If unspecified, it will use the active
+ *                       selected snapshot.
+ * @returns A `Result<RegionObject>`:
+ * - `Success<RegionObject>` when the region exists.
+ * - `Failure` with `ErrorCodes.ResourceNotFound` when no matching region is found.
+ * - `Failure` with `ErrorCodes.Fatal` when an unexpected database error occurs.
+ */
+export async function getRegionById(regionId: string, snapshotId?: string): Promise<Result<RegionObject>> {
+  try {
+    const [result] = await db
       .select({
         id: region.id,
-        regionName: region.name,
-        regionColor: region.color,
-        regionShape: region.shapeType,
+        activeSnapshotId: regionSnapshots.id,
+        snapshotName: regionSnapshots.versionName,
+        snapshotState: regionSnapshots.snapshotState,
+        regionName: regionSnapshots.name,
+        regionColor: regionSnapshots.color,
+        regionShape: regionSnapshots.shapeType,
         regionId: region.id,
 
         points: sql<PointObject[]>`(
@@ -37,7 +126,7 @@ export async function getAllRegions(): Promise<Result<RegionObject[]>> {
           ), '[]'::json
         )
         FROM ${regionSequences}
-        WHERE ${regionSequences.regionId} = "region_markers"."id")`,
+        WHERE ${regionSequences.regionSnapshotId} = ${regionSnapshots.id})`,
 
         stations: sql<StationObject[]>`(
         SELECT COALESCE(
@@ -45,6 +134,8 @@ export async function getAllRegions(): Promise<Result<RegionObject[]>> {
             json_build_object(
               'id', ${regionStations.id},
               'address', ${regionStations.address},
+              'availableFrom', ${regionStations.availableFrom},
+              'availableTo', ${regionStations.availableTo},
               'point', json_build_array(
                 ST_Y(${regionStations.point}),
                 ST_X(${regionStations.point})
@@ -53,13 +144,329 @@ export async function getAllRegions(): Promise<Result<RegionObject[]>> {
           ), '[]'::json
         )
         FROM ${regionStations}
-        WHERE ${regionStations.regionId} = "region_markers"."id")`,
+        WHERE ${regionStations.regionSnapshotId} = ${regionSnapshots.id})`,
       })
-      .from(region);
+      .from(region)
+      .leftJoin(regionSnapshots, eq(regionSnapshots.id, snapshotId ? snapshotId : region.activeSnapshotId))
+      .where(eq(region.id, regionId))
+      .groupBy(region.id, regionSnapshots.id)
+      .limit(1);
+
+    if (!result) {
+      return new Failure(ErrorCodes.ResourceNotFound, "Region not found.", { regionId });
+    }
+
+    return new Success(result as RegionObject);
+  } catch (e) {
+    return new Failure(ErrorCodes.Fatal, "Failed to fetch regions.", {}, e);
+  }
+}
+
+/**
+ * Creates a new snapshot for an existing region, including boundary points and optional stations.
+ *
+ * This operation runs in a transaction and performs:
+ * 1. Region existence validation.
+ * 2. Region snapshot insertion.
+ * 3. Boundary sequence insertion.
+ * 4. Optional station insertion.
+ *
+ * Coordinate mapping note:
+ * - Input/output coordinates use `[lat, lng]`.
+ * - Stored geometry coordinates are persisted as `[lng, lat]`.
+ *
+ * @param regionId - The ID of the region that will own the new snapshot.
+ * @param params - Snapshot payload containing region metadata, ordered boundary points,
+ * and optional station markers.
+ * @returns A `Result<RegionObject>`:
+ * - `Success<RegionObject>` with the created snapshot data.
+ * - `Failure` with `ErrorCodes.ResourceNotFound` if the region does not exist.
+ * - `Failure` with `ErrorCodes.Fatal` if snapshot creation fails unexpectedly.
+ */
+export async function createSnapshot(regionId: string, params: RegionAddParameters, ownerId: string): Promise<Result<RegionObject>> {
+  try {
+    const [regionTarget] = await db
+      .select({ id: region.id })
+      .from(region)
+      .where(eq(region.id, regionId))
+      .limit(1);
+    if (!regionTarget) {
+      return new Failure(ErrorCodes.ResourceNotFound, "Region not found.", { regionId });
+    }
+
+    const transaction = await db.transaction(async tx => {
+      // Create a snapshot
+      const [snapshot] = await tx
+        .insert(regionSnapshots)
+        .values({
+          ownerId,
+          versionName: params.snapshotName,
+          snapshotState: params.snapshotState ?? "wip",
+          regionId: regionTarget.id,
+          name: params.regionName,
+          color: params.regionColor,
+          shapeType: params.regionShape,
+        })
+        .returning();
+
+      // Generate sequences
+      const sequences = await tx
+        .insert(regionSequences)
+        .values(
+          params.points.map(point => ({
+            regionSnapshotId: snapshot.id,
+            sequenceNumber: point.sequence,
+            point: [point.point[1], point.point[0]] as [number, number],
+          })),
+        )
+        .returning();
+      if (sequences.length !== params.points.length) return tx.rollback();
+
+      let stations: StationObject[] = [];
+      if (params.stations.length > 0) {
+        const stationCreateResult = await tx
+          .insert(regionStations)
+          .values(
+            params.stations.map(point => ({
+              regionSnapshotId: snapshot.id,
+              address: point.address,
+              availableFrom: point.availableFrom ?? "00:00",
+              availableTo: point.availableTo ?? "23:59",
+              point: [point.point[1], point.point[0]] as [number, number],
+            })),
+          )
+          .returning();
+        stations = stationCreateResult.map(s => ({
+          id: s.id,
+          address: s.address,
+          availableFrom: s.availableFrom,
+          availableTo: s.availableTo,
+          point: [s.point[1], s.point[0]],
+        }));
+      }
+
+      return {
+        id: snapshot.id,
+        activeSnapshotId: snapshot.id,
+        snapshotName: snapshot.versionName,
+        snapshotState: snapshot.snapshotState,
+        regionName: snapshot.name,
+        regionColor: snapshot.color,
+        regionShape: snapshot.shapeType,
+        points: sequences.map(x => ({
+          id: x.id,
+          sequence: x.sequenceNumber,
+          point: [x.point[1], x.point[0]],
+        })),
+        stations,
+      } satisfies RegionObject;
+    });
+
+    return new Success(transaction);
+  } catch (e) {
+    return new Failure(ErrorCodes.Fatal, "Failed to create a region snapshot.", { regionId, params }, e);
+  }
+}
+
+/**
+ * Clones an existing region snapshot (shape points and stations) into a new `"wip"` snapshot.
+ *
+ * The copy process:
+ * 1. Validates that the source snapshot exists and belongs to the region.
+ * 2. Loads all region boundary sequences and station records from the source snapshot.
+ * 3. Creates a new snapshot with copied metadata and a `"(Copy)"` suffix in the version name.
+ * 4. Re-inserts copied sequences and stations under the new snapshot ID.
+ *
+ * Executed inside a database transaction to ensure atomicity.
+ *
+ * @param regionId - The ID of the region that owns the snapshot.
+ * @param sourceSnapshotId - The snapshot ID to duplicate.
+ * @returns A `Result<SnapshotItem>`:
+ * - `Success<SnapshotItem>` with the new snapshot summary (`id`, `name`, `state`, timestamps).
+ * - `Failure` with `ErrorCodes.ResourceNotFound` if the source snapshot is missing.
+ * - `Failure` with `ErrorCodes.Fatal` if cloning fails unexpectedly.
+ */
+export async function copySnapshot(regionId: string, sourceSnapshotId: string, ownerId: string): Promise<Result<SnapshotItem>> {
+  try {
+    const [snapshot] = await db
+      .select()
+      .from(regionSnapshots)
+      .where(
+        and(
+          eq(regionSnapshots.id, sourceSnapshotId),
+          eq(regionSnapshots.regionId, regionId),
+        ),
+      )
+      .limit(1);
+    if (!snapshot) {
+      return new Failure(ErrorCodes.ResourceNotFound, "Snapshot not found.", { regionId, sourceSnapshotId });
+    }
+
+    // Copy the snapshot points
+    const shape = await db
+      .select()
+      .from(regionSequences)
+      .where(eq(regionSequences.regionSnapshotId, snapshot.id));
+
+    const stations = await db
+      .select()
+      .from(regionStations)
+      .where(eq(regionStations.regionSnapshotId, snapshot.id));
+
+    // Create a new snapshot
+    const result = await db.transaction(async tx => {
+      const [newSnapshot] = await tx
+        .insert(regionSnapshots)
+        .values({
+          ownerId,
+          snapshotState: "wip",
+          regionId: snapshot.regionId,
+          versionName: snapshot.versionName + " (Copy)",
+          name: snapshot.name,
+          color: snapshot.color,
+          shapeType: snapshot.shapeType,
+        })
+        .returning();
+      if (!newSnapshot) return tx.rollback();
+
+      if (shape.length > 0) {
+        await tx
+          .insert(regionSequences)
+          .values(shape.map(p => ({
+            sequenceNumber: p.sequenceNumber,
+            point: p.point,
+            regionSnapshotId: newSnapshot.id,
+          })));
+      }
+
+      if (stations.length > 0) {
+        await tx
+          .insert(regionStations)
+          .values(stations.map(s => ({
+            point: s.point,
+            address: s.address,
+            availableFrom: s.availableFrom,
+            availableTo: s.availableTo,
+            regionSnapshotId: newSnapshot.id,
+          })));
+      }
+
+      return {
+        id: newSnapshot.id,
+        name: newSnapshot.versionName,
+        state: newSnapshot.snapshotState,
+        createdOn: newSnapshot.createdAt,
+        updatedAt: newSnapshot.updatedAt,
+      };
+    });
 
     return new Success(result);
   } catch (e) {
-    return new Failure(ErrorCodes.Fatal, "Failed to fetch regions.", {}, e);
+    return new Failure(ErrorCodes.Fatal, "Snapshot copying failed.", { regionId, sourceSnapshotId }, e);
+  }
+}
+
+export async function deleteSnapshot(regionId: string, snapshotId: string): Promise<Result<undefined>> {
+  try {
+    const [snapshot] = await db
+      .select({ id: regionSnapshots.id, state: regionSnapshots.snapshotState })
+      .from(regionSnapshots)
+      .where(
+        and(
+          eq(regionSnapshots.id, snapshotId),
+          eq(regionSnapshots.regionId, regionId),
+        ),
+      )
+      .limit(1);
+    if (!snapshot) {
+      return new Failure(ErrorCodes.ResourceExpired, "No snapshot found", { regionId, snapshotId });
+    }
+
+    if (snapshot.state === "ready") {
+      return new Failure(ErrorCodes.ValidationFailure, "You cannot delete this snapshot", { regionId, snapshotId });
+    }
+
+    await db.delete(regionSnapshots)
+      .where(eq(regionSnapshots.id, snapshot.id));
+
+    return new Success(undefined);
+  } catch (e) {
+    return new Failure(ErrorCodes.Fatal, "Unable to delete the snapshot", { regionId, snapshotId }, e);
+  }
+}
+
+/**
+ * Switches a region's active snapshot to the specified snapshot and returns the updated region data.
+ *
+ * Workflow:
+ * 1. Verifies the region exists.
+ * 2. Verifies the target snapshot exists.
+ * 3. Applies snapshot-state validation before activation.
+ * 4. Updates the region's `activeSnapshotId`.
+ * 5. Fetches and returns the resolved region payload.
+ *
+ * @param regionId - The ID of the region to update.
+ * @param snapshotId - The ID of the snapshot to activate.
+ * @returns A `Result<RegionObject>`:
+ * - `Success<RegionObject>` with the region after the active snapshot switch.
+ * - `Failure` with `ErrorCodes.ResourceNotFound` if region or snapshot is not found.
+ * - `Failure` with `ErrorCodes.ValidationFailure` if the snapshot state is not eligible for switching.
+ * - `Failure` with `ErrorCodes.Fatal` if an unexpected error occurs.
+ */
+export async function switchSnapshot(regionId: string, snapshotId: string): Promise<Result<RegionObject>> {
+  try {
+    const [regionToEdit] = await db
+      .select({ id: region.id })
+      .from(region)
+      .where(eq(region.id, regionId))
+      .limit(1);
+    if (!regionToEdit) {
+      return new Failure(ErrorCodes.ResourceNotFound, "Region not found.", { regionId });
+    }
+
+    const [snapshotToUse] = await db
+      .select({ id: regionSnapshots.id, state: regionSnapshots.snapshotState })
+      .from(regionSnapshots)
+      .where(eq(regionSnapshots.id, snapshotId))
+      .limit(1);
+    if (!snapshotToUse) {
+      return new Failure(ErrorCodes.ResourceNotFound, "Snapshot not found.", { regionId, snapshotId });
+    }
+
+    // Check if the state is ready
+    if (snapshotToUse.state !== "ready") {
+      return new Failure(ErrorCodes.ValidationFailure, "Snapshot is not in a ready state. Cannot be used.", { regionId, snapshotId, snapshotToUse });
+    }
+
+    // Finally swap
+    await db
+      .update(region)
+      .set({ activeSnapshotId: snapshotToUse.id })
+      .where(eq(region.id, regionId));
+
+    const result = await unwrap(getRegionById(regionId));
+    return new Success(result);
+  } catch (e) {
+    return new Failure(ErrorCodes.Fatal, "Failed to switch region snapshot.", { regionId, snapshotId }, e);
+  }
+}
+
+export async function getAllSnapshots(closureId: string): Promise<Result<SnapshotItem[]>> {
+  try {
+    const snapshots = await db
+      .select({
+        id: regionSnapshots.id,
+        name: regionSnapshots.versionName,
+        createdOn: regionSnapshots.createdAt,
+        updatedAt: regionSnapshots.updatedAt,
+        state: regionSnapshots.snapshotState,
+      })
+      .from(regionSnapshots)
+      .where(eq(regionSnapshots.regionId, closureId));
+
+    return new Success(snapshots);
+  } catch (e) {
+    return new Failure(ErrorCodes.Fatal, "Unable to get all the snapshots", { closureId }, e);
   }
 }
 
@@ -73,66 +480,32 @@ export async function getAllRegions(): Promise<Result<RegionObject[]>> {
  * @param payload - Region data to create, including metadata, points, and optional stations.
  * @returns A `Result<RegionObject>` containing the created region, or a failure if creation fails.
  */
-export async function createRegion(payload: RegionAddParameters): Promise<Result<RegionObject>> {
+export async function createRegion(payload: RegionAddParameters, ownerId: string): Promise<Result<RegionObject>> {
   try {
-    const result = await db.transaction(async tx => {
-      const [newRegion] = await tx
-        .insert(region)
-        .values({
-          name: payload.regionName,
-          color: payload.regionColor,
-          shapeType: payload.regionShape,
-        })
-        .returning();
-      if (!newRegion) return tx.rollback();
+    const [newRegion] = await db
+      .insert(region)
+      .values({
+        activeSnapshotId: "unset",
+        ownerId,
+      })
+      .returning();
+    if (!newRegion) {
+      return new Failure(ErrorCodes.Fatal, "Failed to create region.", {});
+    }
 
-      // Generate sequences
-      const sequences = await tx
-        .insert(regionSequences)
-        .values(
-          payload.points.map(point => ({
-            regionId: newRegion.id,
-            sequenceNumber: point.sequence,
-            point: [point.point[1], point.point[0]] as [number, number],
-          })),
-        )
-        .returning();
-      if (sequences.length !== payload.points.length) return tx.rollback();
+    // Create snapshot
+    const snapshot = await unwrap(createSnapshot(newRegion.id, payload, ownerId));
 
-      let stations: Array<{ id: string; address: string; point: [number, number] }> = [];
-      if (payload.stations.length > 0) {
-        const stationCreateResult = await tx
-          .insert(regionStations)
-          .values(
-            payload.stations.map(point => ({
-              regionId: newRegion.id,
-              address: point.address,
-              point: [point.point[1], point.point[0]] as [number, number],
-            })),
-          )
-          .returning();
-        stations = stationCreateResult.map(s => ({
-          id: s.id,
-          address: s.address,
-          point: [s.point[1], s.point[0]],
-        }));
-      }
+    // Update the active snapshot
+    await db
+      .update(region)
+      .set({ activeSnapshotId: snapshot.id })
+      .where(eq(region.id, newRegion.id));
 
-      return {
-        id: newRegion.id,
-        regionName: newRegion.name,
-        regionColor: newRegion.color,
-        regionShape: newRegion.shapeType,
-        points: sequences.map(x => ({
-          id: x.id,
-          sequence: x.sequenceNumber,
-          point: [x.point[1], x.point[0]],
-        })),
-        stations,
-      } satisfies RegionObject;
+    return new Success({
+      ...snapshot,
+      id: newRegion.id,
     });
-
-    return new Success(result);
   } catch (e) {
     return new Failure(ErrorCodes.Fatal, "Failed to create region.", {}, e);
   }
@@ -174,17 +547,40 @@ export async function removeRegion(regionId: string): Promise<Result<null>> {
  * reloaded and returned with coordinates normalized into `[latitude, longitude]` format.
  *
  * @param regionId - The unique identifier of the region to update.
+ * @param snapshotId - The unique identifier of the snapshot to update.
  * @param params - The region fields and/or related collections to modify.
  * @returns A `Result<RegionObject>` containing the updated region, or a failure if the update fails.
  */
-export async function updateRegion(
+export async function updateRegionSnapshot(
   regionId: string,
+  snapshotId: string,
   params: UpdateRegionParameters,
 ) {
   try {
-    const updated = await db.transaction(async tx => {
+    const [snapshotToEdit] = await db
+      .select({ id: regionSnapshots.id, state: regionSnapshots.snapshotState })
+      .from(regionSnapshots)
+      .where(
+        and(
+          eq(regionSnapshots.id, snapshotId),
+          eq(regionSnapshots.regionId, regionId),
+        ),
+      )
+      .limit(1);
+    if (!snapshotToEdit) {
+      return new Failure(ErrorCodes.ResourceNotFound, "Region snapshot not found.", { regionId, snapshotId });
+    }
+
+    if (snapshotToEdit.state === "ready") {
+      return new Failure(ErrorCodes.ResourceNotFound, "Snapshot is not editable. Create a new copy and edit.", { regionId, snapshotId });
+    }
+
+    // Update snapshot
+    await db.transaction(async tx => {
       // Patch to apply
       const regionPatch = {
+        ...(params.snapshotName !== undefined && { versionName: params.snapshotName }),
+        ...(params.snapshotState !== undefined && { snapshotState: params.snapshotState }),
         ...(params.regionName !== undefined && { name: params.regionName }),
         ...(params.regionColor !== undefined && { color: params.regionColor }),
         ...(params.regionShape !== undefined && { shapeType: params.regionShape }),
@@ -192,9 +588,9 @@ export async function updateRegion(
 
       if (Object.keys(regionPatch).length > 0) {
         const [updatedRegion] = await tx
-          .update(region)
+          .update(regionSnapshots)
           .set(regionPatch)
-          .where(eq(region.id, regionId))
+          .where(eq(regionSnapshots.id, snapshotToEdit.id))
           .returning({ id: region.id });
 
         if (!updatedRegion) tx.rollback();
@@ -210,12 +606,12 @@ export async function updateRegion(
       }
 
       if (params.points !== undefined) {
-        await tx.delete(regionSequences).where(eq(regionSequences.regionId, regionId));
+        await tx.delete(regionSequences).where(eq(regionSequences.regionSnapshotId, snapshotToEdit.id));
 
         if (params.points.length > 0) {
           await tx.insert(regionSequences).values(
             params.points.map((point) => ({
-              regionId,
+              regionSnapshotId: snapshotToEdit.id,
               sequenceNumber: point.sequence,
               point: [point.point[1], point.point[0]] as [number, number],
             })),
@@ -224,66 +620,23 @@ export async function updateRegion(
       }
 
       if (params.stations !== undefined) {
-        await tx.delete(regionStations).where(eq(regionStations.regionId, regionId));
+        await tx.delete(regionStations).where(eq(regionStations.regionSnapshotId, snapshotToEdit.id));
 
         if (params.stations.length > 0) {
           await tx.insert(regionStations).values(
             params.stations.map((station) => ({
-              regionId,
+              regionSnapshotId: snapshotToEdit.id,
               address: station.address,
+              availableFrom: station.availableFrom ?? "00:00",
+              availableTo: station.availableTo ?? "23:59",
               point: [station.point[1], station.point[0]] as [number, number],
             })),
           );
         }
       }
-
-      // Return the updated result
-      const [finalResult] = await db
-        .select({
-          id: region.id,
-          regionName: region.name,
-          regionColor: region.color,
-          regionShape: region.shapeType,
-          regionId: region.id,
-
-          points: sql<PointObject[]>`(
-          SELECT COALESCE(
-            json_agg(
-              json_build_object(
-                'id', ${regionSequences.id},
-                'sequence', ${regionSequences.sequenceNumber},
-                'point', json_build_array(
-                  ST_Y(${regionSequences.point}),
-                  ST_X(${regionSequences.point})
-                )
-              ) ORDER BY ${regionSequences.sequenceNumber} ASC
-            ), '[]'::json
-          )
-          FROM ${regionSequences}
-          WHERE ${regionSequences.regionId} = "region_markers"."id")`,
-
-          stations: sql<StationObject[]>`(
-          SELECT COALESCE(
-            json_agg(
-              json_build_object(
-                'id', ${regionStations.id},
-                'address', ${regionStations.address},
-                'point', json_build_array(
-                  ST_Y(${regionStations.point}),
-                  ST_X(${regionStations.point})
-                )
-              )
-            ), '[]'::json
-          )
-          FROM ${regionStations}
-          WHERE ${regionStations.regionId} = "region_markers"."id")`,
-        })
-        .from(region)
-        .where(eq(region.id, regionId));
-
-      return finalResult;
     });
 
+    const updated = await unwrap(getRegionById(regionId, snapshotToEdit.id));
     return new Success(updated);
   } catch (e) {
     return new Failure(ErrorCodes.Fatal, "Failed to update region.", { regionId, params }, e);
@@ -299,11 +652,16 @@ export interface PointObject {
 export interface StationObject {
   id: string;
   address: string;
+  availableFrom: string;
+  availableTo: string;
   point: [number, number];
 }
 
 export interface RegionObject {
   id: string;
+  activeSnapshotId: string;
+  snapshotName: string;
+  snapshotState: string;
   regionName: string;
   regionColor: string;
   regionShape: string;
@@ -312,17 +670,39 @@ export interface RegionObject {
 }
 
 export interface RegionAddParameters {
+  snapshotName: string;
+  snapshotState?: "wip" | "for_approval" | "ready";
   regionName: string;
   regionColor: string;
   regionShape: string;
   points: Array<Omit<PointObject, "id">>;
-  stations: Array<Omit<StationObject, "id">>;
+  stations: Array<{
+    address: string;
+    point: [number, number];
+    availableFrom?: string;
+    availableTo?: string;
+  }>;
 }
 
 export interface UpdateRegionParameters {
+  snapshotName?: string;
+  snapshotState?: "wip" | "for_approval" | "ready";
   regionName?: string;
   regionColor?: string;
   regionShape?: string;
   points?: Array<Omit<PointObject, "id">>;
-  stations?: Array<Omit<StationObject, "id">>;
+  stations?: Array<{
+    address: string;
+    point: [number, number];
+    availableFrom?: string;
+    availableTo?: string;
+  }>;
+}
+
+export interface SnapshotItem {
+  id: string;
+  name: string;
+  state: string;
+  createdOn: Date;
+  updatedAt: Date;
 }

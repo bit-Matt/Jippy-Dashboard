@@ -6,7 +6,11 @@ export interface ClosurePointObject {
 
 export interface ClosureObject {
   id: string;
+  activeSnapshotId: string;
+  versionName: string;
+  snapshotState: string;
   closureName: string;
   closureDescription: string;
+  shape: string;
   points: Array<ClosurePointObject>;
 }
