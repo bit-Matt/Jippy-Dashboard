@@ -169,6 +169,13 @@
       "when": 1775377775758,
       "tag": "0023_abandoned_norman_osborn",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1775446564450,
+      "tag": "0024_narrow_malice",
+      "breakpoints": true
     }
   ]
 }

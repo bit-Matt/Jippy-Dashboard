@@ -8,8 +8,22 @@ import * as route from "@/lib/management/route-manager";
 import { tryParseJson } from "@/lib/http/RequestUtilities";
 import { utils, validator } from "@/lib/validator";
 import { session, SessionCode } from "@/lib/auth";
+import { logActivity, logDashboardVisit } from "@/lib/management/activity-logger";
 
 export async function GET() {
+  const currentSession = await session.verify();
+  if (currentSession.code !== SessionCode.Ok) {
+    return ResponseComposer.composeFromSessionValidation(currentSession)
+      .orchestrate();
+  }
+
+  void logDashboardVisit({
+    actorUserId: currentSession.user!.id,
+    actorRole: currentSession.user!.role,
+    routePath: "/dashboard/route",
+    summary: "Visited route dashboard",
+  });
+
   try {
     const [allRoutes, allClosures] = await Promise.all([
       unwrap(route.getAllRoutes(false)),
@@ -114,7 +128,23 @@ export async function POST(req: NextRequest) {
   });
 
   return oneOf(result).match(
-    s => ResponseComposer.compose(StatusCodes.Status201Created).setBody(s).orchestrate(),
+    s => {
+      void logActivity({
+        actorUserId: currentSession.user!.id,
+        actorRole: currentSession.user!.role,
+        category: "write_operation",
+        action: "route_created",
+        summary: `Created route ${s.routeNumber} - ${s.routeName}`,
+        routePath: "/api/restricted/management/route",
+        httpMethod: "POST",
+        statusCode: StatusCodes.Status201Created,
+        entityType: "route",
+        entityId: s.id,
+        payload: data,
+      });
+
+      return ResponseComposer.compose(StatusCodes.Status201Created).setBody(s).orchestrate();
+    },
     e => ResponseComposer.composeFromFailure(e).orchestrate(),
   );
 }

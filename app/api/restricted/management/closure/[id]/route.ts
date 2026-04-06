@@ -6,6 +6,7 @@ import { tryParseJson } from "@/lib/http/RequestUtilities";
 import { oneOf } from "@/lib/one-of";
 import { utils, validator } from "@/lib/validator";
 import { session, SessionCode } from "@/lib/auth";
+import { logActivity } from "@/lib/management/activity-logger";
 
 export async function POST(
   request: NextRequest,
@@ -86,7 +87,23 @@ export async function POST(
 
   const result = await closure.createSnapshot(id, data);
   return oneOf(result).match(
-    s => ResponseComposer.compose(StatusCodes.Status201Created).setBody(s).orchestrate(),
+    s => {
+      void logActivity({
+        actorUserId: currentSession.user!.id,
+        actorRole: currentSession.user!.role,
+        category: "write_operation",
+        action: "closure_snapshot_created",
+        summary: `Created closure snapshot ${s.versionName}`,
+        routePath: `/api/restricted/management/closure/${id}`,
+        httpMethod: "POST",
+        statusCode: StatusCodes.Status201Created,
+        entityType: "closure_snapshot",
+        entityId: s.activeSnapshotId,
+        payload: data,
+      });
+
+      return ResponseComposer.compose(StatusCodes.Status201Created).setBody(s).orchestrate();
+    },
     e => ResponseComposer.composeFromFailure(e).orchestrate(),
   );
 }
@@ -131,7 +148,23 @@ export async function PATCH(
 
   const result = await closure.switchSnapshot(id, data.snapshotId);
   return oneOf(result).match(
-    s => ResponseComposer.compose(StatusCodes.Status200Ok).setBody(s).orchestrate(),
+    s => {
+      void logActivity({
+        actorUserId: currentSession.user!.id,
+        actorRole: currentSession.user!.role,
+        category: "active_snapshot_changed",
+        action: "closure_active_snapshot_changed",
+        summary: `Switched active closure snapshot for ${id}`,
+        routePath: `/api/restricted/management/closure/${id}`,
+        httpMethod: "PATCH",
+        statusCode: StatusCodes.Status200Ok,
+        entityType: "closure",
+        entityId: id,
+        payload: data,
+      });
+
+      return ResponseComposer.compose(StatusCodes.Status200Ok).setBody(s).orchestrate();
+    },
     e => ResponseComposer.composeFromFailure(e).orchestrate(),
   );
 }
@@ -156,9 +189,24 @@ export async function DELETE(
 
   const result = await closure.removeClosure(id);
   return oneOf(result).match(
-    () => ResponseComposer.compose(StatusCodes.Status200Ok)
-      .setBody({ ok: true })
-      .orchestrate(),
+    () => {
+      void logActivity({
+        actorUserId: currentSession.user!.id,
+        actorRole: currentSession.user!.role,
+        category: "write_operation",
+        action: "closure_deleted",
+        summary: `Deleted closure ${id}`,
+        routePath: `/api/restricted/management/closure/${id}`,
+        httpMethod: "DELETE",
+        statusCode: StatusCodes.Status200Ok,
+        entityType: "closure",
+        entityId: id,
+      });
+
+      return ResponseComposer.compose(StatusCodes.Status200Ok)
+        .setBody({ ok: true })
+        .orchestrate();
+    },
     e => ResponseComposer.composeFromFailure(e).orchestrate(),
   );
 }

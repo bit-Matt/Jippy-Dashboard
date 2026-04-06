@@ -6,6 +6,7 @@ import { ResponseComposer, StatusCodes } from "@/lib/http";
 import { oneOf } from "@/lib/one-of";
 import { tryParseJson } from "@/lib/http/RequestUtilities";
 import { validator } from "@/lib/validator";
+import { logActivity } from "@/lib/management/activity-logger";
 
 export async function GET() {
   const session = await auth.verify("administrator_user");
@@ -51,7 +52,26 @@ export async function POST(req: NextRequest) {
   // Create invitation
   const invitation = await accounts.createNewInvitation(body.email);
   return oneOf(invitation).match(
-    s => ResponseComposer.compose(StatusCodes.Status200Ok).setBody(s).orchestrate(),
+    s => {
+      void logActivity({
+        actorUserId: session.user!.id,
+        actorRole: session.user!.role,
+        category: "write_operation",
+        action: "invitation_sent",
+        summary: `Sent invitation to ${body.email}`,
+        routePath: "/api/restricted/accounts/invitations",
+        httpMethod: "POST",
+        statusCode: StatusCodes.Status200Ok,
+        entityType: "invitation",
+        entityId: s.id,
+        payload: {
+          targetEmail: body.email,
+          sent: !Boolean(s.errors),
+        },
+      });
+
+      return ResponseComposer.compose(StatusCodes.Status200Ok).setBody(s).orchestrate();
+    },
     e => ResponseComposer.composeFromFailure(e).orchestrate(),
   );
 }

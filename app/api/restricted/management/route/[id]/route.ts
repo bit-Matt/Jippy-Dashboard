@@ -7,6 +7,7 @@ import { oneOf } from "@/lib/one-of";
 import { getRoutePolyline } from "@/lib/osm/valhalla";
 import { utils, validator } from "@/lib/validator";
 import { session, SessionCode } from "@/lib/auth";
+import { logActivity } from "@/lib/management/activity-logger";
 
 export async function POST(
   request: NextRequest,
@@ -101,7 +102,23 @@ export async function POST(
   });
 
   return oneOf(result).match(
-    s => ResponseComposer.compose(StatusCodes.Status200Ok).setBody(s).orchestrate(),
+    s => {
+      void logActivity({
+        actorUserId: currentSession.user!.id,
+        actorRole: currentSession.user!.role,
+        category: "write_operation",
+        action: "route_snapshot_created",
+        summary: `Created route snapshot ${s.snapshotName}`,
+        routePath: `/api/restricted/management/route/${id}`,
+        httpMethod: "POST",
+        statusCode: StatusCodes.Status200Ok,
+        entityType: "route_snapshot",
+        entityId: s.activeSnapshotId,
+        payload: data,
+      });
+
+      return ResponseComposer.compose(StatusCodes.Status200Ok).setBody(s).orchestrate();
+    },
     e => ResponseComposer.composeFromFailure(e).orchestrate(),
   );
 }
@@ -110,6 +127,12 @@ export async function PATCH(
   request: NextRequest,
   { params }: RouteContext<"/api/restricted/management/route/[id]">,
 ) {
+  const currentSession = await session.verify("administrator_user");
+  if (currentSession.code !== SessionCode.Ok) {
+    return ResponseComposer.composeFromSessionValidation(currentSession)
+      .orchestrate();
+  }
+
   const { id } = await params;
 
   // Invalid ID format.
@@ -140,7 +163,23 @@ export async function PATCH(
 
   const result = await route.switchSnapshot(id, data.snapshotId);
   return oneOf(result).match(
-    s => ResponseComposer.compose(StatusCodes.Status200Ok).setBody(s).orchestrate(),
+    s => {
+      void logActivity({
+        actorUserId: currentSession.user!.id,
+        actorRole: currentSession.user!.role,
+        category: "active_snapshot_changed",
+        action: "route_active_snapshot_changed",
+        summary: `Switched active snapshot for route ${id}`,
+        routePath: `/api/restricted/management/route/${id}`,
+        httpMethod: "PATCH",
+        statusCode: StatusCodes.Status200Ok,
+        entityType: "route",
+        entityId: id,
+        payload: data,
+      });
+
+      return ResponseComposer.compose(StatusCodes.Status200Ok).setBody(s).orchestrate();
+    },
     e => ResponseComposer.composeFromFailure(e).orchestrate(),
   );
 }
@@ -149,6 +188,12 @@ export async function DELETE(
   request: NextRequest,
   { params }: RouteContext<"/api/restricted/management/route/[id]">,
 ) {
+  const currentSession = await session.verify("administrator_user");
+  if (currentSession.code !== SessionCode.Ok) {
+    return ResponseComposer.composeFromSessionValidation(currentSession)
+      .orchestrate();
+  }
+
   const { id } = await params;
 
   // Invalid ID format.
@@ -159,9 +204,24 @@ export async function DELETE(
 
   const result = await route.removeRoute(id);
   return oneOf(result).match(
-    () => ResponseComposer.compose(StatusCodes.Status200Ok)
-      .setBody({ ok: true })
-      .orchestrate(),
+    () => {
+      void logActivity({
+        actorUserId: currentSession.user!.id,
+        actorRole: currentSession.user!.role,
+        category: "write_operation",
+        action: "route_deleted",
+        summary: `Deleted route ${id}`,
+        routePath: `/api/restricted/management/route/${id}`,
+        httpMethod: "DELETE",
+        statusCode: StatusCodes.Status200Ok,
+        entityType: "route",
+        entityId: id,
+      });
+
+      return ResponseComposer.compose(StatusCodes.Status200Ok)
+        .setBody({ ok: true })
+        .orchestrate();
+    },
     e => ResponseComposer.composeFromFailure(e).orchestrate(),
   );
 }

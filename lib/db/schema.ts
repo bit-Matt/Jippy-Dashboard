@@ -1,4 +1,4 @@
-import { relations, sql } from "drizzle-orm";
+import { relations } from "drizzle-orm";
 import { pgEnum, pgTable, text, timestamp, boolean, index, integer, geometry } from "drizzle-orm/pg-core";
 import { v7 as uuidv7 } from "uuid";
 
@@ -368,6 +368,35 @@ export const accessToken = pgTable("access_tokens", {
     .notNull(),
 });
 
+export const activityLogs = pgTable(
+  "activity_logs",
+  {
+    id: text("id")
+      .primaryKey()
+      .$default(() => uuidv7()),
+    actorUserId: text("actor_user_id")
+      .references(() => user.id, { onDelete: "set null" }),
+    actorRole: text("actor_role"),
+    category: text("category").notNull(),
+    action: text("action").notNull(),
+    entityType: text("entity_type"),
+    entityId: text("entity_id"),
+    httpMethod: text("http_method"),
+    routePath: text("route_path"),
+    statusCode: integer("status_code"),
+    summary: text("summary").notNull(),
+    payload: text("payload").notNull().default("{}"),
+    metadata: text("metadata").notNull().default("{}"),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (table) => [
+    index("activity_logs_actor_idx").on(table.actorUserId, table.createdAt),
+    index("activity_logs_action_idx").on(table.action, table.createdAt),
+    index("activity_logs_entity_idx").on(table.entityType, table.entityId, table.createdAt),
+    index("activity_logs_created_at_idx").on(table.createdAt),
+  ],
+);
+
 export const roadClosurePoints = pgTable("road_closure_points", {
   id: text("id")
     .primaryKey()
@@ -398,6 +427,7 @@ export const roadClosurePoints = pgTable("road_closure_points", {
 export const userRelations = relations(user, ({ many }) => ({
   sessions: many(session),
   accounts: many(account),
+  activityLogs: many(activityLogs),
 }));
 
 export const sessionRelations = relations(session, ({ one }) => ({
@@ -410,6 +440,13 @@ export const sessionRelations = relations(session, ({ one }) => ({
 export const accountRelations = relations(account, ({ one }) => ({
   user: one(user, {
     fields: [account.userId],
+    references: [user.id],
+  }),
+}));
+
+export const activityLogsRelations = relations(activityLogs, ({ one }) => ({
+  actorUser: one(user, {
+    fields: [activityLogs.actorUserId],
     references: [user.id],
   }),
 }));

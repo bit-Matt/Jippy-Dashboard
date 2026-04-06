@@ -5,6 +5,7 @@ import { session as auth, SessionCode } from "@/lib/auth";
 import { ResponseComposer, StatusCodes } from "@/lib/http";
 import { oneOf } from "@/lib/one-of";
 import { utils } from "@/lib/validator";
+import { logActivity } from "@/lib/management/activity-logger";
 
 export async function DELETE(
   req: NextRequest,
@@ -26,7 +27,25 @@ export async function DELETE(
   // Attempt to delete
   const result = await accounts.revokeInvitation(id);
   return oneOf(result).match(
-    () => ResponseComposer.compose(StatusCodes.Status204NoContent).orchestrate(),
+    s => {
+      void logActivity({
+        actorUserId: session.user!.id,
+        actorRole: session.user!.role,
+        category: "write_operation",
+        action: "invitation_revoked",
+        summary: `Revoked invitation for ${s.email}`,
+        routePath: `/api/restricted/accounts/invitations/${id}`,
+        httpMethod: "DELETE",
+        statusCode: StatusCodes.Status204NoContent,
+        entityType: "invitation",
+        entityId: s.id,
+        payload: {
+          targetEmail: s.email,
+        },
+      });
+
+      return ResponseComposer.compose(StatusCodes.Status204NoContent).orchestrate();
+    },
     e => ResponseComposer.composeFromFailure(e).orchestrate(),
   );
 }
@@ -36,9 +55,9 @@ export async function POST(
   { params }: RouteContext<"/api/restricted/accounts/invitations/[id]">,
 ) {
   const session = await auth.verify("administrator_user");
-  if (!session) {
+  if (!session || session.code !== SessionCode.Ok) {
     return ResponseComposer
-      .composeError(StatusCodes.Status403Forbidden, "Forbidden")
+      .composeFromSessionValidation(session)
       .orchestrate();
   }
 
@@ -50,9 +69,28 @@ export async function POST(
 
   const result = await accounts.resendInvitation(id);
   return oneOf(result).match(
-    s => ResponseComposer.compose(StatusCodes.Status200Ok)
-      .setBody({ errors: s.errors, sent: !Boolean(s.errors) })
-      .orchestrate(),
+    s => {
+      void logActivity({
+        actorUserId: session.user!.id,
+        actorRole: session.user!.role,
+        category: "write_operation",
+        action: "invitation_resent",
+        summary: `Resent invitation to ${s.email}`,
+        routePath: `/api/restricted/accounts/invitations/${id}`,
+        httpMethod: "POST",
+        statusCode: StatusCodes.Status200Ok,
+        entityType: "invitation",
+        entityId: id,
+        payload: {
+          targetEmail: s.email,
+          sent: !Boolean(s.errors),
+        },
+      });
+
+      return ResponseComposer.compose(StatusCodes.Status200Ok)
+        .setBody({ errors: s.errors, sent: !Boolean(s.errors) })
+        .orchestrate();
+    },
     e => ResponseComposer.composeFromFailure(e).orchestrate(),
   );
 }

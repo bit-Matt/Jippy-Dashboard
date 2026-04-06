@@ -66,7 +66,7 @@ export default function Invitations() {
     <SidebarProvider>
       <AppSidebar />
       <SidebarInset>
-        <div className="p-4 pt-0 w-full">
+        <div className="p-4 pt-4 w-full">
           <Typography variant="h3" className="mb-4">Invitations</Typography>
 
           <InvitationForm handleInvite={handleInvite} />
@@ -140,7 +140,7 @@ function Row({ data, onRevoke }: { data: InvitationListResponse["data"][0], onRe
   return (
     <TableRow>
       <TableCell className="font-medium">{data.email}</TableCell>
-      <TableCell>{data.role ? "Root User" : "Collaborator"}</TableCell>
+      <TableCell>{data.role === "administrator_user" ? "Root User" : "Collaborator"}</TableCell>
       <TableCell>
         <Badge
           variant="outline"

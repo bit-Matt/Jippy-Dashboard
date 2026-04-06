@@ -1,7 +1,7 @@
 "use client";
 
 import { type ComponentProps } from "react";
-import { Command, Map, ShieldCheck, SquareDashed } from "lucide-react";
+import { Activity, Command, Map, ShieldCheck, SquareDashed } from "lucide-react";
 import useSWR from "swr";
 
 import { NavMain } from "@/components/nav-main";
@@ -23,38 +23,44 @@ export function AppSidebar({
   const { data: meResponse, error, isLoading } = useSWR<BetterFetchMeResult>("/api/me", $fetch);
   const currentUser = meResponse?.data?.data;
 
+  const navMain = [
+    {
+      title: "Route Management",
+      url: "/dashboard/route",
+      icon: Map,
+      isActive: true,
+    },
+    {
+      title: "Closure Management",
+      url: "/dashboard/closure",
+      icon: Map,
+      isActive: true,
+    },
+    {
+      title: "Region Management",
+      url: "/dashboard/region",
+      isActive: true,
+      icon: SquareDashed,
+    },
+  ];
+
   const navData = {
-    navMain: [
-      {
-        title: "Route Management",
-        url: "/dashboard/route",
-        icon: Map,
-        isActive: true,
-      },
-      {
-        title: "Closure Management",
-        url: "/dashboard/closure",
-        icon: Map,
-        isActive: true,
-      },
-      {
-        title: "Region Management",
-        url: "/dashboard/region",
-        isActive: true,
-        icon: SquareDashed,
-      },
-    ],
+    navMain,
 
     administration: [
       {
-        title: "User Management",
+        title: "Administration",
         url: "#",
         icon: ShieldCheck,
         isActive: true,
         items: [
           {
-            title: "User Invitations",
+            title: "Invitations",
             url: "/dashboard/invitations",
+          },
+          {
+            title: "Audits",
+            url: "/dashboard/logs",
           },
         ],
       },

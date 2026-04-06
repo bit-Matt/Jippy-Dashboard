@@ -6,6 +6,7 @@ import { session, SessionCode } from "@/lib/auth";
 import { tryParseJson } from "@/lib/http/RequestUtilities";
 import { oneOf } from "@/lib/one-of";
 import { utils, validator } from "@/lib/validator";
+import { logActivity } from "@/lib/management/activity-logger";
 
 export async function GET(
   request: NextRequest,
@@ -60,7 +61,22 @@ export async function PUT(
 
   const result = await region.copySnapshot(id, snapshotId);
   return oneOf(result).match(
-    s => ResponseComposer.compose(StatusCodes.Status200Ok).setBody(s).orchestrate(),
+    s => {
+      void logActivity({
+        actorUserId: currentSession.user!.id,
+        actorRole: currentSession.user!.role,
+        category: "write_operation",
+        action: "region_snapshot_copied",
+        summary: `Copied region snapshot ${snapshotId}`,
+        routePath: `/api/restricted/management/region/${id}/${snapshotId}`,
+        httpMethod: "PUT",
+        statusCode: StatusCodes.Status200Ok,
+        entityType: "region_snapshot",
+        entityId: s.id,
+      });
+
+      return ResponseComposer.compose(StatusCodes.Status200Ok).setBody(s).orchestrate();
+    },
     e => ResponseComposer.composeFromFailure(e).orchestrate(),
   );
 }
@@ -181,9 +197,25 @@ export async function PATCH(
 
   const result = await region.updateRegionSnapshot(id, snapshotId, data);
   return oneOf(result).match(
-    success => ResponseComposer.compose(StatusCodes.Status200Ok)
-      .setBody(success)
-      .orchestrate(),
+    success => {
+      void logActivity({
+        actorUserId: currentSession.user!.id,
+        actorRole: currentSession.user!.role,
+        category: data.snapshotState !== undefined ? "snapshot_state_changed" : "write_operation",
+        action: data.snapshotState !== undefined ? "region_snapshot_state_changed" : "region_snapshot_updated",
+        summary: `Updated region snapshot ${snapshotId}`,
+        routePath: `/api/restricted/management/region/${id}/${snapshotId}`,
+        httpMethod: "PATCH",
+        statusCode: StatusCodes.Status200Ok,
+        entityType: "region_snapshot",
+        entityId: snapshotId,
+        payload: data,
+      });
+
+      return ResponseComposer.compose(StatusCodes.Status200Ok)
+        .setBody(success)
+        .orchestrate();
+    },
     e => ResponseComposer.composeFromFailure(e).orchestrate(),
   );
 }
@@ -212,9 +244,24 @@ export async function DELETE(
 
   const result = await region.deleteSnapshot(id, snapshotId);
   return oneOf(result).match(
-    success => ResponseComposer.compose(StatusCodes.Status200Ok)
-      .setBody(success)
-      .orchestrate(),
+    success => {
+      void logActivity({
+        actorUserId: currentSession.user!.id,
+        actorRole: currentSession.user!.role,
+        category: "write_operation",
+        action: "region_snapshot_deleted",
+        summary: `Deleted region snapshot ${snapshotId}`,
+        routePath: `/api/restricted/management/region/${id}/${snapshotId}`,
+        httpMethod: "DELETE",
+        statusCode: StatusCodes.Status200Ok,
+        entityType: "region_snapshot",
+        entityId: snapshotId,
+      });
+
+      return ResponseComposer.compose(StatusCodes.Status200Ok)
+        .setBody(success)
+        .orchestrate();
+    },
     e => ResponseComposer.composeFromFailure(e).orchestrate(),
   );
 }

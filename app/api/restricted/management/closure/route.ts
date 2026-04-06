@@ -7,8 +7,22 @@ import { session, SessionCode } from "@/lib/auth";
 import { tryParseJson } from "@/lib/http/RequestUtilities";
 import { unwrap } from "@/lib/one-of";
 import { utils, validator } from "@/lib/validator";
+import { logActivity, logDashboardVisit } from "@/lib/management/activity-logger";
 
 export async function GET() {
+  const currentSession = await session.verify();
+  if (currentSession.code !== SessionCode.Ok) {
+    return ResponseComposer.composeFromSessionValidation(currentSession)
+      .orchestrate();
+  }
+
+  void logDashboardVisit({
+    actorUserId: currentSession.user!.id,
+    actorRole: currentSession.user!.role,
+    routePath: "/dashboard/closure",
+    summary: "Visited closure dashboard",
+  });
+
   try {
     const allClosures = await unwrap(closure.getAllClosures(false));
 
@@ -93,7 +107,23 @@ export async function POST(req: NextRequest) {
 
   const result = await closure.createClosure(data);
   return oneOf(result).match(
-    s => ResponseComposer.compose(StatusCodes.Status201Created).setBody(s).orchestrate(),
+    s => {
+      void logActivity({
+        actorUserId: currentSession.user!.id,
+        actorRole: currentSession.user!.role,
+        category: "write_operation",
+        action: "closure_created",
+        summary: `Created closure ${s.closureName}`,
+        routePath: "/api/restricted/management/closure",
+        httpMethod: "POST",
+        statusCode: StatusCodes.Status201Created,
+        entityType: "closure",
+        entityId: s.id,
+        payload: data,
+      });
+
+      return ResponseComposer.compose(StatusCodes.Status201Created).setBody(s).orchestrate();
+    },
     e => ResponseComposer.composeFromFailure(e).orchestrate(),
   );
 }

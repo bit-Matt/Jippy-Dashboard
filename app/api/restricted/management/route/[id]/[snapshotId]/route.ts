@@ -7,6 +7,7 @@ import { tryParseJson } from "@/lib/http/RequestUtilities";
 import { oneOf } from "@/lib/one-of";
 import { utils, validator } from "@/lib/validator";
 import { session, SessionCode } from "@/lib/auth";
+import { logActivity } from "@/lib/management/activity-logger";
 
 export async function GET(
   request: NextRequest,
@@ -35,6 +36,12 @@ export async function PUT(
   request: NextRequest,
   { params }: RouteContext<"/api/restricted/management/route/[id]/[snapshotId]">,
 ) {
+  const currentSession = await session.verify();
+  if (currentSession.code !== SessionCode.Ok) {
+    return ResponseComposer.composeFromSessionValidation(currentSession)
+      .orchestrate();
+  }
+
   const { id, snapshotId } = await params;
 
   if (!utils.isUuid(id)) {
@@ -49,7 +56,23 @@ export async function PUT(
 
   const result = await route.copySnapshot(id, snapshotId);
   return oneOf(result).match(
-    s => ResponseComposer.compose(StatusCodes.Status200Ok).setBody(s).orchestrate(),
+    s => {
+      void logActivity({
+        actorUserId: currentSession.user!.id,
+        actorRole: currentSession.user!.role,
+        category: "write_operation",
+        action: "route_snapshot_copied",
+        summary: `Copied route snapshot ${snapshotId}`,
+        routePath: `/api/restricted/management/route/${id}/${snapshotId}`,
+        httpMethod: "PUT",
+        statusCode: StatusCodes.Status200Ok,
+        entityType: "route_snapshot",
+        entityId: s.id,
+        metadata: { sourceSnapshotId: snapshotId },
+      });
+
+      return ResponseComposer.compose(StatusCodes.Status200Ok).setBody(s).orchestrate();
+    },
     e => ResponseComposer.composeFromFailure(e).orchestrate(),
   );
 }
@@ -169,9 +192,25 @@ export async function PATCH(
 
   const result = await route.updateRouteSnapshot(id, snapshotId, patchPayload);
   return oneOf(result).match(
-    success => ResponseComposer.compose(StatusCodes.Status200Ok)
-      .setBody(success)
-      .orchestrate(),
+    success => {
+      void logActivity({
+        actorUserId: currentSession.user!.id,
+        actorRole: currentSession.user!.role,
+        category: data.snapshotState !== undefined ? "snapshot_state_changed" : "write_operation",
+        action: data.snapshotState !== undefined ? "route_snapshot_state_changed" : "route_snapshot_updated",
+        summary: `Updated route snapshot ${snapshotId}`,
+        routePath: `/api/restricted/management/route/${id}/${snapshotId}`,
+        httpMethod: "PATCH",
+        statusCode: StatusCodes.Status200Ok,
+        entityType: "route_snapshot",
+        entityId: snapshotId,
+        payload: data,
+      });
+
+      return ResponseComposer.compose(StatusCodes.Status200Ok)
+        .setBody(success)
+        .orchestrate();
+    },
     e => ResponseComposer.composeFromFailure(e).orchestrate(),
   );
 }
@@ -200,9 +239,24 @@ export async function DELETE(
 
   const result = await route.deleteSnapshot(id, snapshotId);
   return oneOf(result).match(
-    success => ResponseComposer.compose(StatusCodes.Status200Ok)
-      .setBody(success)
-      .orchestrate(),
+    success => {
+      void logActivity({
+        actorUserId: currentSession.user!.id,
+        actorRole: currentSession.user!.role,
+        category: "write_operation",
+        action: "route_snapshot_deleted",
+        summary: `Deleted route snapshot ${snapshotId}`,
+        routePath: `/api/restricted/management/route/${id}/${snapshotId}`,
+        httpMethod: "DELETE",
+        statusCode: StatusCodes.Status200Ok,
+        entityType: "route_snapshot",
+        entityId: snapshotId,
+      });
+
+      return ResponseComposer.compose(StatusCodes.Status200Ok)
+        .setBody(success)
+        .orchestrate();
+    },
     e => ResponseComposer.composeFromFailure(e).orchestrate(),
   );
 }

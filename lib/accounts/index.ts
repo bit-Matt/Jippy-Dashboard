@@ -285,7 +285,7 @@ export async function createNewInvitation(email: string): Promise<Result<SentInv
  * - Email provider failures are logged for observability and returned as a non-fatal `errors` field.
  * - This does not create a new token or extend expiration; it reuses the existing token and validity window.
  */
-export async function resendInvitation(id: string): Promise<Result<{ ok: boolean, errors?: object }>> {
+export async function resendInvitation(id: string): Promise<Result<{ ok: boolean, email: string, errors?: object }>> {
   try {
     const [result] = await db
       .select({
@@ -322,6 +322,7 @@ export async function resendInvitation(id: string): Promise<Result<{ ok: boolean
 
     return new Success({
       ok: true,
+      email: result.email,
       ...(error ? { errors: { message: "Failed to send the email. This issue has been reported." } } : {}),
     });
   } catch (e) {
@@ -385,17 +386,18 @@ export async function getActiveInvitations(): Promise<Result<Array<Invitation>>>
  * then deletes the invitation record and returns a success result.
  *
  * @param id - The invitation identifier to revoke.
- * @returns A `Success<null>` when the invitation is revoked, or a `Failure` when the invitation does not exist or an unexpected error occurs.
+ * @returns A `Success<{ id: string; email: string }>` when the invitation is revoked, or a `Failure` when the invitation does not exist or an unexpected error occurs.
  *
  * @remarks
  * - If the invitation is missing, this returns a resource-not-found failure.
  * - Any unexpected exception is wrapped as a fatal failure and includes the `id` in the error metadata.
  */
-export async function revokeInvitation(id: string): Promise<Success<null> | Failure> {
+export async function revokeInvitation(id: string): Promise<Success<{ id: string; email: string }> | Failure> {
   try {
     const [invitation] = await db
       .select({
         id: invitations.id,
+        email: invitations.email,
       })
       .from(invitations)
       .where(eq(invitations.id, id))
@@ -408,7 +410,10 @@ export async function revokeInvitation(id: string): Promise<Success<null> | Fail
     // Delete entry
     await db.delete(invitations).where(eq(invitations.id, id));
 
-    return new Success(null);
+    return new Success({
+      id: invitation.id,
+      email: invitation.email,
+    });
   } catch (e) {
     return new Failure(ErrorCodes.Fatal, "An exception occurred during invitation revocation.", { id }, e);
   }

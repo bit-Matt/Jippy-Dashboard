@@ -7,6 +7,7 @@ import { session, SessionCode } from "@/lib/auth";
 import { tryParseJson } from "@/lib/http/RequestUtilities";
 import { unwrap } from "@/lib/one-of";
 import { utils, validator } from "@/lib/validator";
+import { logActivity, logDashboardVisit } from "@/lib/management/activity-logger";
 
 export async function GET() {
   const currentSession = await session.verify();
@@ -14,6 +15,13 @@ export async function GET() {
     return ResponseComposer.composeFromSessionValidation(currentSession)
       .orchestrate();
   }
+
+  void logDashboardVisit({
+    actorUserId: currentSession.user!.id,
+    actorRole: currentSession.user!.role,
+    routePath: "/dashboard/region",
+    summary: "Visited region dashboard",
+  });
 
   try {
     const result = await unwrap(region.getAllRegions(false));
@@ -118,7 +126,23 @@ export async function POST(req: NextRequest) {
 
   const result = await region.createRegion(data);
   return oneOf(result).match(
-    s => ResponseComposer.compose(StatusCodes.Status201Created).setBody(s).orchestrate(),
+    s => {
+      void logActivity({
+        actorUserId: currentSession.user!.id,
+        actorRole: currentSession.user!.role,
+        category: "write_operation",
+        action: "region_created",
+        summary: `Created region ${s.regionName}`,
+        routePath: "/api/restricted/management/region",
+        httpMethod: "POST",
+        statusCode: StatusCodes.Status201Created,
+        entityType: "region",
+        entityId: s.id,
+        payload: data,
+      });
+
+      return ResponseComposer.compose(StatusCodes.Status201Created).setBody(s).orchestrate();
+    },
     e => ResponseComposer.composeFromFailure(e).orchestrate(),
   );
 }
