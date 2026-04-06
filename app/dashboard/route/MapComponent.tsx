@@ -199,7 +199,7 @@ const RoutingMachine = ({ waypoints, color, onRouteCoordinatesChange }: RoutingM
 };
 
 
-const createSequenceIcon = (sequence: number, isActive: boolean) => {
+const createSequenceIcon = (sequence: number | string, isActive: boolean) => {
   const background = isActive ? "#2563eb" : "#0f172a";
   const border = isActive ? "#93c5fd" : "#e2e8f0";
 
