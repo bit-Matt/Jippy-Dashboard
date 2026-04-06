@@ -60,6 +60,7 @@ export default function RegionEditor() {
     finishRegionToolEditing,
     startAddingStation,
     stopAddingStation,
+    updateStationAvailability,
     removeStation,
     saveRegionTemplate,
     closeRegionEditor,
@@ -68,6 +69,14 @@ export default function RegionEditor() {
   } = useRegionEditor();
   const { data: me } = useSWR<MeResponse>("/api/me", $fetch);
   const isAdministrator = me?.data?.data?.role === "administrator_user";
+  const invalidStationIndexes = stations
+    .map((station, index) => ({
+      index,
+      isInvalid: !station.availableFrom || !station.availableTo || station.availableFrom > station.availableTo,
+    }))
+    .filter((station) => station.isInvalid)
+    .map((station) => station.index + 1);
+  const hasInvalidStationAvailability = invalidStationIndexes.length > 0;
 
   useEffect(() => {
     if (initialDraftRegionIdRef.current === editingRegionId) return;
@@ -157,6 +166,11 @@ export default function RegionEditor() {
       return;
     }
 
+    if (hasInvalidStationAvailability) {
+      alert("One or more station availability windows are invalid. Ensure Available From is earlier than or equal to Available To.");
+      return;
+    }
+
     void saveRegionTemplate();
   };
 
@@ -196,7 +210,7 @@ export default function RegionEditor() {
             <Button
               size="sm"
               onClick={handleSaveRegion}
-              disabled={!hasDefinedPolygon}
+              disabled={!hasDefinedPolygon || hasInvalidStationAvailability}
             >
               Save
             </Button>
@@ -317,9 +331,34 @@ export default function RegionEditor() {
                     value={stationAddresses[station.id] ?? (loadingAddresses.has(station.id) ? "Loading address..." : "Resolving address...")}
                     title={stationAddresses[station.id]}
                   />
+                  <div className="mt-2 grid grid-cols-2 gap-2" onClick={(event) => event.stopPropagation()}>
+                    <div className="space-y-1">
+                      <Label htmlFor={`station-${station.id}-from`} className="text-xs">Available From</Label>
+                      <Input
+                        id={`station-${station.id}-from`}
+                        type="time"
+                        value={station.availableFrom}
+                        onChange={(event) => updateStationAvailability(station.id, "availableFrom", event.target.value)}
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <Label htmlFor={`station-${station.id}-to`} className="text-xs">Available To</Label>
+                      <Input
+                        id={`station-${station.id}-to`}
+                        type="time"
+                        value={station.availableTo}
+                        onChange={(event) => updateStationAvailability(station.id, "availableTo", event.target.value)}
+                      />
+                    </div>
+                  </div>
                 </div>
               ))}
             </div>
+            {hasInvalidStationAvailability ? (
+              <p className="text-xs text-destructive">
+                Invalid availability in station point(s): {invalidStationIndexes.join(", ")}. Available From must be earlier than or equal to Available To.
+              </p>
+            ) : null}
           </div>
 
           <div className="space-y-3">

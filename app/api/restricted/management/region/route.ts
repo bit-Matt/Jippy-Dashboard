@@ -9,6 +9,19 @@ import { unwrap } from "@/lib/one-of";
 import { utils, validator } from "@/lib/validator";
 import { logActivity, logDashboardVisit } from "@/lib/management/activity-logger";
 
+const TIME_PATTERN = /^([01]\d|2[0-3]):([0-5]\d)$/;
+
+const isValidStationTimeRange = (availableFrom?: string, availableTo?: string) => {
+  const from = availableFrom ?? "00:00";
+  const to = availableTo ?? "23:59";
+
+  if (!TIME_PATTERN.test(from) || !TIME_PATTERN.test(to)) {
+    return false;
+  }
+
+  return from <= to;
+};
+
 export async function GET() {
   const currentSession = await session.verify();
   if (currentSession.code !== SessionCode.Ok) {
@@ -101,6 +114,10 @@ export async function POST(req: NextRequest) {
               return { ok: false, error: "Invalid address." };
             }
 
+            if (!isValidStationTimeRange(point.availableFrom, point.availableTo)) {
+              return { ok: false, error: "Invalid station availability range. Use HH:mm and ensure from <= to." };
+            }
+
             if (!utils.isExisty(point.point) || !utils.isTuple(point.point)) {
               return { ok: false, error: "Invalid point." };
             }
@@ -159,6 +176,8 @@ type RequestBody = {
   }>;
   stations: Array<{
     address: string;
+    availableFrom?: string;
+    availableTo?: string;
     point: [number, number];
   }>;
 }

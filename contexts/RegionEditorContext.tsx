@@ -25,6 +25,8 @@ export interface RegionSummary {
   stations: Array<{
     id: string;
     address: string;
+    availableFrom: string;
+    availableTo: string;
     point: [number, number];
   }>;
 }
@@ -34,6 +36,8 @@ export interface RegionStationDraft {
   lat: number;
   lng: number;
   address?: string;
+  availableFrom: string;
+  availableTo: string;
 }
 
 export type ActiveRegionTool = "none" | "draw-polygon" | "draw-rectangle" | "edit-region";
@@ -108,6 +112,7 @@ interface RegionEditorContextType {
   stopAddingStation: () => void;
   addStation: (lat: number, lng: number) => void;
   updateStation: (id: number, lat: number, lng: number) => void;
+  updateStationAvailability: (id: number, field: "availableFrom" | "availableTo", value: string) => void;
   removeStation: (id: number) => void;
   saveRegionTemplate: () => Promise<void>;
   deleteRegionTemplate: () => Promise<void>;
@@ -190,6 +195,8 @@ export function RegionEditorProvider({ children }: { children: React.ReactNode }
       lat: station.point[0],
       lng: station.point[1],
       address: station.address,
+      availableFrom: station.availableFrom ?? "00:00",
+      availableTo: station.availableTo ?? "23:59",
     }));
     setStations(mappedStations);
     setActiveStationId(mappedStations.length > 0 ? mappedStations[0].id : null);
@@ -248,6 +255,8 @@ export function RegionEditorProvider({ children }: { children: React.ReactNode }
       id: stationCounter,
       lat,
       lng,
+      availableFrom: "00:00",
+      availableTo: "23:59",
     };
 
     setStations((prev) => [...prev, newStation]);
@@ -259,6 +268,12 @@ export function RegionEditorProvider({ children }: { children: React.ReactNode }
   const updateStation = useCallback((id: number, lat: number, lng: number) => {
     setStations((prev) => prev.map((station) => (
       station.id === id ? { ...station, lat, lng, address: undefined } : station
+    )));
+  }, []);
+
+  const updateStationAvailability = useCallback((id: number, field: "availableFrom" | "availableTo", value: string) => {
+    setStations((prev) => prev.map((station) => (
+      station.id === id ? { ...station, [field]: value } : station
     )));
   }, []);
 
@@ -278,6 +293,8 @@ export function RegionEditorProvider({ children }: { children: React.ReactNode }
         if (station.address) {
           return {
             address: station.address,
+            availableFrom: station.availableFrom,
+            availableTo: station.availableTo,
             point: [station.lat, station.lng] as [number, number],
           };
         }
@@ -296,6 +313,8 @@ export function RegionEditorProvider({ children }: { children: React.ReactNode }
 
         return {
           address,
+          availableFrom: station.availableFrom,
+          availableTo: station.availableTo,
           point: [station.lat, station.lng] as [number, number],
         };
       }),
@@ -393,6 +412,7 @@ export function RegionEditorProvider({ children }: { children: React.ReactNode }
     stopAddingStation,
     addStation,
     updateStation,
+    updateStationAvailability,
     removeStation,
     saveRegionTemplate,
     deleteRegionTemplate,

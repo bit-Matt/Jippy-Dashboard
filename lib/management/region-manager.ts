@@ -48,6 +48,8 @@ export async function getAllRegions(readyActiveOnly = false): Promise<Result<Reg
             json_build_object(
               'id', ${regionStations.id},
               'address', ${regionStations.address},
+              'availableFrom', ${regionStations.availableFrom},
+              'availableTo', ${regionStations.availableTo},
               'point', json_build_array(
                 ST_Y(${regionStations.point}),
                 ST_X(${regionStations.point})
@@ -132,6 +134,8 @@ export async function getRegionById(regionId: string, snapshotId?: string): Prom
             json_build_object(
               'id', ${regionStations.id},
               'address', ${regionStations.address},
+              'availableFrom', ${regionStations.availableFrom},
+              'availableTo', ${regionStations.availableTo},
               'point', json_build_array(
                 ST_Y(${regionStations.point}),
                 ST_X(${regionStations.point})
@@ -218,7 +222,7 @@ export async function createSnapshot(regionId: string, params: RegionAddParamete
         .returning();
       if (sequences.length !== params.points.length) return tx.rollback();
 
-      let stations: Array<{ id: string; address: string; point: [number, number] }> = [];
+      let stations: StationObject[] = [];
       if (params.stations.length > 0) {
         const stationCreateResult = await tx
           .insert(regionStations)
@@ -226,6 +230,8 @@ export async function createSnapshot(regionId: string, params: RegionAddParamete
             params.stations.map(point => ({
               regionSnapshotId: snapshot.id,
               address: point.address,
+              availableFrom: point.availableFrom ?? "00:00",
+              availableTo: point.availableTo ?? "23:59",
               point: [point.point[1], point.point[0]] as [number, number],
             })),
           )
@@ -233,6 +239,8 @@ export async function createSnapshot(regionId: string, params: RegionAddParamete
         stations = stationCreateResult.map(s => ({
           id: s.id,
           address: s.address,
+          availableFrom: s.availableFrom,
+          availableTo: s.availableTo,
           point: [s.point[1], s.point[0]],
         }));
       }
@@ -337,6 +345,8 @@ export async function copySnapshot(regionId: string, sourceSnapshotId: string, o
           .values(stations.map(s => ({
             point: s.point,
             address: s.address,
+            availableFrom: s.availableFrom,
+            availableTo: s.availableTo,
             regionSnapshotId: newSnapshot.id,
           })));
       }
@@ -617,6 +627,8 @@ export async function updateRegionSnapshot(
             params.stations.map((station) => ({
               regionSnapshotId: snapshotToEdit.id,
               address: station.address,
+              availableFrom: station.availableFrom ?? "00:00",
+              availableTo: station.availableTo ?? "23:59",
               point: [station.point[1], station.point[0]] as [number, number],
             })),
           );
@@ -640,6 +652,8 @@ export interface PointObject {
 export interface StationObject {
   id: string;
   address: string;
+  availableFrom: string;
+  availableTo: string;
   point: [number, number];
 }
 
@@ -662,7 +676,12 @@ export interface RegionAddParameters {
   regionColor: string;
   regionShape: string;
   points: Array<Omit<PointObject, "id">>;
-  stations: Array<Omit<StationObject, "id">>;
+  stations: Array<{
+    address: string;
+    point: [number, number];
+    availableFrom?: string;
+    availableTo?: string;
+  }>;
 }
 
 export interface UpdateRegionParameters {
@@ -672,7 +691,12 @@ export interface UpdateRegionParameters {
   regionColor?: string;
   regionShape?: string;
   points?: Array<Omit<PointObject, "id">>;
-  stations?: Array<Omit<StationObject, "id">>;
+  stations?: Array<{
+    address: string;
+    point: [number, number];
+    availableFrom?: string;
+    availableTo?: string;
+  }>;
 }
 
 export interface SnapshotItem {

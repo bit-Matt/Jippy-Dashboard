@@ -153,6 +153,12 @@ export const routeSnapshots = pgTable(
     routeDetails: text("route_details")
       .default("")
       .notNull(),
+    availableFrom: text("available_from")
+      .notNull()
+      .default("00:00"),
+    availableTo: text("available_to")
+      .notNull()
+      .default("23:59"),
     polylineGoingTo: text("polyline_going_to")
       .notNull(),
     polylineGoingBack: text("polyline_going_back")
@@ -298,6 +304,12 @@ export const regionStations = pgTable(
     address: text("address")
       .notNull()
       .default("Unknown"),
+    availableFrom: text("available_from")
+      .notNull()
+      .default("00:00"),
+    availableTo: text("available_to")
+      .notNull()
+      .default("23:59"),
     point: geometry("point", { type: "point", mode: "tuple", srid: 4326 }).notNull(),
 
     // Metadata

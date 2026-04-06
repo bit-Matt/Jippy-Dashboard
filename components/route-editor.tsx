@@ -100,6 +100,8 @@ export default function RouteEditor({
   const [routeNumber, setRouteNumber] = useState("");
   const [routeName, setRouteName] = useState("");
   const [routeDetails, setRouteDetails] = useState("");
+  const [availableFrom, setAvailableFrom] = useState("00:00");
+  const [availableTo, setAvailableTo] = useState("23:59");
   const [isDetailsDialogOpen, setIsDetailsDialogOpen] = useState(false);
   const [draftRouteDetails, setDraftRouteDetails] = useState("");
   const [draggedWaypointId, setDraggedWaypointId] = useState<number | null>(null);
@@ -131,6 +133,8 @@ export default function RouteEditor({
       setRouteNumber("");
       setRouteName("");
       setRouteDetails("");
+      setAvailableFrom("00:00");
+      setAvailableTo("23:59");
       return;
     }
 
@@ -139,6 +143,8 @@ export default function RouteEditor({
     setRouteNumber(editingRoute.routeNumber);
     setRouteName(editingRoute.routeName);
     setRouteDetails(editingRoute.routeDetails ?? "");
+    setAvailableFrom(editingRoute.availableFrom ?? "00:00");
+    setAvailableTo(editingRoute.availableTo ?? "23:59");
   }, [editingRoute]);
 
   // Reverse geocode waypoints to get addresses
@@ -203,6 +209,11 @@ export default function RouteEditor({
   }, [waypoints]);
 
   const handleSaveRoute = async () => {
+    if (!availableFrom || !availableTo || availableFrom > availableTo) {
+      alert("Route availability is invalid. Ensure Available From is earlier than or equal to Available To.");
+      return;
+    }
+
     if (!routeNumber.trim() || !routeName.trim()) {
       console.warn("Route number and name are required");
       return;
@@ -238,6 +249,8 @@ export default function RouteEditor({
           routeName: routeName,
           routeColor: selectedColor,
           routeDetails: routeDetails,
+          availableFrom,
+          availableTo,
           points: {
             goingTo: route.goingTo.map(x => ({
               sequence: x.sequence,
@@ -264,6 +277,8 @@ export default function RouteEditor({
       setSnapshotName("v1");
       setSnapshotState("wip");
       setRouteDetails("");
+      setAvailableFrom("00:00");
+      setAvailableTo("23:59");
       clearAllWaypoints();
       stopCreating();
       onSaved?.();
@@ -288,6 +303,8 @@ export default function RouteEditor({
     setSnapshotName("v1");
     setSnapshotState("wip");
     setRouteDetails("");
+    setAvailableFrom("00:00");
+    setAvailableTo("23:59");
     clearAllWaypoints();
     stopCreating();
     onClosed?.();
@@ -332,6 +349,7 @@ export default function RouteEditor({
     setIsDetailsDialogOpen(false);
   };
 
+  const isRouteAvailabilityValid = Boolean(availableFrom) && Boolean(availableTo) && availableFrom <= availableTo;
   const canSave = waypointCounts.goingTo >= 2 && waypointCounts.goingBack >= 2;
   const isAdministrator = me?.data?.data?.role === "administrator_user";
 
@@ -349,7 +367,7 @@ export default function RouteEditor({
             <Button
               size="sm"
               onClick={handleSaveRoute}
-              disabled={!canSave || !routeNumber.trim() || !routeName.trim()}
+              disabled={!canSave || !routeNumber.trim() || !routeName.trim() || !isRouteAvailabilityValid}
             >
               Save
             </Button>
@@ -426,6 +444,37 @@ export default function RouteEditor({
                   ? `Details saved (${routeDetails.trim().length} characters).`
                   : "No route details added yet."}
               </p>
+            </div>
+            <div className="space-y-2">
+              <Label>Availability Window</Label>
+              <div className="grid grid-cols-2 gap-2">
+                <div className="space-y-1">
+                  <Label htmlFor="route-available-from" className="text-xs">Available From</Label>
+                  <Input
+                    id="route-available-from"
+                    type="time"
+                    value={availableFrom}
+                    onChange={(e) => setAvailableFrom(e.target.value)}
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label htmlFor="route-available-to" className="text-xs">Available To</Label>
+                  <Input
+                    id="route-available-to"
+                    type="time"
+                    value={availableTo}
+                    onChange={(e) => setAvailableTo(e.target.value)}
+                  />
+                </div>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Default full-day service is 00:00 to 23:59.
+              </p>
+              {!isRouteAvailabilityValid ? (
+                <p className="text-xs text-destructive">
+                  Availability range is invalid. Available From must be earlier than or equal to Available To.
+                </p>
+              ) : null}
             </div>
           </div>
 

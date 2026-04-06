@@ -183,6 +183,13 @@
       "when": 1775448389179,
       "tag": "0025_milky_ricochet",
       "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "7",
+      "when": 1775454869546,
+      "tag": "0026_overrated_stature",
+      "breakpoints": true
     }
   ]
 }

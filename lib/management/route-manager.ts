@@ -27,6 +27,8 @@ export async function getAllRoutes(readyActiveOnly = false): Promise<Result<Rout
       routeName: routeSnapshots.routeName,
       routeColor: routeSnapshots.routeColor,
       routeDetails: routeSnapshots.routeDetails,
+      availableFrom: routeSnapshots.availableFrom,
+      availableTo: routeSnapshots.availableTo,
 
       // language=text
       points: sql<RoutePoint>`
@@ -117,6 +119,8 @@ export async function getRouteById(routeId: string, snapshotId?: string): Promis
         routeName: routeSnapshots.routeName,
         routeColor: routeSnapshots.routeColor,
         routeDetails: routeSnapshots.routeDetails,
+        availableFrom: routeSnapshots.availableFrom,
+        availableTo: routeSnapshots.availableTo,
 
         // language=text
         points: sql<RoutePoint>`
@@ -215,6 +219,8 @@ export async function createSnapshot(routeId: string, params: AddRouteParameters
           routeNumber: params.routeNumber,
           routeColor: params.routeColor,
           routeDetails: params.routeDetails ?? "",
+          availableFrom: params.availableFrom ?? "00:00",
+          availableTo: params.availableTo ?? "23:59",
           polylineGoingTo: params.polylineGoingTo ?? "",
           polylineGoingBack: params.polylineGoingBack ?? "",
         })
@@ -256,6 +262,8 @@ export async function createSnapshot(routeId: string, params: AddRouteParameters
         routeName: snapshot.routeName,
         routeColor: snapshot.routeColor,
         routeDetails: snapshot.routeDetails,
+        availableFrom: snapshot.availableFrom,
+        availableTo: snapshot.availableTo,
         points: {
           polylineGoingTo: snapshot.polylineGoingTo,
           goingTo: sequences
@@ -339,6 +347,8 @@ export async function copySnapshot(routeId: string, sourceSnapshotId: string, ow
           routeName: snapshot.routeName,
           routeColor: snapshot.routeColor,
           routeDetails: snapshot.routeDetails,
+          availableFrom: snapshot.availableFrom,
+          availableTo: snapshot.availableTo,
           polylineGoingTo: snapshot.polylineGoingTo,
           polylineGoingBack: snapshot.polylineGoingBack,
         })
@@ -629,6 +639,8 @@ export async function updateRouteSnapshot(
         ...(params.routeName !== undefined && { routeName: params.routeName }),
         ...(params.routeColor !== undefined && { routeColor: params.routeColor }),
         ...(params.routeDetails !== undefined && { routeDetails: params.routeDetails }),
+        ...(params.availableFrom !== undefined && { availableFrom: params.availableFrom }),
+        ...(params.availableTo !== undefined && { availableTo: params.availableTo }),
         ...(params.polylineGoingTo !== undefined && { polylineGoingTo: params.polylineGoingTo }),
         ...(params.polylineGoingBack !== undefined && { polylineGoingBack: params.polylineGoingBack }),
       };
@@ -694,6 +706,8 @@ export interface AddRouteParameters {
   routeName: string;
   routeColor: string;
   routeDetails: string;
+  availableFrom?: string;
+  availableTo?: string;
   polylineGoingTo: string;
   polylineGoingBack: string;
   points: {
@@ -709,6 +723,8 @@ export interface UpdateRouteParameters {
   routeName?: string;
   routeColor?: string;
   routeDetails?: string;
+  availableFrom?: string;
+  availableTo?: string;
   polylineGoingTo?: string;
   polylineGoingBack?: string;
   points?: {
@@ -726,6 +742,8 @@ export interface RouteObject {
   routeName: string;
   routeColor: string;
   routeDetails: string;
+  availableFrom: string;
+  availableTo: string;
   points: RoutePoint;
 }
 

@@ -130,6 +130,8 @@ export interface AllResponse {
     routeName: string
     routeColor: string
     routeDetails: string
+    availableFrom: string
+    availableTo: string
     points: {
       polylineGoingTo: string;
       goingTo: Array<{
@@ -163,6 +165,8 @@ export interface AllResponse {
     stations: Array<{
       id: string;
       address: string;
+      availableFrom: string;
+      availableTo: string;
       point: [number, number];
     }>;
   }>;
