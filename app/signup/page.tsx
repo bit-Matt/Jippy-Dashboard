@@ -1,5 +1,10 @@
+import type { Metadata } from "next";
 import { Suspense } from "react";
 import { SignupForm } from "@/components/signup-form";
+
+export const metadata: Metadata = {
+  title: "Sign Up",
+};
 
 export default function Page() {
   return (

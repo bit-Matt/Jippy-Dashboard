@@ -1,7 +1,12 @@
+import type { Metadata } from "next";
 import type { ReactNode } from "react";
 import { redirect, RedirectType } from "next/navigation";
 
 import { session as auth } from "@/lib/auth";
+
+export const metadata: Metadata = {
+  title: "Activity Logs",
+};
 
 export default async function LogsLayout({ children }: { children: ReactNode }) {
   const currentSession = await auth.verify("administrator_user");

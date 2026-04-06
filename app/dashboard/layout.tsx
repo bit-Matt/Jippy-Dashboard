@@ -1,7 +1,12 @@
+import type { Metadata } from "next";
 import type { ReactNode } from "react";
 import { redirect, RedirectType } from "next/navigation";
 
 import { session as auth, SessionCode } from "@/lib/auth";
+
+export const metadata: Metadata = {
+  title: "Dashboard",
+};
 
 export default async function DashboardLayout({ children }: { children: ReactNode }) {
   const session = await auth.verify();
