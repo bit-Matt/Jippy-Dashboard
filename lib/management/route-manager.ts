@@ -1,7 +1,7 @@
 import { and, eq, sql } from "drizzle-orm";
 
 import { db } from "@/lib/db";
-import { routes, routeSnapshots, routeSequences } from "@/lib/db/schema";
+import { routes, routeSnapshots, routeSequences, vehicleTypes } from "@/lib/db/schema";
 import { ErrorCodes, Failure, Result, Success } from "@/lib/one-of/types";
 import { unwrap } from "../one-of";
 
@@ -29,6 +29,9 @@ export async function getAllRoutes(readyActiveOnly = false): Promise<Result<Rout
       routeDetails: routeSnapshots.routeDetails,
       availableFrom: routeSnapshots.availableFrom,
       availableTo: routeSnapshots.availableTo,
+      vehicleTypeId: routeSnapshots.vehicleTypeId,
+      vehicleTypeName: vehicleTypes.name,
+      vehicleTypeRequiresRoute: vehicleTypes.requiresRoute,
 
       // language=text
       points: sql<RoutePoint>`
@@ -72,15 +75,17 @@ export async function getAllRoutes(readyActiveOnly = false): Promise<Result<Rout
         .select(selectFields)
         .from(routes)
         .innerJoin(routeSnapshots, eq(routes.activeSnapshotId, routeSnapshots.id))
+        .innerJoin(vehicleTypes, eq(routeSnapshots.vehicleTypeId, vehicleTypes.id))
         .leftJoin(routeSequences, eq(routeSnapshots.id, routeSequences.routeSnapshotId))
         .where(eq(routeSnapshots.snapshotState, "ready"))
-        .groupBy(routes.id, routeSnapshots.id)
+        .groupBy(routes.id, routeSnapshots.id, vehicleTypes.id)
       : await db
         .select(selectFields)
         .from(routes)
         .leftJoin(routeSnapshots, eq(routes.activeSnapshotId, routeSnapshots.id))
+        .leftJoin(vehicleTypes, eq(routeSnapshots.vehicleTypeId, vehicleTypes.id))
         .leftJoin(routeSequences, eq(routeSnapshots.id, routeSequences.routeSnapshotId))
-        .groupBy(routes.id, routeSnapshots.id);
+        .groupBy(routes.id, routeSnapshots.id, vehicleTypes.id);
 
     return new Success(result as RouteObject[]);
   } catch (e) {
@@ -121,6 +126,9 @@ export async function getRouteById(routeId: string, snapshotId?: string): Promis
         routeDetails: routeSnapshots.routeDetails,
         availableFrom: routeSnapshots.availableFrom,
         availableTo: routeSnapshots.availableTo,
+        vehicleTypeId: routeSnapshots.vehicleTypeId,
+        vehicleTypeName: vehicleTypes.name,
+        vehicleTypeRequiresRoute: vehicleTypes.requiresRoute,
 
         // language=text
         points: sql<RoutePoint>`
@@ -161,8 +169,9 @@ export async function getRouteById(routeId: string, snapshotId?: string): Promis
       .from(routes)
       .where(eq(routes.id, routeId))
       .leftJoin(routeSnapshots, eq(routeSnapshots.id, snapshotId ? snapshotId : routes.activeSnapshotId))
+      .leftJoin(vehicleTypes, eq(routeSnapshots.vehicleTypeId, vehicleTypes.id))
       .leftJoin(routeSequences, eq(routeSnapshots.id, routeSequences.routeSnapshotId))
-      .groupBy(routes.id, routeSnapshots.id);
+      .groupBy(routes.id, routeSnapshots.id, vehicleTypes.id);
 
     if (!result) {
       return new Failure(ErrorCodes.ResourceNotFound, "No such route found.", { routeId });
@@ -206,6 +215,18 @@ export async function createSnapshot(routeId: string, params: AddRouteParameters
       return new Failure(ErrorCodes.ResourceNotFound, "No such route found", { routeId });
     }
 
+    const [vehicleType] = await db
+      .select({ id: vehicleTypes.id })
+      .from(vehicleTypes)
+      .where(eq(vehicleTypes.id, params.vehicleTypeId))
+      .limit(1);
+    if (!vehicleType) {
+      return new Failure(ErrorCodes.ValidationFailure, "Vehicle type not found.", {
+        routeId,
+        vehicleTypeId: params.vehicleTypeId,
+      });
+    }
+
     const transaction = await db.transaction(async tx => {
       // Generate a snapshot first
       const [snapshot] = await tx
@@ -221,6 +242,7 @@ export async function createSnapshot(routeId: string, params: AddRouteParameters
           routeDetails: params.routeDetails ?? "",
           availableFrom: params.availableFrom ?? "00:00",
           availableTo: params.availableTo ?? "23:59",
+          vehicleTypeId: params.vehicleTypeId,
           polylineGoingTo: params.polylineGoingTo ?? "",
           polylineGoingBack: params.polylineGoingBack ?? "",
         })
@@ -264,6 +286,7 @@ export async function createSnapshot(routeId: string, params: AddRouteParameters
         routeDetails: snapshot.routeDetails,
         availableFrom: snapshot.availableFrom,
         availableTo: snapshot.availableTo,
+        vehicleTypeId: snapshot.vehicleTypeId,
         points: {
           polylineGoingTo: snapshot.polylineGoingTo,
           goingTo: sequences
@@ -349,6 +372,7 @@ export async function copySnapshot(routeId: string, sourceSnapshotId: string, ow
           routeDetails: snapshot.routeDetails,
           availableFrom: snapshot.availableFrom,
           availableTo: snapshot.availableTo,
+          vehicleTypeId: snapshot.vehicleTypeId,
           polylineGoingTo: snapshot.polylineGoingTo,
           polylineGoingBack: snapshot.polylineGoingBack,
         })
@@ -604,6 +628,21 @@ export async function updateRouteSnapshot(
   params: UpdateRouteParameters,
 ): Promise<Result<RouteObject>> {
   try {
+    if (params.vehicleTypeId !== undefined) {
+      const [vehicleType] = await db
+        .select({ id: vehicleTypes.id })
+        .from(vehicleTypes)
+        .where(eq(vehicleTypes.id, params.vehicleTypeId))
+        .limit(1);
+      if (!vehicleType) {
+        return new Failure(ErrorCodes.ValidationFailure, "Vehicle type not found.", {
+          routeId,
+          snapshotId,
+          vehicleTypeId: params.vehicleTypeId,
+        });
+      }
+    }
+
     // Check if the snapshot is editable
     const [snapshotToEdit] = await db
       .select({ id: routeSnapshots.id, state: routeSnapshots.snapshotState })
@@ -641,6 +680,7 @@ export async function updateRouteSnapshot(
         ...(params.routeDetails !== undefined && { routeDetails: params.routeDetails }),
         ...(params.availableFrom !== undefined && { availableFrom: params.availableFrom }),
         ...(params.availableTo !== undefined && { availableTo: params.availableTo }),
+        ...(params.vehicleTypeId !== undefined && { vehicleTypeId: params.vehicleTypeId }),
         ...(params.polylineGoingTo !== undefined && { polylineGoingTo: params.polylineGoingTo }),
         ...(params.polylineGoingBack !== undefined && { polylineGoingBack: params.polylineGoingBack }),
       };
@@ -706,6 +746,7 @@ export interface AddRouteParameters {
   routeName: string;
   routeColor: string;
   routeDetails: string;
+  vehicleTypeId: string;
   availableFrom?: string;
   availableTo?: string;
   polylineGoingTo: string;
@@ -723,6 +764,7 @@ export interface UpdateRouteParameters {
   routeName?: string;
   routeColor?: string;
   routeDetails?: string;
+  vehicleTypeId?: string;
   availableFrom?: string;
   availableTo?: string;
   polylineGoingTo?: string;
@@ -744,6 +786,9 @@ export interface RouteObject {
   routeDetails: string;
   availableFrom: string;
   availableTo: string;
+  vehicleTypeId: string;
+  vehicleTypeName?: string;
+  vehicleTypeRequiresRoute?: boolean;
   points: RoutePoint;
 }
 

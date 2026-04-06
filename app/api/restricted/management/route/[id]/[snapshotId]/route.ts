@@ -141,6 +141,7 @@ export async function PATCH(
     || data.routeName !== undefined
     || data.routeColor !== undefined
     || data.routeDetails !== undefined
+    || data.vehicleTypeId !== undefined
     || data.availableFrom !== undefined
     || data.availableTo !== undefined
     || data.points !== undefined;
@@ -164,6 +165,7 @@ export async function PATCH(
       routeName: { type: "string", formatter: "non-empty-string" },
       routeColor: { type: "string", formatter: "hex-color" },
       routeDetails: { type: "string", formatter: "non-empty-string" },
+      vehicleTypeId: { type: "string", formatter: "uuid" },
       availableFrom: { type: "string", formatterFn: async (value) => {
         if (value === undefined) return { ok: true };
         if (!TIME_PATTERN.test(value)) return { ok: false, error: "Invalid availableFrom time. Use HH:mm format." };
@@ -315,6 +317,7 @@ type PatchRequestBody = {
   routeName?: string;
   routeColor?: string;
   routeDetails?: string;
+  vehicleTypeId?: string;
   availableFrom?: string;
   availableTo?: string;
   points?: {

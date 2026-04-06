@@ -48,6 +48,7 @@ export async function POST(
       routeName: { type: "string", formatter: "non-empty-string" },
       routeColor: { type: "string", formatter: "hex-color" },
       routeDetails: { type: "string", formatter: "non-empty-string" },
+      vehicleTypeId: { type: "string", formatter: "uuid" },
       points: {
         type: "object",
         formatterFn: async (values) => {
@@ -77,7 +78,7 @@ export async function POST(
         },
       },
     },
-    requiredProperties: ["routeNumber", "routeName", "routeColor", "routeDetails", "points"],
+    requiredProperties: ["routeNumber", "routeName", "routeColor", "routeDetails", "vehicleTypeId", "points"],
     allowUnvalidatedProperties: false,
   });
   if (!validation.ok) {
@@ -237,6 +238,7 @@ type RequestBody = {
   routeName: string;
   routeColor: string;
   routeDetails: string;
+  vehicleTypeId: string;
   points: {
     goingTo: Array<{
       sequence: number;

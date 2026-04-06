@@ -100,6 +100,7 @@ export default function RouteEditor({
   const [routeNumber, setRouteNumber] = useState("");
   const [routeName, setRouteName] = useState("");
   const [routeDetails, setRouteDetails] = useState("");
+  const [vehicleTypeId, setVehicleTypeId] = useState("");
   const [availableFrom, setAvailableFrom] = useState("00:00");
   const [availableTo, setAvailableTo] = useState("23:59");
   const [isDetailsDialogOpen, setIsDetailsDialogOpen] = useState(false);
@@ -108,6 +109,7 @@ export default function RouteEditor({
   const dragPreviewRef = useRef<HTMLElement | null>(null);
   const [loadingAddresses, setLoadingAddresses] = useState<Set<number>>(new Set());
   const { data: me } = useSWR<MeResponse>("/api/me", $fetch);
+  const { data: vehicleTypesResponse } = useSWR<VehicleTypesResponse>("/api/restricted/management/vehicle", $fetch);
   const {
     selectedColor,
     activeDirection,
@@ -135,6 +137,7 @@ export default function RouteEditor({
       setRouteNumber("");
       setRouteName("");
       setRouteDetails("");
+      setVehicleTypeId("");
       setAvailableFrom("00:00");
       setAvailableTo("23:59");
       return;
@@ -145,9 +148,21 @@ export default function RouteEditor({
     setRouteNumber(editingRoute.routeNumber);
     setRouteName(editingRoute.routeName);
     setRouteDetails(editingRoute.routeDetails ?? "");
+    setVehicleTypeId(editingRoute.vehicleTypeId ?? "");
     setAvailableFrom(editingRoute.availableFrom ?? "00:00");
     setAvailableTo(editingRoute.availableTo ?? "23:59");
   }, [editingRoute]);
+
+  useEffect(() => {
+    if (vehicleTypeId) {
+      return;
+    }
+
+    const firstVehicleTypeId = vehicleTypesResponse?.data?.data?.[0]?.id;
+    if (firstVehicleTypeId) {
+      setVehicleTypeId(firstVehicleTypeId);
+    }
+  }, [vehicleTypeId, vehicleTypesResponse]);
 
   // Reverse geocode waypoints to get addresses
   useEffect(() => {
@@ -251,6 +266,7 @@ export default function RouteEditor({
           routeName: routeName,
           routeColor: selectedColor,
           routeDetails: routeDetails,
+          vehicleTypeId,
           availableFrom,
           availableTo,
           points: {
@@ -279,6 +295,7 @@ export default function RouteEditor({
       setSnapshotName("v1");
       setSnapshotState("wip");
       setRouteDetails("");
+      setVehicleTypeId(vehicleTypesResponse?.data?.data?.[0]?.id ?? "");
       setAvailableFrom("00:00");
       setAvailableTo("23:59");
       clearAllWaypoints();
@@ -305,6 +322,7 @@ export default function RouteEditor({
     setSnapshotName("v1");
     setSnapshotState("wip");
     setRouteDetails("");
+    setVehicleTypeId(vehicleTypesResponse?.data?.data?.[0]?.id ?? "");
     setAvailableFrom("00:00");
     setAvailableTo("23:59");
     clearAllWaypoints();
@@ -362,8 +380,9 @@ export default function RouteEditor({
   };
 
   const isRouteAvailabilityValid = Boolean(availableFrom) && Boolean(availableTo) && availableFrom <= availableTo;
-  const canSave = waypointCounts.goingTo >= 2 && waypointCounts.goingBack >= 2;
+  const canSave = waypointCounts.goingTo >= 2 && waypointCounts.goingBack >= 2 && Boolean(vehicleTypeId);
   const isAdministrator = me?.data?.data?.role === "administrator_user";
+  const selectedVehicle = vehicleTypesResponse?.data?.data?.find((vehicle) => vehicle.id === vehicleTypeId);
 
   return (
     <div className="absolute top-2 left-6 z-9999 w-1/4 animate-in slide-in-from-left-6 duration-200">
@@ -464,6 +483,26 @@ export default function RouteEditor({
                       ? `Details saved (${routeDetails.trim().length} characters).`
                       : "No route details added yet."}
                   </p>
+                </div>
+                <div className="space-y-2">
+                  <Label>Vehicle Type</Label>
+                  <Select value={vehicleTypeId} onValueChange={setVehicleTypeId}>
+                    <SelectTrigger className="w-full">
+                      <SelectValue placeholder="Select vehicle type" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {vehicleTypesResponse?.data?.data?.map((vehicleType) => (
+                        <SelectItem key={vehicleType.id} value={vehicleType.id}>
+                          {vehicleType.name} ({vehicleType.requiresRoute ? "Requires Route" : "Freeform"})
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  {!selectedVehicle ? (
+                    <p className="text-xs text-destructive">
+                      Vehicle type is required.
+                    </p>
+                  ) : null}
                 </div>
                 <div className="space-y-2">
                   <Label>Availability Window</Label>
@@ -678,6 +717,18 @@ type MeResponse = {
     data: {
       role: string;
     };
+  };
+  error?: unknown;
+}
+
+type VehicleTypesResponse = {
+  data: {
+    ok: boolean;
+    data: Array<{
+      id: string;
+      name: string;
+      requiresRoute: boolean;
+    }>;
   };
   error?: unknown;
 }

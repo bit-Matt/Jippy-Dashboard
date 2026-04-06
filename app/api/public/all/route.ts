@@ -12,7 +12,7 @@ export async function GET() {
       unwrap(closure.getAllClosures(true)),
     ]);
 
-    const routes = allRoutes.map(({ activeSnapshotId, snapshotName, snapshotState, ...rest }) => rest);
+    const routes = allRoutes.map(({ activeSnapshotId, snapshotName, snapshotState, vehicleTypeRequiresRoute, ...rest }) => rest);
     const regions = allRegions.map(({ activeSnapshotId, snapshotName, snapshotState, ...rest }) => rest);
     const closures = allClosures.map(({ activeSnapshotId, versionName, snapshotState, ...rest }) => rest);
 

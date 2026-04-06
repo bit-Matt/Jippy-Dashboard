@@ -95,6 +95,30 @@ export const invitations = pgTable("invitations", {
     .notNull(),
 });
 
+export const vehicleTypes = pgTable("vehicle_types", {
+  id: text("id")
+    .primaryKey()
+    .$default(() => uuidv7()),
+
+  name: text("name")
+    .notNull()
+    .unique(),
+  requiresRoute: boolean("requires_route")
+    .default(true)
+    .notNull(),
+
+  ownerId: text("owner_id")
+    .references(() => user.id, { onDelete: "set null" }),
+
+  createdAt: timestamp("created_at")
+    .defaultNow()
+    .notNull(),
+  updatedAt: timestamp("updated_at")
+    .defaultNow()
+    .$onUpdate(() => new Date())
+    .notNull(),
+});
+
 export const routes = pgTable(
   "routes",
   {
@@ -135,6 +159,9 @@ export const routeSnapshots = pgTable(
     routeId: text("route_id")
       .notNull()
       .references(() => routes.id, { onDelete: "cascade" }),
+    vehicleTypeId: text("vehicle_type_id")
+      .notNull()
+      .references(() => vehicleTypes.id),
     ownerId: text("owner_id")
       .references(() => user.id, { onDelete: "set null" }),
 
@@ -454,6 +481,15 @@ export const userRelations = relations(user, ({ many }) => ({
   sessions: many(session),
   accounts: many(account),
   activityLogs: many(activityLogs),
+  vehicleTypes: many(vehicleTypes),
+}));
+
+export const vehicleTypesRelations = relations(vehicleTypes, ({ one, many }) => ({
+  owner: one(user, {
+    fields: [vehicleTypes.ownerId],
+    references: [user.id],
+  }),
+  routeSnapshots: many(routeSnapshots),
 }));
 
 export const sessionRelations = relations(session, ({ one }) => ({
@@ -485,6 +521,10 @@ export const routeSnapshotRelations = relations(routeSnapshots, ({ one }) => ({
   route: one(routes, {
     fields: [routeSnapshots.routeId],
     references: [routes.id],
+  }),
+  vehicleType: one(vehicleTypes, {
+    fields: [routeSnapshots.vehicleTypeId],
+    references: [vehicleTypes.id],
   }),
 }));
 

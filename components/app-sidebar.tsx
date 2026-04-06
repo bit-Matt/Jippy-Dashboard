@@ -62,6 +62,10 @@ export function AppSidebar({
             title: "Audits",
             url: "/dashboard/logs",
           },
+          {
+            title: "Vehicle Types",
+            url: "/dashboard/vehicle",
+          },
         ],
       },
     ],
@@ -132,6 +136,9 @@ export interface AllResponse {
     routeDetails: string
     availableFrom: string
     availableTo: string
+    vehicleTypeId: string
+    vehicleTypeName?: string
+    vehicleTypeRequiresRoute?: boolean
     points: {
       polylineGoingTo: string;
       goingTo: Array<{

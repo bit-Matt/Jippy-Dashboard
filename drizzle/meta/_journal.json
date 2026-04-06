@@ -190,6 +190,13 @@
       "when": 1775454869546,
       "tag": "0026_overrated_stature",
       "breakpoints": true
+    },
+    {
+      "idx": 27,
+      "version": "7",
+      "when": 1775460410857,
+      "tag": "0027_past_celestials",
+      "breakpoints": true
     }
   ]
 }
