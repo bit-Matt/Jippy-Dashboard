@@ -4,6 +4,12 @@ import { Validator } from "@/lib/validator/validator";
 
 const validator = new Validator();
 
+// Regular expressions
+const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const TIME_PATTERN = /^([01]\d|2[0-3]):([0-5]\d)$/;
+const UUID_PATTERN = /^[0-9a-fA-F]{8}\b-[0-9a-fA-F]{4}\b-[0-9a-fA-F]{4}\b-[0-9a-fA-F]{4}\b-[0-9a-fA-F]{12}$/i;
+const HEX_COLOR_PATTERN = /^#([A-Fa-f0-9]{6}|[A-Fa-f0-9]{3})$/;
+
 // Inject built-in formatters
 validator.addFormat("non-empty-string", {
   forType: "string",
@@ -25,8 +31,7 @@ validator.addFormat("non-empty-string", {
 validator.addFormat("email", {
   forType: "string",
   formatterFn: async (value: string) => {
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(value)) {
+    if (!EMAIL_PATTERN.test(value)) {
       return {
         ok: false,
         error: "Invalid email address",
@@ -40,8 +45,7 @@ validator.addFormat("email", {
 validator.addFormat("uuid", {
   forType: "string",
   formatterFn: async (value) => {
-    const uuidRegex = /^[0-9a-fA-F]{8}\b-[0-9a-fA-F]{4}\b-[0-9a-fA-F]{4}\b-[0-9a-fA-F]{4}\b-[0-9a-fA-F]{12}$/i;
-    if (!uuidRegex.test(value)) {
+    if (!UUID_PATTERN.test(value)) {
       return {
         ok: false,
         error: "Invalid UUID",
@@ -93,11 +97,25 @@ validator.addFormat("strong-password", {
 validator.addFormat("hex-color", {
   forType: "string",
   formatterFn: async (value) => {
-    const hexRegex = /^#([A-Fa-f0-9]{6}|[A-Fa-f0-9]{3})$/;
-    if (!hexRegex.test(value)) {
+    if (!HEX_COLOR_PATTERN.test(value)) {
       return {
         ok: false,
         error: "Invalid hex color",
+      };
+    }
+
+    return { ok: true };
+  },
+});
+
+validator.addFormat("time-hh-mm", {
+  forType: "string",
+  formatterFn: async (value) => {
+    const test = TIME_PATTERN.test(value);
+    if (!test) {
+      return {
+        ok: false,
+        error: "Invalid time. Use HH:mm format.",
       };
     }
 
@@ -159,6 +177,15 @@ const utils = {
 
     // Check via regex
     return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+  },
+
+  isValidTimeRange: (from?: string, to?: string) => {
+    // Do not entertain falsy
+    if (!utils.isExisty(from) || !utils.isExisty(to)) return false;
+
+    return TIME_PATTERN.test(from!)
+      && TIME_PATTERN.test(to!)
+      && from! > to!;
   },
 };
 

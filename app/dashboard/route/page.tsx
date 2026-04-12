@@ -168,6 +168,7 @@ function RouteDashboardContent() {
   const [snapshotCreateParentRouteId, setSnapshotCreateParentRouteId] = useState<string | null>(null);
   const [isMapSettingsDialogOpen, setIsMapSettingsDialogOpen] = useState(false);
   const selectedRouteRef = useRef<RouteResponse | null>(null);
+  const selectedRouteSnapshotIdRef = useRef<string | null>(null);
 
   const { isCreating, startCreating, startEditing, stopCreating } = useRouteEditor();
 
@@ -249,6 +250,23 @@ function RouteDashboardContent() {
     selectedRouteRef.current = selectedRoute;
   }, [selectedRoute]);
 
+  useEffect(() => {
+    selectedRouteSnapshotIdRef.current = selectedRouteSnapshotId;
+  }, [selectedRouteSnapshotId]);
+
+  const fetchRouteSnapshot = useCallback(async (routeId: string, snapshotId: string) => {
+    const { data, error } = await $fetch<IApiResponse<RouteResponse>>(`/api/restricted/management/route/${routeId}/${snapshotId}`, {
+      method: "GET",
+    });
+
+    if (error) {
+      console.error("Failed to load route snapshot:", error);
+      return null;
+    }
+
+    return data.data;
+  }, []);
+
   const loadRouteSnapshots = useCallback(async (route: RouteResponse, preferredSnapshotId?: string | null) => {
     setIsSnapshotLoading(true);
     const { data, error } = await $fetch<IApiResponse<SnapshotListItem[]>>(`/api/restricted/management/route/${route.id}/snapshots`, {
@@ -296,21 +314,27 @@ function RouteDashboardContent() {
     setClosures(nextClosures);
 
     if (selectedRouteRef.current) {
+      const preservedSnapshotId = selectedRouteSnapshotIdRef.current;
       const refreshedRoute = nextRoutes.find((route) => route.id === selectedRouteRef.current?.id) ?? null;
-      setSelectedRoute(refreshedRoute);
       if (!refreshedRoute) {
+        setSelectedRoute(null);
         setEditingRoute(null);
         setEditingSnapshotId(null);
         setRouteSnapshots([]);
         setSelectedRouteSnapshotId(null);
         setActiveRouteSnapshotId(null);
       } else {
-        void loadRouteSnapshots(refreshedRoute, selectedRouteSnapshotId);
+        const preservedSnapshot = preservedSnapshotId
+          ? await fetchRouteSnapshot(refreshedRoute.id, preservedSnapshotId)
+          : null;
+
+        setSelectedRoute(preservedSnapshot ?? refreshedRoute);
+        void loadRouteSnapshots(refreshedRoute, preservedSnapshotId);
       }
     }
 
     setIsFetchingRoutes(false);
-  }, [loadRouteSnapshots, selectedRouteSnapshotId]);
+  }, [fetchRouteSnapshot, loadRouteSnapshots]);
 
   const isRoutesLoading = isFetchingRoutes || !areRouteLayersReady;
 
@@ -323,19 +347,6 @@ function RouteDashboardContent() {
       window.clearTimeout(timerId);
     };
   }, [fetchRoutes]);
-
-  const fetchRouteSnapshot = async (routeId: string, snapshotId: string) => {
-    const { data, error } = await $fetch<IApiResponse<RouteResponse>>(`/api/restricted/management/route/${routeId}/${snapshotId}`, {
-      method: "GET",
-    });
-
-    if (error) {
-      console.error("Failed to load route snapshot:", error);
-      return null;
-    }
-
-    return data.data;
-  };
 
   const fetchRouteSnapshotPoints = async (routeId: string, snapshotId: string) => {
     const { data, error } = await $fetch<IApiResponse<RoutePointResponse>>(`/api/restricted/management/route/${routeId}/${snapshotId}/points`, {
