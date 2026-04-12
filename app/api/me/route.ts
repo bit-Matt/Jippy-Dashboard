@@ -1,7 +1,4 @@
-import { headers } from "next/headers";
-
 import * as accounts from "@/lib/accounts";
-import { auth } from "@/lib/auth";
 import { ResponseComposer, StatusCodes } from "@/lib/http";
 import { session, SessionCode } from "@/lib/auth";
 import { oneOf } from "@/lib/one-of";

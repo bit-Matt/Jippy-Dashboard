@@ -109,16 +109,16 @@ export async function POST(
         actorRole: currentSession.user!.role,
         category: "write_operation",
         action: "route_snapshot_created",
-        summary: `Created route snapshot ${s.snapshotName}`,
+        summary: `Created route snapshot ${data.snapshotName}`,
         routePath: `/api/restricted/management/route/${id}`,
         httpMethod: "POST",
         statusCode: StatusCodes.Status200Ok,
         entityType: "route_snapshot",
-        entityId: s.activeSnapshotId,
+        entityId: s.id,
         payload: data,
       });
 
-      return ResponseComposer.compose(StatusCodes.Status200Ok).setBody(s).orchestrate();
+      return ResponseComposer.compose(StatusCodes.Status200Ok).setBody(s.route).orchestrate();
     },
     e => ResponseComposer.composeFromFailure(e).orchestrate(),
   );

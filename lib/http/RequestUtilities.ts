@@ -1,7 +1,4 @@
-import { headers } from "next/headers";
 import type { NextRequest } from "next/server";
-
-import { auth } from "@/lib/auth";
 
 /**
  * Attempts to parse the JSON body from the given request. If the parsing fails,

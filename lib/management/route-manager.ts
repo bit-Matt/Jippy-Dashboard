@@ -3,71 +3,33 @@ import { and, eq, sql } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { routes, routeSnapshots, routeSequences, vehicleTypes } from "@/lib/db/schema";
 import { ErrorCodes, Failure, Result, Success } from "@/lib/one-of/types";
-import { unwrap } from "../one-of";
+import { unwrap } from "@/lib/one-of";
 
 /**
- * Fetches all routes with their metadata and nested point data.
+ * Fetches all routes using route-level projection fields.
  *
- * The returned result includes each route's identifying fields plus a `points`
- * payload containing:
- * - the route polylines for outgoing and return directions
- * - ordered `goingTo` and `goingBack` point arrays with coordinates normalized
- *   into `[latitude, longitude]` format
+ * This list response intentionally excludes sequence-point loading. It only returns
+ * route-level metadata and polylines while keeping point arrays empty. Point
+ * sequences should be fetched explicitly when editing a snapshot.
  *
+ * @param readyActiveOnly - When `true`, returns only publicly viewable routes.
  * @returns A `Result<RouteObject[]>` wrapping either the list of routes or a failure.
  */
 export async function getAllRoutes(readyActiveOnly = false): Promise<Result<RouteObject[]>> {
   try {
     const selectFields = {
       id: routes.id,
-      activeSnapshotId: routeSnapshots.id,
-      snapshotName: routeSnapshots.versionName,
-      snapshotState: routeSnapshots.snapshotState,
-      routeNumber: routeSnapshots.routeNumber,
-      routeName: routeSnapshots.routeName,
-      routeColor: routeSnapshots.routeColor,
-      routeDetails: routeSnapshots.routeDetails,
-      availableFrom: routeSnapshots.availableFrom,
-      availableTo: routeSnapshots.availableTo,
-      vehicleTypeId: routeSnapshots.vehicleTypeId,
+      routeNumber: routes.routeNumber,
+      routeName: routes.routeName,
+      routeColor: routes.routeColor,
+      routeDetails: routes.routeDetails,
+      availableFrom: routes.availableFrom,
+      availableTo: routes.availableTo,
+      vehicleTypeId: routes.vehicleTypeId,
       vehicleTypeName: vehicleTypes.name,
       vehicleTypeRequiresRoute: vehicleTypes.requiresRoute,
-
-      // language=text
-      points: sql<RoutePoint>`
-        json_build_object(
-          'polylineGoingTo', ${routeSnapshots.polylineGoingTo},
-          'goingTo', COALESCE(
-            json_agg(
-              json_build_object(
-                'id', ${routeSequences.id},
-                'sequence', ${routeSequences.sequenceNumber},
-                'address', ${routeSequences.address},
-                -- Manually parse the geometry into a JSON [x, y] array
-                'point', json_build_array(
-                  ST_Y(${routeSequences.point}),
-                  ST_X(${routeSequences.point})
-                )
-              ) ORDER BY ${routeSequences.sequenceNumber} ASC
-            ) FILTER (WHERE ${routeSequences.sequenceType} = 'going_to'), '[]'::json
-          ),
-          'polylineGoingBack', ${routeSnapshots.polylineGoingBack},
-          'goingBack', COALESCE(
-            json_agg(
-              json_build_object(
-                'id', ${routeSequences.id},
-                'sequence', ${routeSequences.sequenceNumber},
-                'address', ${routeSequences.address},
-                -- Again, manually parse the geometry into a JSON [x, y] array
-                'point', json_build_array(
-                  ST_Y(${routeSequences.point}),
-                  ST_X(${routeSequences.point})
-                )
-              ) ORDER BY ${routeSequences.sequenceNumber} ASC
-            ) FILTER (WHERE ${routeSequences.sequenceType} = 'going_back'), '[]'::json
-          )
-        )
-      `,
+      polylineGoingTo: routes.polylineGoingTo,
+      polylineGoingBack: routes.polylineGoingBack,
     };
 
     const result = readyActiveOnly
@@ -75,19 +37,35 @@ export async function getAllRoutes(readyActiveOnly = false): Promise<Result<Rout
         .select(selectFields)
         .from(routes)
         .innerJoin(routeSnapshots, eq(routes.activeSnapshotId, routeSnapshots.id))
-        .innerJoin(vehicleTypes, eq(routeSnapshots.vehicleTypeId, vehicleTypes.id))
-        .leftJoin(routeSequences, eq(routeSnapshots.id, routeSequences.routeSnapshotId))
-        .where(eq(routeSnapshots.snapshotState, "ready"))
-        .groupBy(routes.id, routeSnapshots.id, vehicleTypes.id)
+        .innerJoin(vehicleTypes, eq(routes.vehicleTypeId, vehicleTypes.id))
+        .where(eq(routes.isPublic, true))
       : await db
         .select(selectFields)
         .from(routes)
         .leftJoin(routeSnapshots, eq(routes.activeSnapshotId, routeSnapshots.id))
-        .leftJoin(vehicleTypes, eq(routeSnapshots.vehicleTypeId, vehicleTypes.id))
-        .leftJoin(routeSequences, eq(routeSnapshots.id, routeSequences.routeSnapshotId))
-        .groupBy(routes.id, routeSnapshots.id, vehicleTypes.id);
+        .leftJoin(vehicleTypes, eq(routes.vehicleTypeId, vehicleTypes.id));
 
-    return new Success(result as RouteObject[]);
+    const mapping: RouteObject[] = result.map(x => ({
+      id: x.id,
+      routeNumber: x.routeNumber,
+      routeName: x.routeName,
+      routeColor: x.routeColor,
+      routeDetails: x.routeDetails,
+      availability: {
+        from: x.availableFrom,
+        to: x.availableTo,
+      },
+      vehicle: {
+        id: x.vehicleTypeId,
+        name: x.vehicleTypeName!,
+      },
+      polylines: {
+        to: x.polylineGoingTo,
+        back: x.polylineGoingBack,
+      },
+    }));
+
+    return new Success(mapping);
   } catch (e) {
     return new Failure(ErrorCodes.Fatal, "Failed to fetch routes", {}, e);
   }
@@ -117,9 +95,6 @@ export async function getRouteById(routeId: string, snapshotId?: string): Promis
     const [result] = await db
       .select({
         id: routes.id,
-        activeSnapshotId: routeSnapshots.id,
-        snapshotName: routeSnapshots.versionName,
-        snapshotState: routeSnapshots.snapshotState,
         routeNumber: routeSnapshots.routeNumber,
         routeName: routeSnapshots.routeName,
         routeColor: routeSnapshots.routeColor,
@@ -128,43 +103,8 @@ export async function getRouteById(routeId: string, snapshotId?: string): Promis
         availableTo: routeSnapshots.availableTo,
         vehicleTypeId: routeSnapshots.vehicleTypeId,
         vehicleTypeName: vehicleTypes.name,
-        vehicleTypeRequiresRoute: vehicleTypes.requiresRoute,
-
-        // language=text
-        points: sql<RoutePoint>`
-        json_build_object(
-          'polylineGoingTo', ${routeSnapshots.polylineGoingTo},
-          'goingTo', COALESCE(
-            json_agg(
-              json_build_object(
-                'id', ${routeSequences.id},
-                'sequence', ${routeSequences.sequenceNumber},
-                'address', ${routeSequences.address},
-                -- Manually parse the geometry into a JSON [x, y] array
-                'point', json_build_array(
-                  ST_Y(${routeSequences.point}),
-                  ST_X(${routeSequences.point})
-                )
-              ) ORDER BY ${routeSequences.sequenceNumber} ASC
-            ) FILTER (WHERE ${routeSequences.sequenceType} = 'going_to'), '[]'::json
-          ),
-          'polylineGoingBack', ${routeSnapshots.polylineGoingBack},
-          'goingBack', COALESCE(
-            json_agg(
-              json_build_object(
-                'id', ${routeSequences.id},
-                'sequence', ${routeSequences.sequenceNumber},
-                'address', ${routeSequences.address},
-                -- Again, manually parse the geometry into a JSON [x, y] array
-                'point', json_build_array(
-                  ST_Y(${routeSequences.point}),
-                  ST_X(${routeSequences.point})
-                )
-              ) ORDER BY ${routeSequences.sequenceNumber} ASC
-            ) FILTER (WHERE ${routeSequences.sequenceType} = 'going_back'), '[]'::json
-          )
-        )
-      `,
+        polylineGoingTo: routeSnapshots.polylineGoingTo,
+        polylineGoingBack: routeSnapshots.polylineGoingBack,
       })
       .from(routes)
       .where(eq(routes.id, routeId))
@@ -177,9 +117,99 @@ export async function getRouteById(routeId: string, snapshotId?: string): Promis
       return new Failure(ErrorCodes.ResourceNotFound, "No such route found.", { routeId });
     }
 
-    return new Success(result as RouteObject);
+    const item: RouteObject = {
+      id: result.id,
+      routeNumber: result.routeNumber ?? "",
+      routeName: result.routeName ?? "",
+      routeColor: result.routeColor ?? "",
+      routeDetails: result.routeDetails ?? "",
+      availability: {
+        from: result.availableFrom ?? "00:00",
+        to: result.availableTo ?? "23:59",
+      },
+      vehicle: {
+        id: result.vehicleTypeId ?? "",
+        name: result.vehicleTypeName ?? "Unknown",
+      },
+      polylines: {
+        to: result.polylineGoingTo ?? "",
+        back: result.polylineGoingBack ?? "",
+      },
+    };
+
+    return new Success(item);
   } catch (e) {
     return new Failure(ErrorCodes.Fatal, "Failed to fetch route", { routeId }, e);
+  }
+}
+
+/**
+ * Fetches sequence points for a specific route snapshot.
+ *
+ * Use this when editing route geometry. This keeps list responses lightweight by
+ * loading heavy point payloads only on demand.
+ *
+ * @param routeId - The ID of the route that owns the snapshot.
+ * @param snapshotId - The snapshot ID whose directional points should be loaded.
+ * @returns A `Result<RoutePoint>` with ordered `goingTo` / `goingBack` sequence
+ * points and their encoded polylines, or a failure when the snapshot cannot be
+ * resolved.
+ */
+export async function getSnapshotPoints(routeId: string, snapshotId: string): Promise<Result<RoutePoint>> {
+  try {
+    const [result] = await db
+      .select({
+        // language=text
+        points: sql<RoutePoint>`
+          json_build_object(
+            'polylineGoingTo', ${routeSnapshots.polylineGoingTo},
+            'goingTo', COALESCE(
+              json_agg(
+                json_build_object(
+                  'id', ${routeSequences.id},
+                  'sequence', ${routeSequences.sequenceNumber},
+                  'address', ${routeSequences.address},
+                  'point', json_build_array(
+                    ST_Y(${routeSequences.point}),
+                    ST_X(${routeSequences.point})
+                  )
+                ) ORDER BY ${routeSequences.sequenceNumber} ASC
+              ) FILTER (WHERE ${routeSequences.sequenceType} = 'going_to'), '[]'::json
+            ),
+            'polylineGoingBack', ${routeSnapshots.polylineGoingBack},
+            'goingBack', COALESCE(
+              json_agg(
+                json_build_object(
+                  'id', ${routeSequences.id},
+                  'sequence', ${routeSequences.sequenceNumber},
+                  'address', ${routeSequences.address},
+                  'point', json_build_array(
+                    ST_Y(${routeSequences.point}),
+                    ST_X(${routeSequences.point})
+                  )
+                ) ORDER BY ${routeSequences.sequenceNumber} ASC
+              ) FILTER (WHERE ${routeSequences.sequenceType} = 'going_back'), '[]'::json
+            )
+          )
+        `,
+      })
+      .from(routeSnapshots)
+      .where(
+        and(
+          eq(routeSnapshots.id, snapshotId),
+          eq(routeSnapshots.routeId, routeId),
+        ),
+      )
+      .leftJoin(routeSequences, eq(routeSnapshots.id, routeSequences.routeSnapshotId))
+      .groupBy(routeSnapshots.id);
+
+    if (!result) {
+      return new Failure(ErrorCodes.ResourceNotFound, "No such snapshot found", { routeId, snapshotId });
+    }
+
+    return new Success(result.points);
+  } catch (e) {
+    return new Failure(ErrorCodes.Fatal, "Failed to fetch snapshot points", { routeId, snapshotId }, e);
   }
 }
 
@@ -199,12 +229,12 @@ export async function getRouteById(routeId: string, snapshotId?: string): Promis
  * @param routeId - The ID of the route for which a snapshot will be created.
  * @param params - Snapshot creation payload, including route metadata, optional polylines,
  * and directional point sequences.
- * @returns A `Result<RouteObject>`:
- * - `Success<RouteObject>` with the created snapshot data when successful.
+ * @returns A `Result<RouteSnapshotCreateResult>`:
+ * - `Success<RouteSnapshotCreateResult>` with the created snapshot metadata and route payload when successful.
  * - `Failure` with `ErrorCodes.ResourceNotFound` if the route does not exist.
  * - `Failure` with `ErrorCodes.Fatal` if an unexpected error occurs.
  */
-export async function createSnapshot(routeId: string, params: AddRouteParameters, ownerId: string): Promise<Result<RouteObject>> {
+export async function createSnapshot(routeId: string, params: AddRouteParameters, ownerId: string): Promise<Result<RouteSnapshotCreateResult>> {
   try {
     const [route] = await db
       .select({ id: routes.id })
@@ -216,7 +246,7 @@ export async function createSnapshot(routeId: string, params: AddRouteParameters
     }
 
     const [vehicleType] = await db
-      .select({ id: vehicleTypes.id })
+      .select({ id: vehicleTypes.id, name: vehicleTypes.name })
       .from(vehicleTypes)
       .where(eq(vehicleTypes.id, params.vehicleTypeId))
       .limit(1);
@@ -267,45 +297,33 @@ export async function createSnapshot(routeId: string, params: AddRouteParameters
         })),
       ];
 
-      let sequences: typeof routeSequences.$inferSelect[] = [];
       if (newPoints.length > 0) {
-        sequences = await tx
+        await tx
           .insert(routeSequences)
-          .values(newPoints)
-          .returning();
+          .values(newPoints);
       }
 
       return {
         id: snapshot.id,
-        activeSnapshotId: snapshot.id,
-        snapshotName: snapshot.versionName,
-        snapshotState: snapshot.snapshotState,
-        routeNumber: snapshot.routeNumber,
-        routeName: snapshot.routeName,
-        routeColor: snapshot.routeColor,
-        routeDetails: snapshot.routeDetails,
-        availableFrom: snapshot.availableFrom,
-        availableTo: snapshot.availableTo,
-        vehicleTypeId: snapshot.vehicleTypeId,
-        points: {
-          polylineGoingTo: snapshot.polylineGoingTo,
-          goingTo: sequences
-            .filter(x => x.sequenceType === "going_to")
-            .map(x => ({
-              id: x.id,
-              address: x.address,
-              sequence: x.sequenceNumber,
-              point: [x.point[1], x.point[0]] as [number, number],
-            })),
-          polylineGoingBack: snapshot.polylineGoingBack,
-          goingBack: sequences
-            .filter(x => x.sequenceType === "going_back")
-            .map(x => ({
-              id: x.id,
-              address: x.address,
-              sequence: x.sequenceNumber,
-              point: [x.point[1], x.point[0]] as [number, number],
-            })),
+        state: snapshot.snapshotState,
+        route: {
+          id: route.id,
+          routeNumber: snapshot.routeNumber,
+          routeName: snapshot.routeName,
+          routeColor: snapshot.routeColor,
+          routeDetails: snapshot.routeDetails,
+          availability: {
+            from: snapshot.availableFrom,
+            to: snapshot.availableTo,
+          },
+          vehicle: {
+            id: snapshot.vehicleTypeId,
+            name: vehicleType.name,
+          },
+          polylines: {
+            to: snapshot.polylineGoingTo,
+            back: snapshot.polylineGoingBack,
+          },
         },
       };
     });
@@ -395,6 +413,7 @@ export async function copySnapshot(routeId: string, sourceSnapshotId: string, ow
         id: newSnapshot.id,
         name: newSnapshot.versionName,
         state: newSnapshot.snapshotState,
+        isActive: false,
         createdOn: newSnapshot.createdAt,
         updatedAt: newSnapshot.updatedAt,
       };
@@ -406,8 +425,30 @@ export async function copySnapshot(routeId: string, sourceSnapshotId: string, ow
   }
 }
 
+/**
+ * Deletes a route snapshot when it is safe to remove.
+ *
+ * Validation flow:
+ * 1. Ensure the parent route exists.
+ * 2. Ensure the snapshot exists and belongs to the route.
+ * 3. Reject deletion for snapshots in `ready` state.
+ * 4. Reject deletion of the route's currently active snapshot.
+ *
+ * @param routeId - The owning route identifier.
+ * @param snapshotId - The snapshot identifier to delete.
+ * @returns A `Result<undefined>` indicating successful deletion or a validation/resource failure.
+ */
 export async function deleteSnapshot(routeId: string, snapshotId: string): Promise<Result<undefined>> {
   try {
+    const [route] = await db
+      .select({ id: routes.id, activeSnapshotId: routes.activeSnapshotId })
+      .from(routes)
+      .where(eq(routes.id, routeId))
+      .limit(1);
+    if (!route) {
+      return new Failure(ErrorCodes.ResourceNotFound, "No such route found", { routeId, snapshotId });
+    }
+
     const [snapshot] = await db
       .select({ id: routeSnapshots.id, state: routeSnapshots.snapshotState })
       .from(routeSnapshots)
@@ -424,6 +465,13 @@ export async function deleteSnapshot(routeId: string, snapshotId: string): Promi
 
     if (snapshot.state === "ready") {
       return new Failure(ErrorCodes.ValidationFailure, "You cannot delete this snapshot.", { snapshotId });
+    }
+
+    if (route.activeSnapshotId === snapshot.id) {
+      return new Failure(ErrorCodes.ValidationFailure, "You cannot delete the active snapshot.", {
+        routeId,
+        snapshotId,
+      });
     }
 
     await db.delete(routeSnapshots)
@@ -453,10 +501,12 @@ export async function getAllSnapshotByRouteId(routeId: string): Promise<Result<S
         id: routeSnapshots.id,
         name: routeSnapshots.versionName,
         state: routeSnapshots.snapshotState,
+        isActive: sql<boolean>`${routes.activeSnapshotId} = ${routeSnapshots.id}`,
         createdOn: routeSnapshots.createdAt,
         updatedAt: routeSnapshots.updatedAt,
       })
       .from(routeSnapshots)
+      .leftJoin(routes, eq(routes.id, routeSnapshots.routeId))
       .where(eq(routeSnapshots.routeId, routeId))
       .orderBy(routeSnapshots.updatedAt);
 
@@ -501,9 +551,15 @@ export async function switchSnapshot(routeId: string, snapshotId: string): Promi
       .select({
         id: routeSnapshots.id,
         routeId: routeSnapshots.routeId,
-        routeName: routeSnapshots.routeName,
         routeNumber: routeSnapshots.routeNumber,
+        routeName: routeSnapshots.routeName,
         routeColor: routeSnapshots.routeColor,
+        routeDetails: routeSnapshots.routeDetails,
+        availableFrom: routeSnapshots.availableFrom,
+        availableTo: routeSnapshots.availableTo,
+        vehicleTypeId: routeSnapshots.vehicleTypeId,
+        polylineGoingTo: routeSnapshots.polylineGoingTo,
+        polylineGoingBack: routeSnapshots.polylineGoingBack,
         state: routeSnapshots.snapshotState,
       })
       .from(routeSnapshots)
@@ -530,7 +586,19 @@ export async function switchSnapshot(routeId: string, snapshotId: string): Promi
     // Swap
     await db
       .update(routes)
-      .set({ activeSnapshotId: snapshotToUse.id })
+      .set({
+        activeSnapshotId: snapshotToUse.id,
+        routeNumber: snapshotToUse.routeNumber,
+        routeName: snapshotToUse.routeName,
+        routeColor: snapshotToUse.routeColor,
+        routeDetails: snapshotToUse.routeDetails,
+        availableFrom: snapshotToUse.availableFrom,
+        availableTo: snapshotToUse.availableTo,
+        vehicleTypeId: snapshotToUse.vehicleTypeId,
+        polylineGoingTo: snapshotToUse.polylineGoingTo,
+        polylineGoingBack: snapshotToUse.polylineGoingBack,
+        isPublic: snapshotToUse.state === "ready",
+      })
       .where(eq(routes.id, routeToEdit.id));
 
     const route = await unwrap(getRouteById(routeToEdit.id));
@@ -555,6 +623,16 @@ export async function addRoute(params: AddRouteParameters, ownerId: string): Pro
     const [route] = await db
       .insert(routes)
       .values({
+        vehicleTypeId: params.vehicleTypeId,
+        routeNumber: params.routeNumber,
+        routeName: params.routeName,
+        routeColor: params.routeColor,
+        routeDetails: params.routeDetails ?? "",
+        availableFrom: params.availableFrom ?? "00:00",
+        availableTo: params.availableTo ?? "23:59",
+        polylineGoingTo: params.polylineGoingTo,
+        polylineGoingBack: params.polylineGoingBack,
+        isPublic: false,
         activeSnapshotId: "unset",
         ownerId,
       })
@@ -568,13 +646,23 @@ export async function addRoute(params: AddRouteParameters, ownerId: string): Pro
 
     // Apply the snapshot as the active state:
     await db.update(routes)
-      .set({ activeSnapshotId: snapshot.id })
+      .set({
+        activeSnapshotId: snapshot.id,
+        routeNumber: snapshot.route.routeNumber,
+        routeName: snapshot.route.routeName,
+        routeColor: snapshot.route.routeColor,
+        routeDetails: snapshot.route.routeDetails,
+        availableFrom: snapshot.route.availability.from,
+        availableTo: snapshot.route.availability.to,
+        vehicleTypeId: snapshot.route.vehicle.id,
+        polylineGoingTo: snapshot.route.polylines.to,
+        polylineGoingBack: snapshot.route.polylines.back,
+        isPublic: snapshot.state === "ready",
+      })
       .where(eq(routes.id, route.id));
 
-    return new Success({
-      ...snapshot,
-      id: route.id,
-    });
+    const result = await unwrap(getRouteById(route.id, snapshot.id));
+    return new Success(result);
   } catch (e) {
     return new Failure(ErrorCodes.Fatal, "Failed to add route", params, e);
   }
@@ -628,6 +716,15 @@ export async function updateRouteSnapshot(
   params: UpdateRouteParameters,
 ): Promise<Result<RouteObject>> {
   try {
+    const [routeToEdit] = await db
+      .select({ id: routes.id, activeSnapshotId: routes.activeSnapshotId })
+      .from(routes)
+      .where(eq(routes.id, routeId))
+      .limit(1);
+    if (!routeToEdit) {
+      return new Failure(ErrorCodes.ResourceNotFound, "No such route found", { routeId, snapshotId, params });
+    }
+
     if (params.vehicleTypeId !== undefined) {
       const [vehicleType] = await db
         .select({ id: vehicleTypes.id })
@@ -694,6 +791,32 @@ export async function updateRouteSnapshot(
           .returning();
 
         if (!routeData) tx.rollback();
+      }
+
+      // Keep route-level projection in sync when editing the active snapshot.
+      if (routeToEdit.activeSnapshotId === snapshotToEdit.id) {
+        const activeRoutePatch = {
+          ...(params.routeNumber !== undefined && { routeNumber: params.routeNumber }),
+          ...(params.routeName !== undefined && { routeName: params.routeName }),
+          ...(params.routeColor !== undefined && { routeColor: params.routeColor }),
+          ...(params.routeDetails !== undefined && { routeDetails: params.routeDetails }),
+          ...(params.availableFrom !== undefined && { availableFrom: params.availableFrom }),
+          ...(params.availableTo !== undefined && { availableTo: params.availableTo }),
+          ...(params.vehicleTypeId !== undefined && { vehicleTypeId: params.vehicleTypeId }),
+          ...(params.polylineGoingTo !== undefined && { polylineGoingTo: params.polylineGoingTo }),
+          ...(params.polylineGoingBack !== undefined && { polylineGoingBack: params.polylineGoingBack }),
+          ...(params.snapshotState !== undefined && { isPublic: params.snapshotState === "ready" }),
+        };
+
+        if (Object.keys(activeRoutePatch).length > 0) {
+          const [updatedRoute] = await tx
+            .update(routes)
+            .set(activeRoutePatch)
+            .where(eq(routes.id, routeToEdit.id))
+            .returning({ id: routes.id });
+
+          if (!updatedRoute) tx.rollback();
+        }
       }
 
       if (params.points) {
@@ -777,19 +900,22 @@ export interface UpdateRouteParameters {
 
 export interface RouteObject {
   id: string;
-  activeSnapshotId: string;
-  snapshotName: string;
-  snapshotState: string;
   routeNumber: string;
   routeName: string;
   routeColor: string;
   routeDetails: string;
-  availableFrom: string;
-  availableTo: string;
-  vehicleTypeId: string;
-  vehicleTypeName?: string;
-  vehicleTypeRequiresRoute?: boolean;
-  points: RoutePoint;
+  availability: {
+    from: string;
+    to: string;
+  }
+  vehicle: {
+    id: string;
+    name: string;
+  }
+  polylines: {
+    to: string;
+    back: string;
+  }
 }
 
 export type RouteData = Omit<RouteObject, "points">;
@@ -798,8 +924,15 @@ export interface SnapshotItem {
   id: string;
   name: string;
   state: string;
+  isActive?: boolean;
   createdOn: Date;
   updatedAt: Date;
+}
+
+export interface RouteSnapshotCreateResult {
+  id: string;
+  state: "wip" | "for_approval" | "ready";
+  route: RouteObject;
 }
 
 export interface RoutePoint {

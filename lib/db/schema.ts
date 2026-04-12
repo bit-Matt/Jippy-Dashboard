@@ -2,7 +2,15 @@ import { relations } from "drizzle-orm";
 import { pgEnum, pgTable, text, timestamp, boolean, index, integer, geometry } from "drizzle-orm/pg-core";
 import { v7 as uuidv7 } from "uuid";
 
+// TODO: Update enums as strings instead. We need to remove this stuff.
 export const roles = pgEnum("role", ["administrator_user", "regular_user"]);
+export const snapshotState = pgEnum("snapshot_state", ["ready", "wip", "for_approval"]);
+export const sequenceType = pgEnum("route_sequence_type", ["going_to", "going_back"]);
+
+// ============================================================================
+// BETTER AUTH RELEATED STUFF
+// DO NOT TOUCH UNLESS YOU KNOW WHAT YOU ARE DOING!
+// ============================================================================
 
 export const user = pgTable("user", {
   id: text("id").primaryKey(),
@@ -78,6 +86,10 @@ export const verification = pgTable(
   (table) => [index("verification_identifier_idx").on(table.identifier)],
 );
 
+// ============================================================================
+// JIPPY MAIN SCHEMA
+// ============================================================================
+
 export const invitations = pgTable("invitations", {
   id: text("id")
     .primaryKey()
@@ -126,50 +138,10 @@ export const routes = pgTable(
       .primaryKey()
       .$default(() => uuidv7()),
 
-    activeSnapshotId: text("active_snapshot_id")
-      .notNull(),
-    ownerId: text("owner_id")
-      .references(() => user.id, { onDelete: "set null" }),
-
-    // Meta
-    createdAt: timestamp("created_at")
-      .defaultNow()
-      .notNull(),
-    updatedAt: timestamp("updated_at")
-      .defaultNow()
-      .$onUpdate(() => new Date())
-      .notNull(),
-  },
-);
-
-export const snapshotState = pgEnum("snapshot_state", ["ready", "wip", "for_approval"]);
-
-export const routeSnapshots = pgTable(
-  "route_snapshots",
-  {
-    id: text("id")
-      .primaryKey()
-      .$default(() => uuidv7()),
-
-    snapshotState: snapshotState()
-      .notNull()
-      .default("wip"),
-
-    // Snapshot for
-    routeId: text("route_id")
-      .notNull()
-      .references(() => routes.id, { onDelete: "cascade" }),
+    // Projected
     vehicleTypeId: text("vehicle_type_id")
       .notNull()
       .references(() => vehicleTypes.id),
-    ownerId: text("owner_id")
-      .references(() => user.id, { onDelete: "set null" }),
-
-    // Versioning
-    versionName: text("version_name")
-      .notNull(),
-
-    // Route details
     routeNumber: text("route_number")
       .notNull(),
     routeName: text("route_name")
@@ -192,7 +164,14 @@ export const routeSnapshots = pgTable(
       .notNull(),
 
     // Metadata
-    createdAt: timestamp("created_at").defaultNow().notNull(),
+    isPublic: boolean("is_public_viewable").default(false).notNull(),
+    activeSnapshotId: text("active_snapshot_id")
+      .notNull(),
+    ownerId: text("owner_id")
+      .references(() => user.id, { onDelete: "set null" }),
+    createdAt: timestamp("created_at")
+      .defaultNow()
+      .notNull(),
     updatedAt: timestamp("updated_at")
       .defaultNow()
       .$onUpdate(() => new Date())
@@ -200,7 +179,55 @@ export const routeSnapshots = pgTable(
   },
 );
 
-export const sequenceType = pgEnum("route_sequence_type", ["going_to", "going_back"]);
+export const routeSnapshots = pgTable(
+  "route_snapshots",
+  {
+    id: text("id")
+      .primaryKey()
+      .$default(() => uuidv7()),
+
+    // Route details
+    vehicleTypeId: text("vehicle_type_id")
+      .notNull()
+      .references(() => vehicleTypes.id),
+    routeNumber: text("route_number")
+      .notNull(),
+    routeName: text("route_name")
+      .notNull(),
+    routeColor: text("route_color")
+      .notNull()
+      .default("#FFF000"),
+    routeDetails: text("route_details")
+      .default("")
+      .notNull(),
+    availableFrom: text("available_from")
+      .notNull()
+      .default("00:00"),
+    availableTo: text("available_to")
+      .notNull()
+      .default("23:59"),
+    polylineGoingTo: text("polyline_going_to")
+      .notNull(),
+    polylineGoingBack: text("polyline_going_back")
+      .notNull(),
+
+    // Metadata
+    snapshotState: snapshotState()
+      .notNull()
+      .default("wip"),
+    routeId: text("route_id")
+      .notNull()
+      .references(() => routes.id, { onDelete: "cascade" }),
+    ownerId: text("owner_id")
+      .references(() => user.id, { onDelete: "set null" }),
+    versionName: text("version_name").notNull(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at")
+      .defaultNow()
+      .$onUpdate(() => new Date())
+      .notNull(),
+  },
+);
 
 export const routeSequences = pgTable(
   "route_sequences",

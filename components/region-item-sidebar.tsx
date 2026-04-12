@@ -2,7 +2,7 @@
 
 import { X } from "lucide-react";
 
-import type { AllResponse } from "@/components/app-sidebar";
+import type { RegionResponse } from "@/contracts/responses";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -10,7 +10,7 @@ import { Separator } from "@/components/ui/separator";
 import { normalizeSnapshotStateLabel, type SnapshotListItem } from "@/components/snapshot-types";
 
 interface RegionItemSidebarProps {
-  region: AllResponse["regions"][0];
+  region: RegionResponse;
   snapshots: SnapshotListItem[];
   selectedSnapshotId: string | null;
   activeSnapshotId: string | null;

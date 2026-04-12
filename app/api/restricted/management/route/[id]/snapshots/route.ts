@@ -18,7 +18,7 @@ export async function GET(
 
   const result = await route.getAllSnapshotByRouteId(id);
   return oneOf(result).match(
-    s => ResponseComposer.compose(StatusCodes.Status201Created).setBody(s).orchestrate(),
+    s => ResponseComposer.compose(StatusCodes.Status200Ok).setBody(s).orchestrate(),
     e => ResponseComposer.composeFromFailure(e).orchestrate(),
   );
 }

@@ -2,10 +2,16 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-import { AppSidebar, type AllResponse } from "@/components/app-sidebar";
+import { AppSidebar } from "@/components/app-sidebar";
 import RouteItemSidebar from "@/components/route-item-sidebar";
 import RouteEditor from "@/components/route-editor";
 import RouteListCard from "@/components/route-list-card";
+import type {
+  ClosureResponseList,
+  RoutePointResponse,
+  RouteResponse,
+  RouteResponseList,
+} from "@/contracts/responses";
 import { type SnapshotListItem } from "@/components/snapshot-types";
 import { Button } from "@/components/ui/button";
 import {
@@ -146,10 +152,10 @@ const routeLineIntersectsPolygon = (
 function RouteDashboardContent() {
   const [isFetchingRoutes, setIsFetchingRoutes] = useState(true);
   const [areRouteLayersReady, setAreRouteLayersReady] = useState(false);
-  const [routes, setRoutes] = useState<AllResponse["routes"]>([]);
-  const [closures, setClosures] = useState<AllResponse["closures"]>([]);
-  const [selectedRoute, setSelectedRoute] = useState<AllResponse["routes"][0] | null>(null);
-  const [editingRoute, setEditingRoute] = useState<AllResponse["routes"][0] | null>(null);
+  const [routes, setRoutes] = useState<RouteResponseList>([]);
+  const [closures, setClosures] = useState<ClosureResponseList>([]);
+  const [selectedRoute, setSelectedRoute] = useState<RouteResponse | null>(null);
+  const [editingRoute, setEditingRoute] = useState<RouteResponse | null>(null);
   const [routeFocusKey, setRouteFocusKey] = useState<string | number | null>(null);
   const [showClosuresOnMap, setShowClosuresOnMap] = useState(true);
   const [isSnapshotLoading, setIsSnapshotLoading] = useState(false);
@@ -158,24 +164,25 @@ function RouteDashboardContent() {
   const [routeSnapshots, setRouteSnapshots] = useState<SnapshotListItem[]>([]);
   const [selectedRouteSnapshotId, setSelectedRouteSnapshotId] = useState<string | null>(null);
   const [activeRouteSnapshotId, setActiveRouteSnapshotId] = useState<string | null>(null);
+  const [editingSnapshotId, setEditingSnapshotId] = useState<string | null>(null);
   const [snapshotCreateParentRouteId, setSnapshotCreateParentRouteId] = useState<string | null>(null);
   const [isMapSettingsDialogOpen, setIsMapSettingsDialogOpen] = useState(false);
-  const selectedRouteRef = useRef<AllResponse["routes"][0] | null>(null);
+  const selectedRouteRef = useRef<RouteResponse | null>(null);
 
   const { isCreating, startCreating, startEditing, stopCreating } = useRouteEditor();
 
   type RouteManagementResponse = {
-    routes: AllResponse["routes"];
-    closures: AllResponse["closures"];
+    routes: RouteResponseList;
+    closures: ClosureResponseList;
   };
 
   const persistedRouting = useMemo(
     () => routes.flatMap((route) => [
-      route.points.polylineGoingTo
-        ? { color: route.routeColor, polyline: route.points.polylineGoingTo }
+      route.polylines.to
+        ? { color: route.routeColor, polyline: route.polylines.to }
         : null,
-      route.points.polylineGoingBack
-        ? { color: route.routeColor, polyline: route.points.polylineGoingBack }
+      route.polylines.back
+        ? { color: route.routeColor, polyline: route.polylines.back }
         : null,
     ].filter((entry): entry is { color: string; polyline: string } => entry !== null)),
     [routes],
@@ -187,11 +194,11 @@ function RouteDashboardContent() {
     }
 
     return [
-      selectedRoute.points.polylineGoingTo
-        ? { color: selectedRoute.routeColor, polyline: selectedRoute.points.polylineGoingTo }
+      selectedRoute.polylines.to
+        ? { color: selectedRoute.routeColor, polyline: selectedRoute.polylines.to }
         : null,
-      selectedRoute.points.polylineGoingBack
-        ? { color: selectedRoute.routeColor, polyline: selectedRoute.points.polylineGoingBack }
+      selectedRoute.polylines.back
+        ? { color: selectedRoute.routeColor, polyline: selectedRoute.polylines.back }
         : null,
     ].filter((entry): entry is { color: string; polyline: string } => entry !== null);
   }, [persistedRouting, selectedRoute]);
@@ -217,20 +224,12 @@ function RouteDashboardContent() {
     for (const route of routes) {
       const routeLines: Array<Array<[number, number]>> = [];
 
-      if (route.points.polylineGoingTo) {
-        routeLines.push(decodePolyline6(route.points.polylineGoingTo));
-      } else {
-        routeLines.push([...route.points.goingTo]
-          .sort((a, b) => a.sequence - b.sequence)
-          .map((point) => point.point));
+      if (route.polylines.to) {
+        routeLines.push(decodePolyline6(route.polylines.to));
       }
 
-      if (route.points.polylineGoingBack) {
-        routeLines.push(decodePolyline6(route.points.polylineGoingBack));
-      } else {
-        routeLines.push([...route.points.goingBack]
-          .sort((a, b) => a.sequence - b.sequence)
-          .map((point) => point.point));
+      if (route.polylines.back) {
+        routeLines.push(decodePolyline6(route.polylines.back));
       }
 
       const hasIntersection = routeLines.some((line) => (
@@ -250,7 +249,7 @@ function RouteDashboardContent() {
     selectedRouteRef.current = selectedRoute;
   }, [selectedRoute]);
 
-  const loadRouteSnapshots = useCallback(async (route: AllResponse["routes"][0]) => {
+  const loadRouteSnapshots = useCallback(async (route: RouteResponse, preferredSnapshotId?: string | null) => {
     setIsSnapshotLoading(true);
     const { data, error } = await $fetch<IApiResponse<SnapshotListItem[]>>(`/api/restricted/management/route/${route.id}/snapshots`, {
       method: "GET",
@@ -262,9 +261,16 @@ function RouteDashboardContent() {
       return;
     }
 
-    setRouteSnapshots(data.data);
-    setSelectedRouteSnapshotId(route.activeSnapshotId);
-    setActiveRouteSnapshotId(route.activeSnapshotId);
+    const snapshots = data.data;
+    const activeSnapshotId = snapshots.find((snapshot) => snapshot.isActive)?.id ?? null;
+    const preferredExists = preferredSnapshotId ? snapshots.some((snapshot) => snapshot.id === preferredSnapshotId) : false;
+    const selectedSnapshotId: string | null = preferredExists
+      ? preferredSnapshotId ?? null
+      : activeSnapshotId ?? snapshots[0]?.id ?? null;
+
+    setRouteSnapshots(snapshots);
+    setSelectedRouteSnapshotId(selectedSnapshotId);
+    setActiveRouteSnapshotId(activeSnapshotId);
     setIsSnapshotLoading(false);
   }, []);
 
@@ -294,17 +300,17 @@ function RouteDashboardContent() {
       setSelectedRoute(refreshedRoute);
       if (!refreshedRoute) {
         setEditingRoute(null);
+        setEditingSnapshotId(null);
         setRouteSnapshots([]);
         setSelectedRouteSnapshotId(null);
         setActiveRouteSnapshotId(null);
       } else {
-        setActiveRouteSnapshotId(refreshedRoute.activeSnapshotId);
-        void loadRouteSnapshots(refreshedRoute);
+        void loadRouteSnapshots(refreshedRoute, selectedRouteSnapshotId);
       }
     }
 
     setIsFetchingRoutes(false);
-  }, [loadRouteSnapshots]);
+  }, [loadRouteSnapshots, selectedRouteSnapshotId]);
 
   const isRoutesLoading = isFetchingRoutes || !areRouteLayersReady;
 
@@ -319,7 +325,7 @@ function RouteDashboardContent() {
   }, [fetchRoutes]);
 
   const fetchRouteSnapshot = async (routeId: string, snapshotId: string) => {
-    const { data, error } = await $fetch<IApiResponse<AllResponse["routes"][0]>>(`/api/restricted/management/route/${routeId}/${snapshotId}`, {
+    const { data, error } = await $fetch<IApiResponse<RouteResponse>>(`/api/restricted/management/route/${routeId}/${snapshotId}`, {
       method: "GET",
     });
 
@@ -331,10 +337,24 @@ function RouteDashboardContent() {
     return data.data;
   };
 
+  const fetchRouteSnapshotPoints = async (routeId: string, snapshotId: string) => {
+    const { data, error } = await $fetch<IApiResponse<RoutePointResponse>>(`/api/restricted/management/route/${routeId}/${snapshotId}/points`, {
+      method: "GET",
+    });
+
+    if (error) {
+      console.error("Failed to load route snapshot points:", error);
+      return null;
+    }
+
+    return data.data;
+  };
+
   const handleShowRoutes = () => {
     if (isCreating) {
       stopCreating();
       setEditingRoute(null);
+      setEditingSnapshotId(null);
       setSnapshotCreateParentRouteId(null);
       setRouteFocusKey(null);
       return;
@@ -342,15 +362,17 @@ function RouteDashboardContent() {
 
     setShowClosuresOnMap(true);
     setEditingRoute(null);
+    setEditingSnapshotId(null);
     setSnapshotCreateParentRouteId(null);
     setRouteFocusKey(null);
     startCreating();
   };
 
-  const handleSelectRoute = (route: AllResponse["routes"][0]) => {
+  const handleSelectRoute = (route: RouteResponse) => {
     setRouteFocusKey(`${route.id}-${Date.now()}`);
     setSelectedRoute(route);
     setEditingRoute(null);
+    setEditingSnapshotId(null);
     setSnapshotCreateParentRouteId(null);
     stopCreating();
     void loadRouteSnapshots(route);
@@ -359,24 +381,34 @@ function RouteDashboardContent() {
   const handleClearSelectedRoute = () => {
     setSelectedRoute(null);
     setEditingRoute(null);
+    setEditingSnapshotId(null);
     setSelectedRouteSnapshotId(null);
     setSnapshotCreateParentRouteId(null);
     setRouteFocusKey(null);
     stopCreating();
   };
 
-  const openRouteEditor = (route: AllResponse["routes"][0]) => {
+  const openRouteEditor = async (route: RouteResponse, snapshotId: string) => {
     setShowClosuresOnMap(true);
     setSelectedRoute(route);
     setEditingRoute(route);
+    setEditingSnapshotId(snapshotId);
     setSnapshotCreateParentRouteId(null);
+
+    const points = await fetchRouteSnapshotPoints(route.id, snapshotId);
+    if (!points) {
+      setEditingRoute(null);
+      setEditingSnapshotId(null);
+      return;
+    }
+
     startEditing({
       color: route.routeColor,
       points: {
-        goingTo: [...route.points.goingTo]
+        goingTo: [...points.goingTo]
           .sort((a, b) => a.sequence - b.sequence)
           .map((point) => ({ point: point.point, address: point.address })),
-        goingBack: [...route.points.goingBack]
+        goingBack: [...points.goingBack]
           .sort((a, b) => a.sequence - b.sequence)
           .map((point) => ({ point: point.point, address: point.address })),
       },
@@ -402,6 +434,7 @@ function RouteDashboardContent() {
 
     setSelectedRoute(null);
     setEditingRoute(null);
+    setEditingSnapshotId(null);
     setSelectedRouteSnapshotId(null);
     setActiveRouteSnapshotId(null);
     stopCreating();
@@ -421,6 +454,8 @@ function RouteDashboardContent() {
     setRouteFocusKey(`${routeSnapshot.id}-${Date.now()}`);
     setSelectedRoute(routeSnapshot);
     setEditingRoute(null);
+    setEditingSnapshotId(null);
+    setSelectedRouteSnapshotId(snapshotId);
     stopCreating();
   };
 
@@ -436,7 +471,7 @@ function RouteDashboardContent() {
     if (!routeSnapshot) return;
 
     setRouteFocusKey(`${routeSnapshot.id}-${Date.now()}`);
-    openRouteEditor(routeSnapshot);
+    await openRouteEditor(routeSnapshot, snapshotId);
   };
 
   const handleCloneRouteSnapshot = async (snapshotId: string) => {
@@ -457,7 +492,7 @@ function RouteDashboardContent() {
     if (!routeSnapshot) return;
 
     setRouteFocusKey(`${routeSnapshot.id}-${Date.now()}`);
-    openRouteEditor(routeSnapshot);
+    await openRouteEditor(routeSnapshot, data.data.id);
     setSelectedRouteSnapshotId(data.data.id);
   };
 
@@ -468,7 +503,7 @@ function RouteDashboardContent() {
     if (!selectedSnapshot || selectedSnapshot.state !== "ready") return;
 
     setIsSnapshotActing(true);
-    const { data, error } = await $fetch<IApiResponse<AllResponse["routes"][0]>>(`/api/restricted/management/route/${selectedRoute.id}`, {
+    const { data, error } = await $fetch<IApiResponse<RouteResponse>>(`/api/restricted/management/route/${selectedRoute.id}`, {
       method: "PATCH",
       body: { snapshotId },
     });
@@ -484,7 +519,7 @@ function RouteDashboardContent() {
     setActiveRouteSnapshotId(snapshotId);
     setRouteFocusKey(`${data.data.id}-${Date.now()}`);
     setIsSnapshotActing(false);
-    void loadRouteSnapshots(data.data);
+    void loadRouteSnapshots(data.data, snapshotId);
   };
 
   const handleCreateBlankRouteSnapshot = () => {
@@ -516,8 +551,10 @@ function RouteDashboardContent() {
     }
 
     const nextSnapshots = routeSnapshots.filter((snapshot) => snapshot.id !== snapshotId);
+    const nextActiveSnapshotId = nextSnapshots.find((snapshot) => snapshot.isActive)?.id ?? null;
     setRouteSnapshots(nextSnapshots);
-    setSelectedRouteSnapshotId(nextSnapshots[0]?.id ?? null);
+    setSelectedRouteSnapshotId(nextActiveSnapshotId ?? nextSnapshots[0]?.id ?? null);
+    setActiveRouteSnapshotId(nextActiveSnapshotId);
     setIsSnapshotActing(false);
     await fetchRoutes();
   };
@@ -539,9 +576,7 @@ function RouteDashboardContent() {
             closures={closures}
             showClosuresOnMap={showClosuresOnMap}
             focusedWaypoints={selectedRoute
-              ? [...selectedRoute.points.goingTo]
-                .sort((a, b) => a.sequence - b.sequence)
-                .map((point) => point.point)
+              ? decodePolyline6(selectedRoute.polylines.to)
               : undefined}
             focusKey={routeFocusKey}
           />
@@ -594,17 +629,21 @@ function RouteDashboardContent() {
               onSaved={async () => {
                 await fetchRoutes();
 
-                if (editingRoute?.id && editingRoute?.activeSnapshotId) {
-                  const refreshedSnapshot = await fetchRouteSnapshot(editingRoute.id, editingRoute.activeSnapshotId);
+                if (editingRoute?.id && editingSnapshotId) {
+                  const refreshedSnapshot = await fetchRouteSnapshot(editingRoute.id, editingSnapshotId);
                   if (refreshedSnapshot) {
                     setSelectedRoute(refreshedSnapshot);
+                    await loadRouteSnapshots(refreshedSnapshot, editingSnapshotId);
                   }
                 }
               }}
               onClosed={() => {
                 setEditingRoute(null);
+                setEditingSnapshotId(null);
                 setSnapshotCreateParentRouteId(null);
               }}
+              editingSnapshot={routeSnapshots.find((snapshot) => snapshot.id === editingSnapshotId) ?? null}
+              editingSnapshotId={editingSnapshotId}
             />
           ) : null}
 

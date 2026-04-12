@@ -2,10 +2,11 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-import { AppSidebar, type AllResponse } from "@/components/app-sidebar";
+import { AppSidebar } from "@/components/app-sidebar";
 import RegionItemSidebar from "@/components/region-item-sidebar";
 import RegionEditor from "@/components/region-editor";
 import RouteListCard from "@/components/route-list-card";
+import type { RegionResponse, RegionResponseList } from "@/contracts/responses";
 import { type SnapshotListItem } from "@/components/snapshot-types";
 import {
   SidebarInset,
@@ -19,10 +20,10 @@ import RegionMapComponent from "./MapComponent";
 
 function RegionDashboardContent() {
   const [isFetchingRegions, setIsFetchingRegions] = useState(true);
-  const [regions, setRegions] = useState<AllResponse["regions"]>([]);
+  const [regions, setRegions] = useState<RegionResponseList>([]);
   const [selectedRegionId, setSelectedRegionId] = useState<string | null>(null);
-  const [selectedRegion, setSelectedRegion] = useState<AllResponse["regions"][0] | null>(null);
-  const selectedRegionRef = useRef<AllResponse["regions"][0] | null>(null);
+  const [selectedRegion, setSelectedRegion] = useState<RegionResponse | null>(null);
+  const selectedRegionRef = useRef<RegionResponse | null>(null);
   const selectedRegionIdRef = useRef<string | null>(null);
 
   const [focusedRegionWaypoints, setFocusedRegionWaypoints] = useState<Array<[number, number]> | undefined>(undefined);
@@ -43,6 +44,12 @@ function RegionDashboardContent() {
     closeRegionEditor,
   } = useRegionEditor();
 
+  const resetSnapshotState = useCallback(() => {
+    setSnapshots([]);
+    setSelectedSnapshotId(null);
+    setActiveRegionSnapshotId(null);
+  }, []);
+
   const mapRegions = useMemo(() => {
     if (!selectedRegion) {
       return regions;
@@ -59,10 +66,29 @@ function RegionDashboardContent() {
     selectedRegionIdRef.current = selectedRegionId;
   }, [selectedRegionId]);
 
+  const loadSnapshots = useCallback(async (regionId: string, activeSnapshotId: string) => {
+    setIsSnapshotLoading(true);
+
+    const { data, error } = await $fetch<IApiResponse<SnapshotListItem[]>>(`/api/restricted/management/region/${regionId}/snapshots`, {
+      method: "GET",
+    });
+
+    if (error) {
+      console.error("Failed to load region snapshots:", error);
+      setIsSnapshotLoading(false);
+      return;
+    }
+
+    setSnapshots(data.data);
+    setActiveRegionSnapshotId(activeSnapshotId);
+    setSelectedSnapshotId((prev) => prev ?? activeSnapshotId);
+    setIsSnapshotLoading(false);
+  }, []);
+
   const fetchRegions = useCallback(async () => {
     setIsFetchingRegions(true);
 
-    const { data, error } = await $fetch<IApiResponse<AllResponse["regions"]>>("/api/restricted/management/region", {
+    const { data, error } = await $fetch<IApiResponse<RegionResponseList>>("/api/restricted/management/region", {
       method: "GET",
     });
 
@@ -87,15 +113,16 @@ function RegionDashboardContent() {
       if (!refreshedRegion) {
         setSelectedRegion(null);
         setSelectedRegionId(null);
-        setActiveRegionSnapshotId(null);
+        resetSnapshotState();
       } else {
         setSelectedRegion(refreshedRegion);
         setActiveRegionSnapshotId(refreshedRegion.activeSnapshotId);
+        void loadSnapshots(refreshedRegion.id, refreshedRegion.activeSnapshotId);
       }
     }
 
     setIsFetchingRegions(false);
-  }, []);
+  }, [loadSnapshots, resetSnapshotState]);
 
   useEffect(() => {
     const timerId = window.setTimeout(() => {
@@ -126,6 +153,7 @@ function RegionDashboardContent() {
       setRegionFocusKey(null);
       setSelectedRegionId(null);
       setSelectedRegion(null);
+      resetSnapshotState();
       return;
     }
 
@@ -134,9 +162,10 @@ function RegionDashboardContent() {
     setRegionFocusKey(null);
     setSelectedRegionId(null);
     setSelectedRegion(null);
+    resetSnapshotState();
   };
 
-  const handleOpenRegionForEdit = (region: AllResponse["regions"][0]) => {
+  const handleOpenRegionForEdit = (region: RegionResponse) => {
     const sortedRegionPoints = [...region.points]
       .sort((a, b) => a.sequence - b.sequence)
       .map((point) => point.point);
@@ -145,41 +174,12 @@ function RegionDashboardContent() {
     setRegionFocusKey(`${region.id}-${Date.now()}`);
     setSelectedRegionId(region.id);
     setSelectedRegion(region);
+    void loadSnapshots(region.id, region.activeSnapshotId);
     closeRegionEditor();
   };
 
-  const loadSnapshots = async (regionId: string, activeSnapshotId: string) => {
-    setIsSnapshotLoading(true);
-
-    const { data, error } = await $fetch<IApiResponse<SnapshotListItem[]>>(`/api/restricted/management/region/${regionId}/snapshots`, {
-      method: "GET",
-    });
-
-    if (error) {
-      console.error("Failed to load region snapshots:", error);
-      setIsSnapshotLoading(false);
-      return;
-    }
-
-    setSnapshots(data.data);
-    setActiveRegionSnapshotId(activeSnapshotId);
-    setSelectedSnapshotId((prev) => prev ?? activeSnapshotId);
-    setIsSnapshotLoading(false);
-  };
-
-  useEffect(() => {
-    if (!selectedRegion) {
-      setSnapshots([]);
-      setSelectedSnapshotId(null);
-      setActiveRegionSnapshotId(null);
-      return;
-    }
-
-    void loadSnapshots(selectedRegion.id, selectedRegion.activeSnapshotId);
-  }, [selectedRegion?.id]);
-
   const fetchRegionSnapshot = async (regionId: string, snapshotId: string) => {
-    const { data, error } = await $fetch<IApiResponse<AllResponse["regions"][0]>>(`/api/restricted/management/region/${regionId}/${snapshotId}`, {
+    const { data, error } = await $fetch<IApiResponse<RegionResponse>>(`/api/restricted/management/region/${regionId}/${snapshotId}`, {
       method: "GET",
     });
 
@@ -191,7 +191,7 @@ function RegionDashboardContent() {
     return data.data;
   };
 
-  const applyRegionView = (region: AllResponse["regions"][0]) => {
+  const applyRegionView = (region: RegionResponse) => {
     const sortedRegionPoints = [...region.points]
       .sort((a, b) => a.sequence - b.sequence)
       .map((point) => point.point);
@@ -199,6 +199,7 @@ function RegionDashboardContent() {
     setSelectedRegionId(region.id);
     setSelectedRegion(region);
     setActiveRegionSnapshotId(region.activeSnapshotId);
+    void loadSnapshots(region.id, region.activeSnapshotId);
     setFocusedRegionWaypoints(sortedRegionPoints);
     setRegionFocusKey(`${region.id}-${Date.now()}`);
   };
@@ -250,7 +251,6 @@ function RegionDashboardContent() {
 
     applyRegionView(snapshotRegion);
     openRegionEditorForEdit(snapshotRegion);
-    await loadSnapshots(snapshotRegion.id, snapshotRegion.activeSnapshotId);
     setSelectedSnapshotId(data.data.id);
   };
 
@@ -261,7 +261,7 @@ function RegionDashboardContent() {
     if (!selectedSnapshot || selectedSnapshot.state !== "ready") return;
 
     setIsSnapshotActing(true);
-    const { data, error } = await $fetch<IApiResponse<AllResponse["regions"][0]>>(`/api/restricted/management/region/${selectedRegion.id}`, {
+    const { data, error } = await $fetch<IApiResponse<RegionResponse>>(`/api/restricted/management/region/${selectedRegion.id}`, {
       method: "PATCH",
       body: { snapshotId },
     });
@@ -277,7 +277,6 @@ function RegionDashboardContent() {
     setSelectedSnapshotId(snapshotId);
     setActiveRegionSnapshotId(snapshotId);
     setIsSnapshotActing(false);
-    await loadSnapshots(data.data.id, data.data.activeSnapshotId);
   };
 
   const handleCreateBlankSnapshot = async () => {
@@ -338,8 +337,7 @@ function RegionDashboardContent() {
 
     setSelectedRegion(null);
     setSelectedRegionId(null);
-    setSelectedSnapshotId(null);
-    setActiveRegionSnapshotId(null);
+    resetSnapshotState();
     closeRegionEditor();
     setFocusedRegionWaypoints(undefined);
     setRegionFocusKey(null);
@@ -351,8 +349,7 @@ function RegionDashboardContent() {
   const handleClearSelectedRegion = () => {
     setSelectedRegion(null);
     setSelectedRegionId(null);
-    setSelectedSnapshotId(null);
-    setActiveRegionSnapshotId(null);
+    resetSnapshotState();
     setFocusedRegionWaypoints(undefined);
     setRegionFocusKey(null);
     closeRegionEditor();

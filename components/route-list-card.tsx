@@ -3,7 +3,14 @@
 import { useState } from "react";
 import { TriangleAlert } from "lucide-react";
 
-import type { AllResponse } from "@/components/app-sidebar";
+import type {
+  ClosureResponse,
+  ClosureResponseList,
+  RegionResponse,
+  RegionResponseList,
+  RouteResponse,
+  RouteResponseList,
+} from "@/contracts/responses";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
@@ -151,7 +158,7 @@ export default function RouteListCard({
                               ) : null}
                             </span>
                             <span className="text-muted-foreground block truncate text-xs">
-                              {route.snapshotName} ({route.snapshotState})
+                              {route.vehicle.name} | {route.availability.from} - {route.availability.to}
                             </span>
                             {routeDistrict ? (
                               <span className="text-muted-foreground block truncate text-xs">
@@ -271,16 +278,16 @@ export default function RouteListCard({
 
 interface RouteListCardProps {
   mode?: "all" | "route-closures" | "regions" | "routes" | "closures";
-  routes: AllResponse["routes"];
-  regions: AllResponse["regions"];
-  closures: AllResponse["closures"];
+  routes: RouteResponseList;
+  regions: RegionResponseList;
+  closures: ClosureResponseList;
   isRoutesLoading: boolean;
   selectedRouteId: string | null;
   selectedRegionId: string | null;
   selectedClosureId: string | null;
-  onRouteSelect?: (route: AllResponse["routes"][0]) => void;
-  onRegionSelect?: (region: AllResponse["regions"][0]) => void;
-  onClosureSelect?: (closure: AllResponse["closures"][0]) => void;
+  onRouteSelect?: (route: RouteResponse) => void;
+  onRegionSelect?: (region: RegionResponse) => void;
+  onClosureSelect?: (closure: ClosureResponse) => void;
   onAddRoute?: () => void;
   onAddRegion?: () => void;
   onAddClosure?: () => void;

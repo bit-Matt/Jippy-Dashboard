@@ -2,10 +2,11 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-import { AppSidebar, type AllResponse } from "@/components/app-sidebar";
+import { AppSidebar } from "@/components/app-sidebar";
 import ClosureItemSidebar from "@/components/closure-item-sidebar";
 import ClosureRegionEditor from "@/components/closure-region-editor";
 import RouteListCard from "@/components/route-list-card";
+import type { ClosureResponse, ClosureResponseList } from "@/contracts/responses";
 import { type SnapshotListItem } from "@/components/snapshot-types";
 import {
   SidebarInset,
@@ -20,8 +21,8 @@ import ClosureMapComponent from "./MapComponent";
 
 function ClosureDashboardContent() {
   const [isFetchingClosures, setIsFetchingClosures] = useState(true);
-  const [closures, setClosures] = useState<AllResponse["closures"]>([]);
-  const [selectedClosure, setSelectedClosure] = useState<AllResponse["closures"][0] | null>(null);
+  const [closures, setClosures] = useState<ClosureResponseList>([]);
+  const [selectedClosure, setSelectedClosure] = useState<ClosureResponse | null>(null);
   const [selectedClosureId, setSelectedClosureId] = useState<string | null>(null);
   const [closureFocusKey, setClosureFocusKey] = useState<string | number | null>(null);
   const [isSnapshotLoading, setIsSnapshotLoading] = useState(false);
@@ -30,7 +31,7 @@ function ClosureDashboardContent() {
   const [closureSnapshots, setClosureSnapshots] = useState<SnapshotListItem[]>([]);
   const [selectedClosureSnapshotId, setSelectedClosureSnapshotId] = useState<string | null>(null);
   const [activeClosureSnapshotId, setActiveClosureSnapshotId] = useState<string | null>(null);
-  const selectedClosureRef = useRef<AllResponse["closures"][0] | null>(null);
+  const selectedClosureRef = useRef<ClosureResponse | null>(null);
 
   const {
     mode: closureMode,
@@ -53,7 +54,7 @@ function ClosureDashboardContent() {
   }, [closures, selectedClosure]);
 
   const fetchClosureSnapshot = useCallback(async (closureId: string, snapshotId: string) => {
-    const { data, error } = await $fetch<IApiResponse<AllResponse["closures"][0]>>(`/api/restricted/management/closure/${closureId}/${snapshotId}`, {
+    const { data, error } = await $fetch<IApiResponse<ClosureResponse>>(`/api/restricted/management/closure/${closureId}/${snapshotId}`, {
       method: "GET",
     });
 
@@ -65,7 +66,7 @@ function ClosureDashboardContent() {
     return data.data;
   }, []);
 
-  const loadClosureSnapshots = useCallback(async (closure: AllResponse["closures"][0]) => {
+  const loadClosureSnapshots = useCallback(async (closure: ClosureResponse) => {
     setIsSnapshotLoading(true);
     const { data, error } = await $fetch<IApiResponse<SnapshotListItem[]>>(`/api/restricted/management/closure/${closure.id}/snapshots`, {
       method: "GET",
@@ -86,7 +87,7 @@ function ClosureDashboardContent() {
   const fetchClosures = useCallback(async () => {
     setIsFetchingClosures(true);
 
-    const { data, error } = await $fetch<IApiResponse<AllResponse["closures"]>>("/api/restricted/management/closure", {
+    const { data, error } = await $fetch<IApiResponse<ClosureResponseList>>("/api/restricted/management/closure", {
       method: "GET",
     });
 
@@ -147,7 +148,7 @@ function ClosureDashboardContent() {
     startCreating();
   };
 
-  const handleSelectClosure = (closure: AllResponse["closures"][0]) => {
+  const handleSelectClosure = (closure: ClosureResponse) => {
     stopEditing();
     setSelectedClosure(closure);
     setSelectedClosureId(closure.id);
@@ -164,7 +165,7 @@ function ClosureDashboardContent() {
     stopEditing();
   };
 
-  const openClosureEditor = (closure: AllResponse["closures"][0]) => {
+  const openClosureEditor = (closure: ClosureResponse) => {
     setSelectedClosure(closure);
     setSelectedClosureId(closure.id);
     setClosureFocusKey(`${closure.id}-${Date.now()}`);
@@ -251,7 +252,7 @@ function ClosureDashboardContent() {
     if (!selectedSnapshot || selectedSnapshot.state !== "ready") return;
 
     setIsSnapshotActing(true);
-    const { data, error } = await $fetch<IApiResponse<AllResponse["closures"][0]>>(`/api/restricted/management/closure/${selectedClosure.id}`, {
+    const { data, error } = await $fetch<IApiResponse<ClosureResponse>>(`/api/restricted/management/closure/${selectedClosure.id}`, {
       method: "PATCH",
       body: { snapshotId },
     });

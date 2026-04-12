@@ -12,8 +12,7 @@ export async function GET() {
       unwrap(closure.getAllClosures(true)),
     ]);
 
-    /* eslint-disable-next-line */
-    const routes = allRoutes.map(({ activeSnapshotId, snapshotName, snapshotState, vehicleTypeRequiresRoute, ...rest }) => rest);
+    const routes = allRoutes;
 
     /* eslint-disable-next-line */
     const regions = allRegions.map(({ activeSnapshotId, snapshotName, snapshotState, ...rest }) => rest);

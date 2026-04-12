@@ -35,8 +35,9 @@ import {
 
 import { $fetch } from "@/lib/http/client";
 import * as nominatim from "@/lib/osm/nominatim";
-import type { AllResponse } from "@/components/app-sidebar";
+import type { RouteResponse } from "@/contracts/responses";
 import { useRouteEditor } from "@/contexts/RouteEditorContext";
+import type { SnapshotListItem } from "@/components/snapshot-types";
 
 const ROUTE_COLORS = [
   { label: "Sun Yellow", value: "#fff100" },
@@ -91,6 +92,8 @@ const getErrorMessage = (error: unknown, fallbackMessage: string) => {
 
 export default function RouteEditor({
   editingRoute,
+  editingSnapshot,
+  editingSnapshotId,
   snapshotParentRouteId,
   onSaved,
   onClosed,
@@ -143,15 +146,15 @@ export default function RouteEditor({
       return;
     }
 
-    setSnapshotName(editingRoute.snapshotName ?? "Draft");
-    setSnapshotState((editingRoute.snapshotState as "wip" | "for_approval" | "ready") ?? "wip");
+    setSnapshotName(editingSnapshot?.name ?? "Draft");
+    setSnapshotState((editingSnapshot?.state as "wip" | "for_approval" | "ready") ?? "wip");
     setRouteNumber(editingRoute.routeNumber);
     setRouteName(editingRoute.routeName);
     setRouteDetails(editingRoute.routeDetails ?? "");
-    setVehicleTypeId(editingRoute.vehicleTypeId ?? "");
-    setAvailableFrom(editingRoute.availableFrom ?? "00:00");
-    setAvailableTo(editingRoute.availableTo ?? "23:59");
-  }, [editingRoute]);
+    setVehicleTypeId(editingRoute.vehicle.id ?? "");
+    setAvailableFrom(editingRoute.availability.from ?? "00:00");
+    setAvailableTo(editingRoute.availability.to ?? "23:59");
+  }, [editingRoute, editingSnapshot]);
 
   useEffect(() => {
     if (vehicleTypeId) {
@@ -241,10 +244,10 @@ export default function RouteEditor({
       return;
     }
 
-    const isSnapshotEdit = !!editingRoute?.id && !!editingRoute?.activeSnapshotId;
+    const isSnapshotEdit = !!editingRoute?.id && !!editingSnapshotId;
     const isSnapshotCreate = !isSnapshotEdit && !!snapshotParentRouteId;
     const endpoint = isSnapshotEdit
-      ? `/api/restricted/management/route/${editingRoute.id}/${editingRoute.activeSnapshotId}`
+      ? `/api/restricted/management/route/${editingRoute.id}/${editingSnapshotId}`
       : isSnapshotCreate
         ? `/api/restricted/management/route/${snapshotParentRouteId}`
         : "/api/restricted/management/route";
@@ -705,7 +708,9 @@ export default function RouteEditor({
 }
 
 interface RouteEditorProps {
-  editingRoute?: AllResponse["routes"][0] | null
+  editingRoute?: RouteResponse | null
+  editingSnapshot?: SnapshotListItem | null
+  editingSnapshotId?: string | null
   snapshotParentRouteId?: string | null
   onSaved?: () => void
   onClosed?: () => void
