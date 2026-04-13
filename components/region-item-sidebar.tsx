@@ -2,7 +2,7 @@
 
 import { X } from "lucide-react";
 
-import type { RegionResponse } from "@/contracts/responses";
+import type { RegionSnapshotResponse } from "@/contracts/responses";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -10,17 +10,20 @@ import { Separator } from "@/components/ui/separator";
 import { normalizeSnapshotStateLabel, type SnapshotListItem } from "@/components/snapshot-types";
 
 interface RegionItemSidebarProps {
-  region: RegionResponse;
+  region: RegionSnapshotResponse;
   snapshots: SnapshotListItem[];
   selectedSnapshotId: string | null;
   activeSnapshotId: string | null;
   isSnapshotLoading: boolean;
   isSnapshotActing: boolean;
   isDeletingRegion: boolean;
+  isPublic: boolean;
+  userRole: string | null;
   onClose: () => void;
   onDeleteRegion: () => void;
   onSelectSnapshot: (snapshotId: string) => void;
   onSetActiveSnapshot: (snapshotId: string) => void;
+  onTogglePublic: (isPublic: boolean) => void;
   onDeleteSnapshot: (snapshotId: string) => void;
   onEditSnapshot: (snapshotId: string) => void;
   onCloneSnapshot: (snapshotId: string) => void;
@@ -35,10 +38,13 @@ export default function RegionItemSidebar({
   isSnapshotLoading,
   isSnapshotActing,
   isDeletingRegion,
+  isPublic,
+  userRole,
   onClose,
   onDeleteRegion,
   onSelectSnapshot,
   onSetActiveSnapshot,
+  onTogglePublic,
   onDeleteSnapshot,
   onEditSnapshot,
   onCloneSnapshot,
@@ -66,6 +72,21 @@ export default function RegionItemSidebar({
         </div>
       </CardHeader>
       <CardContent className="max-h-[75vh] space-y-3 overflow-y-auto">
+        {userRole === "administrator_user" ? (
+          <Button
+            type="button"
+            className={`w-full ${
+              isPublic
+                ? "border-emerald-300 bg-emerald-50 text-emerald-700 hover:border-red-300 hover:bg-red-50 hover:text-red-700"
+                : "border-amber-300 bg-amber-50 text-amber-700 hover:border-emerald-300 hover:bg-emerald-50 hover:text-emerald-700"
+            }`}
+            variant="outline"
+            disabled={isSnapshotActing}
+            onClick={() => onTogglePublic(!isPublic)}
+          >
+            {isPublic ? "Unpublish" : "Publish"}
+          </Button>
+        ) : null}
         <Button
           type="button"
           className="w-full"

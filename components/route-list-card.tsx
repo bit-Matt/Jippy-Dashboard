@@ -6,10 +6,10 @@ import { TriangleAlert } from "lucide-react";
 import type {
   ClosureResponse,
   ClosureResponseList,
-  RegionResponse,
-  RegionResponseList,
-  RouteResponse,
-  RouteResponseList,
+  RegionListItemResponse,
+  RegionListItemResponseList,
+  RouteListItemResponse,
+  RouteListItemResponseList,
 } from "@/contracts/responses";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -157,9 +157,6 @@ export default function RouteListCard({
                                 />
                               ) : null}
                             </span>
-                            <span className="text-muted-foreground block truncate text-xs">
-                              {route.vehicle.name} | {route.availability.from} - {route.availability.to}
-                            </span>
                             {routeDistrict ? (
                               <span className="text-muted-foreground block truncate text-xs">
                                 {routeDistrict}
@@ -190,9 +187,6 @@ export default function RouteListCard({
                       />
                       <span className="min-w-0 flex-1">
                         <span className="block truncate">{region.regionName}</span>
-                        <span className="text-muted-foreground block truncate text-xs">
-                          {region.snapshotName} ({region.snapshotState})
-                        </span>
                       </span>
                     </button>
                   ))
@@ -278,15 +272,15 @@ export default function RouteListCard({
 
 interface RouteListCardProps {
   mode?: "all" | "route-closures" | "regions" | "routes" | "closures";
-  routes: RouteResponseList;
-  regions: RegionResponseList;
+  routes: RouteListItemResponseList;
+  regions: RegionListItemResponseList;
   closures: ClosureResponseList;
   isRoutesLoading: boolean;
   selectedRouteId: string | null;
   selectedRegionId: string | null;
   selectedClosureId: string | null;
-  onRouteSelect?: (route: RouteResponse) => void;
-  onRegionSelect?: (region: RegionResponse) => void;
+  onRouteSelect?: (route: RouteListItemResponse) => void;
+  onRegionSelect?: (region: RegionListItemResponse) => void;
   onClosureSelect?: (closure: ClosureResponse) => void;
   onAddRoute?: () => void;
   onAddRegion?: () => void;

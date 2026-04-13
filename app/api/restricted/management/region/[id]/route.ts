@@ -8,6 +8,31 @@ import { oneOf } from "@/lib/one-of";
 import { utils, validator } from "@/lib/validator";
 import { logActivity } from "@/lib/management/activity-logger";
 
+export async function GET(
+  request: NextRequest,
+  { params }: RouteContext<"/api/restricted/management/region/[id]">,
+) {
+  const currentSession = await session.verify();
+  if (currentSession.code !== SessionCode.Ok) {
+    return ResponseComposer.composeFromSessionValidation(currentSession)
+      .orchestrate();
+  }
+
+  const { id } = await params;
+  if (!utils.isUuid(id)) {
+    return ResponseComposer.composeError(StatusCodes.Status404NotFound, [{ message: "Invalid closure ID" }])
+      .orchestrate();
+  }
+
+  const result = await region.getRegionById(id);
+  return oneOf(result).match(
+    s => ResponseComposer.compose(StatusCodes.Status200Ok)
+      .setBody(s)
+      .orchestrate(),
+    e => ResponseComposer.composeFromFailure(e).orchestrate(),
+  );
+}
+
 export async function POST(
   request: NextRequest,
   { params }: RouteContext<"/api/restricted/management/region/[id]">,
@@ -118,7 +143,7 @@ export async function POST(
         httpMethod: "POST",
         statusCode: StatusCodes.Status201Created,
         entityType: "region_snapshot",
-        entityId: s.activeSnapshotId,
+        entityId: s.snapshotId,
         payload: data,
       });
 
@@ -155,9 +180,9 @@ export async function PATCH(
   // Validate the body first.
   const validation = await validator.validate<SwitchPatchBody>(data, {
     properties: {
-      snapshotId: { type: "string", formatter: "uuid" },
+      isPublic: { type: "boolean" },
     },
-    requiredProperties: ["snapshotId"],
+    requiredProperties: ["isPublic"],
     allowUnvalidatedProperties: false,
   });
   if (!validation.ok) {
@@ -166,15 +191,15 @@ export async function PATCH(
       .orchestrate();
   }
 
-  const result = await region.switchSnapshot(id, data.snapshotId);
+  const result = await region.togglePublic(id, data.isPublic);
   return oneOf(result).match(
     s => {
       void logActivity({
         actorUserId: currentSession.user!.id,
         actorRole: currentSession.user!.role,
-        category: "active_snapshot_changed",
-        action: "region_active_snapshot_changed",
-        summary: `Switched active region snapshot for ${id}`,
+        category: "publish_state_changed",
+        action: "region_publish_state_changed",
+        summary: `Switch publication status for ID: ${id}`,
         routePath: `/api/restricted/management/region/${id}`,
         httpMethod: "PATCH",
         statusCode: StatusCodes.Status200Ok,
@@ -232,7 +257,7 @@ export async function DELETE(
 }
 
 type SwitchPatchBody = {
-  snapshotId: string;
+  isPublic: boolean;
 }
 
 type RequestBody = {

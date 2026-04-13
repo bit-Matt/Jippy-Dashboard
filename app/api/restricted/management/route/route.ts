@@ -32,7 +32,7 @@ export async function GET() {
 
     return ResponseComposer.compose(StatusCodes.Status200Ok)
       .setBody({
-        routes: allRoutes,
+        routes: allRoutes as route.RouteListItem[],
         closures: allClosures,
       })
       .orchestrate();

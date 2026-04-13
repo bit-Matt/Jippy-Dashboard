@@ -17,10 +17,12 @@ interface RouteItemSidebarProps {
   isSnapshotLoading: boolean;
   isSnapshotActing: boolean;
   isDeletingRoute: boolean;
+  userRole: string | null;
   onClose: () => void;
   onDeleteRoute: () => void;
   onSelectSnapshot: (snapshotId: string) => void;
   onSetActiveSnapshot: (snapshotId: string) => void;
+  onTogglePublic: (isPublic: boolean) => void;
   onDeleteSnapshot: (snapshotId: string) => void;
   onEditSnapshot: (snapshotId: string) => void;
   onCloneSnapshot: (snapshotId: string) => void;
@@ -35,10 +37,12 @@ export default function RouteItemSidebar({
   isSnapshotLoading,
   isSnapshotActing,
   isDeletingRoute,
+  userRole,
   onClose,
   onDeleteRoute,
   onSelectSnapshot,
   onSetActiveSnapshot,
+  onTogglePublic,
   onDeleteSnapshot,
   onEditSnapshot,
   onCloneSnapshot,
@@ -69,6 +73,21 @@ export default function RouteItemSidebar({
         </div>
       </CardHeader>
       <CardContent className="max-h-[75vh] space-y-3 overflow-y-auto">
+        {userRole === "administrator_user" ? (
+          <Button
+            type="button"
+            className={`w-full ${
+              route.isPublic
+                ? "border-emerald-300 bg-emerald-50 text-emerald-700 hover:border-red-300 hover:bg-red-50 hover:text-red-700"
+                : "border-amber-300 bg-amber-50 text-amber-700 hover:border-emerald-300 hover:bg-emerald-50 hover:text-emerald-700"
+            }`}
+            variant="outline"
+            disabled={isSnapshotActing}
+            onClick={() => onTogglePublic(!route.isPublic)}
+          >
+            {route.isPublic ? "Unpublish" : "Publish"}
+          </Button>
+        ) : null}
         <Button
           type="button"
           className="w-full"

@@ -11,7 +11,7 @@ export interface RegionDraftShape {
 
 export interface RegionSummary {
   id: string;
-  activeSnapshotId: string;
+  snapshotId: string;
   snapshotName: string;
   snapshotState: string;
   regionName: string;
@@ -181,7 +181,7 @@ export function RegionEditorProvider({ children }: { children: React.ReactNode }
   const openRegionEditorForEdit = (region: RegionSummary) => {
     setShowRegionEditor(true);
     setEditingRegionId(region.id);
-    setEditingSnapshotId(region.activeSnapshotId);
+    setEditingSnapshotId(region.snapshotId);
     setSnapshotName(region.snapshotName ?? "Draft");
     setSnapshotState((region.snapshotState as "wip" | "for_approval" | "ready") ?? "wip");
     setRegionName(region.regionName);

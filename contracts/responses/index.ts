@@ -12,12 +12,21 @@ export interface RoutePointResponse {
   goingBack: RouteSequencePoint[];
 }
 
-export interface RouteResponse {
+export interface RouteListItemResponse {
   id: string;
   routeNumber: string;
   routeName: string;
   routeColor: string;
+  polylines: {
+    to: string;
+    back: string;
+  };
+}
+
+export interface RouteResponse extends RouteListItemResponse {
+  activeSnapshotId: string;
   routeDetails: string;
+  isPublic: boolean;
   availability: {
     from: string;
     to: string;
@@ -26,12 +35,15 @@ export interface RouteResponse {
     id: string;
     name: string;
   };
-  polylines: {
-    to: string;
-    back: string;
-  };
 }
 
+export interface RouteSnapshotResponse extends RouteResponse {
+  snapshotName: string;
+  snapshotState: string;
+  points: RoutePointResponse;
+}
+
+export type RouteListItemResponseList = RouteListItemResponse[];
 export type RouteResponseList = RouteResponse[];
 
 export interface RegionPointResponse {
@@ -48,9 +60,23 @@ export interface RegionStationResponse {
   point: [number, number];
 }
 
-export interface RegionResponse {
+export interface RegionListItemResponse {
   id: string;
+  regionName: string;
+  regionColor: string;
+  regionShape: string;
+  points: RegionPointResponse[];
+}
+
+export interface RegionResponse extends RegionListItemResponse {
   activeSnapshotId: string;
+  isPublic: boolean;
+  stations: RegionStationResponse[];
+}
+
+export interface RegionSnapshotResponse {
+  id: string;
+  snapshotId: string;
   snapshotName: string;
   snapshotState: string;
   regionName: string;
@@ -60,6 +86,7 @@ export interface RegionResponse {
   stations: RegionStationResponse[];
 }
 
+export type RegionListItemResponseList = RegionListItemResponse[];
 export type RegionResponseList = RegionResponse[];
 
 export interface ClosurePointResponse {

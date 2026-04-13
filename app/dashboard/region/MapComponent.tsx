@@ -627,7 +627,7 @@ export interface RegionMapProps {
       sequence: number;
       point: [number, number];
     }>;
-    stations: Array<{
+    stations?: Array<{
       id: string;
       address: string;
       point: [number, number];
@@ -663,7 +663,7 @@ interface RegionsLayerProps {
       sequence: number;
       point: [number, number];
     }>;
-    stations: Array<{
+    stations?: Array<{
       id: string;
       address: string;
       point: [number, number];

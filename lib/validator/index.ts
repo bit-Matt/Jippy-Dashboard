@@ -185,7 +185,7 @@ const utils = {
 
     return TIME_PATTERN.test(from!)
       && TIME_PATTERN.test(to!)
-      && from! > to!;
+      && from! < to!;
   },
 };
 

@@ -54,7 +54,7 @@ export async function GET(
       .orchestrate();
   }
 
-  const result = await route.getRouteById(id, snapshotId);
+  const result = await route.getRouteSnapshotById(id, snapshotId);
   return oneOf(result).match(
     s => ResponseComposer.compose(StatusCodes.Status200Ok).setBody(s).orchestrate(),
     e => ResponseComposer.composeFromFailure(e).orchestrate(),

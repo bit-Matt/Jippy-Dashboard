@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import useSWR from "swr";
 
 import { AppSidebar } from "@/components/app-sidebar";
 import RouteItemSidebar from "@/components/route-item-sidebar";
@@ -8,9 +9,10 @@ import RouteEditor from "@/components/route-editor";
 import RouteListCard from "@/components/route-list-card";
 import type {
   ClosureResponseList,
+  RouteListItemResponse,
+  RouteListItemResponseList,
   RoutePointResponse,
   RouteResponse,
-  RouteResponseList,
 } from "@/contracts/responses";
 import { type SnapshotListItem } from "@/components/snapshot-types";
 import { Button } from "@/components/ui/button";
@@ -152,7 +154,7 @@ const routeLineIntersectsPolygon = (
 function RouteDashboardContent() {
   const [isFetchingRoutes, setIsFetchingRoutes] = useState(true);
   const [areRouteLayersReady, setAreRouteLayersReady] = useState(false);
-  const [routes, setRoutes] = useState<RouteResponseList>([]);
+  const [routes, setRoutes] = useState<RouteListItemResponseList>([]);
   const [closures, setClosures] = useState<ClosureResponseList>([]);
   const [selectedRoute, setSelectedRoute] = useState<RouteResponse | null>(null);
   const [editingRoute, setEditingRoute] = useState<RouteResponse | null>(null);
@@ -172,8 +174,12 @@ function RouteDashboardContent() {
 
   const { isCreating, startCreating, startEditing, stopCreating } = useRouteEditor();
 
+  type MeResponse = { data: { ok: boolean; data: { role: string } }; error?: unknown };
+  const { data: me } = useSWR<MeResponse>("/api/me", $fetch);
+  const userRole = me?.data?.data?.role ?? null;
+
   type RouteManagementResponse = {
-    routes: RouteResponseList;
+    routes: RouteListItemResponseList;
     closures: ClosureResponseList;
   };
 
@@ -267,7 +273,7 @@ function RouteDashboardContent() {
     return data.data;
   }, []);
 
-  const loadRouteSnapshots = useCallback(async (route: RouteResponse, preferredSnapshotId?: string | null) => {
+  const loadRouteSnapshots = useCallback(async (route: { id: string }, activeSnapshotId: string, preferredSnapshotId?: string | null) => {
     setIsSnapshotLoading(true);
     const { data, error } = await $fetch<IApiResponse<SnapshotListItem[]>>(`/api/restricted/management/route/${route.id}/snapshots`, {
       method: "GET",
@@ -280,7 +286,6 @@ function RouteDashboardContent() {
     }
 
     const snapshots = data.data;
-    const activeSnapshotId = snapshots.find((snapshot) => snapshot.isActive)?.id ?? null;
     const preferredExists = preferredSnapshotId ? snapshots.some((snapshot) => snapshot.id === preferredSnapshotId) : false;
     const selectedSnapshotId: string | null = preferredExists
       ? preferredSnapshotId ?? null
@@ -290,6 +295,19 @@ function RouteDashboardContent() {
     setSelectedRouteSnapshotId(selectedSnapshotId);
     setActiveRouteSnapshotId(activeSnapshotId);
     setIsSnapshotLoading(false);
+  }, []);
+
+  const fetchRouteById = useCallback(async (routeId: string) => {
+    const { data, error } = await $fetch<IApiResponse<RouteResponse>>(`/api/restricted/management/route/${routeId}`, {
+      method: "GET",
+    });
+
+    if (error) {
+      console.error("Failed to fetch route:", error);
+      return null;
+    }
+
+    return data.data;
   }, []);
 
   const fetchRoutes = useCallback(async () => {
@@ -324,17 +342,19 @@ function RouteDashboardContent() {
         setSelectedRouteSnapshotId(null);
         setActiveRouteSnapshotId(null);
       } else {
-        const preservedSnapshot = preservedSnapshotId
+        const fullRoute = preservedSnapshotId
           ? await fetchRouteSnapshot(refreshedRoute.id, preservedSnapshotId)
-          : null;
+          : await fetchRouteById(refreshedRoute.id);
 
-        setSelectedRoute(preservedSnapshot ?? refreshedRoute);
-        void loadRouteSnapshots(refreshedRoute, preservedSnapshotId);
+        if (fullRoute) {
+          setSelectedRoute(fullRoute);
+          void loadRouteSnapshots(refreshedRoute, fullRoute.activeSnapshotId, preservedSnapshotId);
+        }
       }
     }
 
     setIsFetchingRoutes(false);
-  }, [fetchRouteSnapshot, loadRouteSnapshots]);
+  }, [fetchRouteById, fetchRouteSnapshot, loadRouteSnapshots]);
 
   const isRoutesLoading = isFetchingRoutes || !areRouteLayersReady;
 
@@ -379,14 +399,18 @@ function RouteDashboardContent() {
     startCreating();
   };
 
-  const handleSelectRoute = (route: RouteResponse) => {
+  const handleSelectRoute = async (route: RouteListItemResponse) => {
     setRouteFocusKey(`${route.id}-${Date.now()}`);
-    setSelectedRoute(route);
     setEditingRoute(null);
     setEditingSnapshotId(null);
     setSnapshotCreateParentRouteId(null);
     stopCreating();
-    void loadRouteSnapshots(route);
+
+    const fullRoute = await fetchRouteById(route.id);
+    if (fullRoute) {
+      setSelectedRoute(fullRoute);
+      void loadRouteSnapshots(route, fullRoute.activeSnapshotId);
+    }
   };
 
   const handleClearSelectedRoute = () => {
@@ -514,7 +538,7 @@ function RouteDashboardContent() {
     if (!selectedSnapshot || selectedSnapshot.state !== "ready") return;
 
     setIsSnapshotActing(true);
-    const { data, error } = await $fetch<IApiResponse<RouteResponse>>(`/api/restricted/management/route/${selectedRoute.id}`, {
+    const { error } = await $fetch<IApiResponse<{ id: string; activeSnapshotId: string }>>(`/api/restricted/management/route/${selectedRoute.id}/snapshots`, {
       method: "PATCH",
       body: { snapshotId },
     });
@@ -525,12 +549,30 @@ function RouteDashboardContent() {
       return;
     }
 
-    setSelectedRoute(data.data);
     setSelectedRouteSnapshotId(snapshotId);
     setActiveRouteSnapshotId(snapshotId);
-    setRouteFocusKey(`${data.data.id}-${Date.now()}`);
     setIsSnapshotActing(false);
-    void loadRouteSnapshots(data.data, snapshotId);
+    await fetchRoutes();
+  };
+
+  const handleTogglePublic = async (isPublic: boolean) => {
+    if (!selectedRoute) return;
+
+    setIsSnapshotActing(true);
+    const { error } = await $fetch<IApiResponse<{ id: string; isPublic: boolean }>>(`/api/restricted/management/route/${selectedRoute.id}`, {
+      method: "PATCH",
+      body: { isPublic },
+    });
+
+    if (error) {
+      console.error("Failed to toggle route publication:", error);
+      setIsSnapshotActing(false);
+      return;
+    }
+
+    setSelectedRoute({ ...selectedRoute, isPublic });
+    setIsSnapshotActing(false);
+    await fetchRoutes();
   };
 
   const handleCreateBlankRouteSnapshot = () => {
@@ -562,10 +604,8 @@ function RouteDashboardContent() {
     }
 
     const nextSnapshots = routeSnapshots.filter((snapshot) => snapshot.id !== snapshotId);
-    const nextActiveSnapshotId = nextSnapshots.find((snapshot) => snapshot.isActive)?.id ?? null;
     setRouteSnapshots(nextSnapshots);
-    setSelectedRouteSnapshotId(nextActiveSnapshotId ?? nextSnapshots[0]?.id ?? null);
-    setActiveRouteSnapshotId(nextActiveSnapshotId);
+    setSelectedRouteSnapshotId(activeRouteSnapshotId ?? nextSnapshots[0]?.id ?? null);
     setIsSnapshotActing(false);
     await fetchRoutes();
   };
@@ -621,10 +661,12 @@ function RouteDashboardContent() {
                 isSnapshotLoading={isSnapshotLoading}
                 isSnapshotActing={isSnapshotActing}
                 isDeletingRoute={isDeletingRoute}
+                userRole={userRole}
                 onClose={handleClearSelectedRoute}
                 onDeleteRoute={handleDeleteRoute}
                 onSelectSnapshot={handleSelectRouteSnapshot}
                 onSetActiveSnapshot={handleSetActiveRouteSnapshot}
+                onTogglePublic={handleTogglePublic}
                 onDeleteSnapshot={handleDeleteRouteSnapshot}
                 onEditSnapshot={handleEditRouteSnapshot}
                 onCloneSnapshot={handleCloneRouteSnapshot}
@@ -644,7 +686,7 @@ function RouteDashboardContent() {
                   const refreshedSnapshot = await fetchRouteSnapshot(editingRoute.id, editingSnapshotId);
                   if (refreshedSnapshot) {
                     setSelectedRoute(refreshedSnapshot);
-                    await loadRouteSnapshots(refreshedSnapshot, editingSnapshotId);
+                    await loadRouteSnapshots(refreshedSnapshot, refreshedSnapshot.activeSnapshotId, editingSnapshotId);
                   }
                 }
               }}

@@ -267,10 +267,20 @@ export const region = pgTable(
       .primaryKey()
       .$default(() => uuidv7()),
 
+    // Region info
+    name: text("region_name")
+      .notNull(),
+    color: text("color")
+      .default("#000000")
+      .notNull(),
+    shapeType: text("shape")
+      .notNull(),
+
+    // Metadata
+    isPublic: boolean("is_public_viewable").default(false).notNull(),
     activeSnapshotId: text("active_snapshot_id").notNull(),
     ownerId: text("owner_id")
       .references(() => user.id, { onDelete: "set null" }),
-
     createdAt: timestamp("created_at").defaultNow().notNull(),
     updatedAt: timestamp("updated_at")
       .defaultNow()
@@ -286,19 +296,6 @@ export const regionSnapshots = pgTable(
       .primaryKey()
       .$default(() => uuidv7()),
 
-    snapshotState: snapshotState()
-      .notNull()
-      .default("wip"),
-    ownerId: text("owner_id")
-      .references(() => user.id, { onDelete: "set null" }),
-
-    versionName: text("version_name").notNull(),
-
-    // Snapshot for
-    regionId: text("region_id")
-      .notNull()
-      .references(() => region.id, { onDelete: "cascade" }),
-
     // Region info
     name: text("region_name")
       .notNull(),
@@ -309,6 +306,14 @@ export const regionSnapshots = pgTable(
       .notNull(),
 
     // Metadata
+    snapshotState: snapshotState()
+      .notNull()
+      .default("wip"),
+    regionId: text("region_id")
+      .notNull(),
+    ownerId: text("owner_id")
+      .references(() => user.id, { onDelete: "set null" }),
+    versionName: text("version_name").notNull(),
     createdAt: timestamp("created_at").defaultNow().notNull(),
     updatedAt: timestamp("updated_at")
       .defaultNow()
@@ -428,6 +433,29 @@ export const roadClosureSnapshots = pgTable(
   },
 );
 
+export const roadClosurePoints = pgTable("road_closure_points", {
+  id: text("id")
+    .primaryKey()
+    .$default(() => uuidv7()),
+  roadClosureSnapshotId: text("road_closure_snapshot_id")
+    .notNull()
+    .references(() => roadClosureSnapshots.id, { onDelete: "cascade" }),
+
+  // Data
+  sequenceNumber: integer("sequence_number").notNull(),
+  point: geometry("point", { type: "point", mode: "tuple", srid: 4326 }).notNull(),
+
+  // Metadata
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at")
+    .defaultNow()
+    .$onUpdate(() => new Date())
+    .notNull(),
+}, (t) => [
+  index("spatial_index_road_closure_region").using("gist", t.point),
+  index("road_closure_region_ref_idx").on(t.roadClosureSnapshotId),
+]);
+
 export const accessTokenPermissions = pgEnum("access_token_permission", ["r", "rw"]);
 export const accessToken = pgTable("access_tokens", {
   id: text("id")
@@ -474,29 +502,6 @@ export const activityLogs = pgTable(
     index("activity_logs_created_at_idx").on(table.createdAt),
   ],
 );
-
-export const roadClosurePoints = pgTable("road_closure_points", {
-  id: text("id")
-    .primaryKey()
-    .$default(() => uuidv7()),
-  roadClosureSnapshotId: text("road_closure_snapshot_id")
-    .notNull()
-    .references(() => roadClosureSnapshots.id, { onDelete: "cascade" }),
-
-  // Data
-  sequenceNumber: integer("sequence_number").notNull(),
-  point: geometry("point", { type: "point", mode: "tuple", srid: 4326 }).notNull(),
-
-  // Metadata
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-  updatedAt: timestamp("updated_at")
-    .defaultNow()
-    .$onUpdate(() => new Date())
-    .notNull(),
-}, (t) => [
-  index("spatial_index_road_closure_region").using("gist", t.point),
-  index("road_closure_region_ref_idx").on(t.roadClosureSnapshotId),
-]);
 
 // ============================================================================
 // BETTER AUTH RELATIONS

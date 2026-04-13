@@ -43,7 +43,7 @@ export async function GET(
       .orchestrate();
   }
 
-  const result = await region.getRegionById(id, snapshotId);
+  const result = await region.getSnapshotInformationById(id, snapshotId);
   return oneOf(result).match(
     s => ResponseComposer.compose(StatusCodes.Status200Ok).setBody(s).orchestrate(),
     e => ResponseComposer.composeFromFailure(e).orchestrate(),

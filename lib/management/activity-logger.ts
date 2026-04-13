@@ -21,6 +21,7 @@ export type ActivityCategory =
   | "write_operation"
   | "snapshot_state_changed"
   | "active_snapshot_changed"
+  | "publish_state_changed"
   | "security_event";
 
 export type ActivityWriteInput = {
