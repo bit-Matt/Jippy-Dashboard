@@ -215,9 +215,7 @@ export const routeSnapshots = pgTable(
     snapshotState: snapshotState()
       .notNull()
       .default("wip"),
-    routeId: text("route_id")
-      .notNull()
-      .references(() => routes.id, { onDelete: "cascade" }),
+    routeId: text("route_id").notNull(),
     ownerId: text("owner_id")
       .references(() => user.id, { onDelete: "set null" }),
     versionName: text("version_name").notNull(),
