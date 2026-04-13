@@ -17,8 +17,8 @@ export async function GET() {
 
     return ResponseComposer.compose(StatusCodes.Status200Ok)
       .setBody({
-        allRoutes,
-        allRegions,
+        routes: allRoutes,
+        regions: allRegions,
         closures,
       })
       .orchestrate();
