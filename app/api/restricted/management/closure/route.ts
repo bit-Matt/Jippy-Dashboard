@@ -2,7 +2,7 @@ import type { NextRequest } from "next/server";
 
 import * as closure from "@/lib/management/closure-manager";
 import { oneOf } from "@/lib/one-of";
-import { ResponseComposer, StatusCodes } from "@/lib/http";
+import { ApiResponseBuilder, StatusCodes } from "@/lib/http";
 import { session, SessionCode } from "@/lib/auth";
 import { tryParseJson } from "@/lib/http/RequestUtilities";
 import { unwrap } from "@/lib/one-of";
@@ -12,8 +12,8 @@ import { logActivity, logDashboardVisit } from "@/lib/management/activity-logger
 export async function GET() {
   const currentSession = await session.verify();
   if (currentSession.code !== SessionCode.Ok) {
-    return ResponseComposer.composeFromSessionValidation(currentSession)
-      .orchestrate();
+    return ApiResponseBuilder.createFromSessionValidation(currentSession)
+      .build();
   }
 
   void logDashboardVisit({
@@ -26,29 +26,29 @@ export async function GET() {
   try {
     const allClosures = await unwrap(closure.getAllClosures(false));
 
-    return ResponseComposer.compose(StatusCodes.Status200Ok)
-      .setBody(allClosures)
-      .orchestrate();
+    return ApiResponseBuilder.create(StatusCodes.Status200Ok)
+      .withBody(allClosures)
+      .build();
   } catch {
-    return ResponseComposer.composeError(StatusCodes.Status500InternalServerError, [{
+    return ApiResponseBuilder.createError(StatusCodes.Status500InternalServerError, [{
       message: "Unknown error occurred.",
-    }]).orchestrate();
+    }]).build();
   }
 }
 
 export async function POST(req: NextRequest) {
   const currentSession = await session.verify();
   if (currentSession.code !== SessionCode.Ok) {
-    return ResponseComposer.composeFromSessionValidation(currentSession)
-      .orchestrate();
+    return ApiResponseBuilder.createFromSessionValidation(currentSession)
+      .build();
   }
 
   const data = await tryParseJson<RequestBody>(req);
 
   // Body is unparseable.
   if (!data) {
-    return ResponseComposer.composeError(StatusCodes.Status400BadRequest, [{ message: "Invalid Payload." }])
-      .orchestrate();
+    return ApiResponseBuilder.createError(StatusCodes.Status400BadRequest, [{ message: "Invalid Payload." }])
+      .build();
   }
 
   // Validate the body first.
@@ -86,9 +86,9 @@ export async function POST(req: NextRequest) {
     allowUnvalidatedProperties: false,
   });
   if (!validation.ok) {
-    return ResponseComposer
-      .composeError(StatusCodes.Status400BadRequest, validation.errors!)
-      .orchestrate();
+    return ApiResponseBuilder
+      .createError(StatusCodes.Status400BadRequest, validation.errors!)
+      .build();
   }
 
   const result = await closure.createClosure(data, currentSession.user!.id);
@@ -108,9 +108,9 @@ export async function POST(req: NextRequest) {
         payload: data,
       });
 
-      return ResponseComposer.compose(StatusCodes.Status201Created).setBody(s).orchestrate();
+      return ApiResponseBuilder.create(StatusCodes.Status201Created).withBody(s).build();
     },
-    e => ResponseComposer.composeFromFailure(e).orchestrate(),
+    e => ApiResponseBuilder.createFromFailure(e).build(),
   );
 }
 

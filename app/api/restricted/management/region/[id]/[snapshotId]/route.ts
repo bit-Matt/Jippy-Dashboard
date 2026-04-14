@@ -1,7 +1,7 @@
 import type { NextRequest } from "next/server";
 
 import * as region from "@/lib/management/region-manager";
-import { ResponseComposer, StatusCodes } from "@/lib/http";
+import { ApiResponseBuilder, StatusCodes } from "@/lib/http";
 import { session, SessionCode } from "@/lib/auth";
 import { tryParseJson } from "@/lib/http/RequestUtilities";
 import { oneOf } from "@/lib/one-of";
@@ -14,26 +14,26 @@ export async function GET(
 ) {
   const currentSession = await session.verify();
   if (currentSession.code !== SessionCode.Ok) {
-    return ResponseComposer.composeFromSessionValidation(currentSession)
-      .orchestrate();
+    return ApiResponseBuilder.createFromSessionValidation(currentSession)
+      .build();
   }
 
   const { id, snapshotId } = await params;
 
   if (!utils.isUuid(id)) {
-    return ResponseComposer.composeError(StatusCodes.Status404NotFound, [{ message: "No region found with the given ID." }])
-      .orchestrate();
+    return ApiResponseBuilder.createError(StatusCodes.Status404NotFound, [{ message: "No region found with the given ID." }])
+      .build();
   }
 
   if (!utils.isUuid(snapshotId)) {
-    return ResponseComposer.composeError(StatusCodes.Status404NotFound, [{ message: "No snapshot found with the given ID." }])
-      .orchestrate();
+    return ApiResponseBuilder.createError(StatusCodes.Status404NotFound, [{ message: "No snapshot found with the given ID." }])
+      .build();
   }
 
   const result = await region.getSnapshotInformationById(id, snapshotId);
   return oneOf(result).match(
-    s => ResponseComposer.compose(StatusCodes.Status200Ok).setBody(s).orchestrate(),
-    e => ResponseComposer.composeFromFailure(e).orchestrate(),
+    s => ApiResponseBuilder.create(StatusCodes.Status200Ok).withBody(s).build(),
+    e => ApiResponseBuilder.createFromFailure(e).build(),
   );
 }
 
@@ -43,20 +43,20 @@ export async function PUT(
 ) {
   const currentSession = await session.verify();
   if (currentSession.code !== SessionCode.Ok) {
-    return ResponseComposer.composeFromSessionValidation(currentSession)
-      .orchestrate();
+    return ApiResponseBuilder.createFromSessionValidation(currentSession)
+      .build();
   }
 
   const { id, snapshotId } = await params;
 
   if (!utils.isUuid(id)) {
-    return ResponseComposer.composeError(StatusCodes.Status404NotFound, [{ message: "No such region found." }])
-      .orchestrate();
+    return ApiResponseBuilder.createError(StatusCodes.Status404NotFound, [{ message: "No such region found." }])
+      .build();
   }
 
   if (!utils.isUuid(snapshotId)) {
-    return ResponseComposer.composeError(StatusCodes.Status404NotFound, [{ message: "No such snapshot found." }])
-      .orchestrate();
+    return ApiResponseBuilder.createError(StatusCodes.Status404NotFound, [{ message: "No such snapshot found." }])
+      .build();
   }
 
   const result = await region.copySnapshot(id, snapshotId, currentSession.user!.id);
@@ -75,9 +75,9 @@ export async function PUT(
         entityId: s.id,
       });
 
-      return ResponseComposer.compose(StatusCodes.Status200Ok).setBody(s).orchestrate();
+      return ApiResponseBuilder.create(StatusCodes.Status200Ok).withBody(s).build();
     },
-    e => ResponseComposer.composeFromFailure(e).orchestrate(),
+    e => ApiResponseBuilder.createFromFailure(e).build(),
   );
 }
 
@@ -87,26 +87,26 @@ export async function PATCH(
 ) {
   const currentSession = await session.verify();
   if (currentSession.code !== SessionCode.Ok) {
-    return ResponseComposer.composeFromSessionValidation(currentSession)
-      .orchestrate();
+    return ApiResponseBuilder.createFromSessionValidation(currentSession)
+      .build();
   }
 
   const { id, snapshotId } = await params;
 
   if (!utils.isUuid(id)) {
-    return ResponseComposer.composeError(StatusCodes.Status404NotFound, [{ message: "No route found with the given ID." }])
-      .orchestrate();
+    return ApiResponseBuilder.createError(StatusCodes.Status404NotFound, [{ message: "No route found with the given ID." }])
+      .build();
   }
 
   if (!utils.isUuid(snapshotId)) {
-    return ResponseComposer.composeError(StatusCodes.Status404NotFound, [{ message: "No snapshot found with the given ID." }])
-      .orchestrate();
+    return ApiResponseBuilder.createError(StatusCodes.Status404NotFound, [{ message: "No snapshot found with the given ID." }])
+      .build();
   }
 
   const data = await tryParseJson<PatchRequestBody>(request);
   if (!data) {
-    return ResponseComposer.composeError(StatusCodes.Status400BadRequest, [{ message: "Invalid payload." }])
-      .orchestrate();
+    return ApiResponseBuilder.createError(StatusCodes.Status400BadRequest, [{ message: "Invalid payload." }])
+      .build();
   }
 
   const hasAnyPatchField =
@@ -119,8 +119,8 @@ export async function PATCH(
     || data.stations !== undefined;
 
   if (!hasAnyPatchField) {
-    return ResponseComposer.composeError(StatusCodes.Status400BadRequest, [{ message: "No update fields provided." }])
-      .orchestrate();
+    return ApiResponseBuilder.createError(StatusCodes.Status400BadRequest, [{ message: "No update fields provided." }])
+      .build();
   }
 
   const validation = await validator.validate<PatchRequestBody>(data, {
@@ -190,13 +190,13 @@ export async function PATCH(
     allowUnvalidatedProperties: false,
   });
   if (!validation.ok) {
-    return ResponseComposer.composeError(StatusCodes.Status400BadRequest, [validation.errors!])
-      .orchestrate();
+    return ApiResponseBuilder.createError(StatusCodes.Status400BadRequest, [validation.errors!])
+      .build();
   }
 
   if (data.snapshotState === "ready" && currentSession.user?.role !== "administrator_user") {
-    return ResponseComposer.composeError(StatusCodes.Status403Forbidden, [{ message: "Insufficient permissions to set ready state." }])
-      .orchestrate();
+    return ApiResponseBuilder.createError(StatusCodes.Status403Forbidden, [{ message: "Insufficient permissions to set ready state." }])
+      .build();
   }
 
   const result = await region.updateRegionSnapshot(id, snapshotId, data);
@@ -216,11 +216,11 @@ export async function PATCH(
         payload: data,
       });
 
-      return ResponseComposer.compose(StatusCodes.Status200Ok)
-        .setBody(success)
-        .orchestrate();
+      return ApiResponseBuilder.create(StatusCodes.Status200Ok)
+        .withBody(success)
+        .build();
     },
-    e => ResponseComposer.composeFromFailure(e).orchestrate(),
+    e => ApiResponseBuilder.createFromFailure(e).build(),
   );
 }
 
@@ -230,20 +230,20 @@ export async function DELETE(
 ) {
   const currentSession = await session.verify();
   if (currentSession.code !== SessionCode.Ok) {
-    return ResponseComposer.composeFromSessionValidation(currentSession)
-      .orchestrate();
+    return ApiResponseBuilder.createFromSessionValidation(currentSession)
+      .build();
   }
 
   const { id, snapshotId } = await params;
 
   if (!utils.isUuid(id)) {
-    return ResponseComposer.composeError(StatusCodes.Status404NotFound, [{ message: "No route found with the given ID." }])
-      .orchestrate();
+    return ApiResponseBuilder.createError(StatusCodes.Status404NotFound, [{ message: "No route found with the given ID." }])
+      .build();
   }
 
   if (!utils.isUuid(snapshotId)) {
-    return ResponseComposer.composeError(StatusCodes.Status404NotFound, [{ message: "No snapshot found with the given ID." }])
-      .orchestrate();
+    return ApiResponseBuilder.createError(StatusCodes.Status404NotFound, [{ message: "No snapshot found with the given ID." }])
+      .build();
   }
 
   const result = await region.deleteSnapshot(id, snapshotId);
@@ -262,11 +262,11 @@ export async function DELETE(
         entityId: snapshotId,
       });
 
-      return ResponseComposer.compose(StatusCodes.Status200Ok)
-        .setBody(success)
-        .orchestrate();
+      return ApiResponseBuilder.create(StatusCodes.Status200Ok)
+        .withBody(success)
+        .build();
     },
-    e => ResponseComposer.composeFromFailure(e).orchestrate(),
+    e => ApiResponseBuilder.createFromFailure(e).build(),
   );
 }
 

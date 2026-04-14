@@ -1,6 +1,6 @@
 import type { NextRequest } from "next/server";
 
-import { ResponseComposer, StatusCodes } from "@/lib/http";
+import { ApiResponseBuilder, StatusCodes } from "@/lib/http";
 import { session, SessionCode } from "@/lib/auth";
 import { oneOf } from "@/lib/one-of";
 import { tryParseJson } from "@/lib/http/RequestUtilities";
@@ -14,26 +14,26 @@ export async function PATCH(
 ) {
   const currentSession = await session.verify("administrator_user");
   if (currentSession.code !== SessionCode.Ok) {
-    return ResponseComposer.composeFromSessionValidation(currentSession)
-      .orchestrate();
+    return ApiResponseBuilder.createFromSessionValidation(currentSession)
+      .build();
   }
 
   const { id } = await params;
   if (!utils.isUuid(id)) {
-    return ResponseComposer.composeError(StatusCodes.Status404NotFound, [{ message: "Vehicle type not found." }])
-      .orchestrate();
+    return ApiResponseBuilder.createError(StatusCodes.Status404NotFound, [{ message: "Vehicle type not found." }])
+      .build();
   }
 
   const data = await tryParseJson<RequestBody>(request);
   if (!data) {
-    return ResponseComposer.composeError(StatusCodes.Status400BadRequest, [{ message: "Invalid Payload." }])
-      .orchestrate();
+    return ApiResponseBuilder.createError(StatusCodes.Status400BadRequest, [{ message: "Invalid Payload." }])
+      .build();
   }
 
   const hasAnyField = data.name !== undefined || data.requiresRoute !== undefined;
   if (!hasAnyField) {
-    return ResponseComposer.composeError(StatusCodes.Status400BadRequest, [{ message: "No update fields provided." }])
-      .orchestrate();
+    return ApiResponseBuilder.createError(StatusCodes.Status400BadRequest, [{ message: "No update fields provided." }])
+      .build();
   }
 
   const validation = await validator.validate<RequestBody>(data, {
@@ -45,9 +45,9 @@ export async function PATCH(
     allowUnvalidatedProperties: false,
   });
   if (!validation.ok) {
-    return ResponseComposer
-      .composeError(StatusCodes.Status400BadRequest, validation.errors!)
-      .orchestrate();
+    return ApiResponseBuilder
+      .createError(StatusCodes.Status400BadRequest, validation.errors!)
+      .build();
   }
 
   const result = await vehicle.updateVehicleType(id, {
@@ -71,9 +71,9 @@ export async function PATCH(
         payload: data,
       });
 
-      return ResponseComposer.compose(StatusCodes.Status200Ok).setBody(s).orchestrate();
+      return ApiResponseBuilder.create(StatusCodes.Status200Ok).withBody(s).build();
     },
-    e => ResponseComposer.composeFromFailure(e).orchestrate(),
+    e => ApiResponseBuilder.createFromFailure(e).build(),
   );
 }
 
@@ -83,14 +83,14 @@ export async function DELETE(
 ) {
   const currentSession = await session.verify("administrator_user");
   if (currentSession.code !== SessionCode.Ok) {
-    return ResponseComposer.composeFromSessionValidation(currentSession)
-      .orchestrate();
+    return ApiResponseBuilder.createFromSessionValidation(currentSession)
+      .build();
   }
 
   const { id } = await params;
   if (!utils.isUuid(id)) {
-    return ResponseComposer.composeError(StatusCodes.Status404NotFound, [{ message: "Vehicle type not found." }])
-      .orchestrate();
+    return ApiResponseBuilder.createError(StatusCodes.Status404NotFound, [{ message: "Vehicle type not found." }])
+      .build();
   }
 
   const result = await vehicle.deleteVehicleType(id);
@@ -109,11 +109,11 @@ export async function DELETE(
         entityId: id,
       });
 
-      return ResponseComposer.compose(StatusCodes.Status200Ok)
-        .setBody({ ok: true })
-        .orchestrate();
+      return ApiResponseBuilder.create(StatusCodes.Status200Ok)
+        .withBody({ ok: true })
+        .build();
     },
-    e => ResponseComposer.composeFromFailure(e).orchestrate(),
+    e => ApiResponseBuilder.createFromFailure(e).build(),
   );
 }
 

@@ -12,7 +12,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { useClosureEditor } from "@/contexts/ClosureEditorContext";
 
 import { $fetch } from "@/lib/http/client";
-import type { IApiResponse } from "@/lib/http/ResponseComposer";
+import type { IApiResponse } from "@/lib/http/ApiResponseBuilder";
 import type { ClosureObject } from "@/contracts/responses";
 import { getErrorMessage } from "@/contracts/parsers";
 

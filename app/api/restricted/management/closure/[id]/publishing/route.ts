@@ -1,7 +1,7 @@
 import type { NextRequest } from "next/server";
 
 import * as closure from "@/lib/management/closure-manager";
-import { ResponseComposer, StatusCodes } from "@/lib/http";
+import { ApiResponseBuilder, StatusCodes } from "@/lib/http";
 import { tryParseJson } from "@/lib/http/RequestUtilities";
 import { oneOf } from "@/lib/one-of";
 import { utils, validator } from "@/lib/validator";
@@ -14,22 +14,22 @@ export async function PATCH(
 ) {
   const currentSession = await session.verify("administrator_user");
   if (currentSession.code !== SessionCode.Ok) {
-    return ResponseComposer.composeFromSessionValidation(currentSession)
-      .orchestrate();
+    return ApiResponseBuilder.createFromSessionValidation(currentSession)
+      .build();
   }
 
   const { id } = await params;
 
   // Invalid ID format.
   if (!utils.isUuid(id)) {
-    return ResponseComposer.composeError(StatusCodes.Status404NotFound, [{ message: "No closure found with given ID." }])
-      .orchestrate();
+    return ApiResponseBuilder.createError(StatusCodes.Status404NotFound, [{ message: "No closure found with given ID." }])
+      .build();
   }
 
   const data = await tryParseJson<SwitchPatchBody>(request);
   if (!data) {
-    return ResponseComposer.composeError(StatusCodes.Status400BadRequest, [{ message: "Invalid Payload." }])
-      .orchestrate();
+    return ApiResponseBuilder.createError(StatusCodes.Status400BadRequest, [{ message: "Invalid Payload." }])
+      .build();
   }
 
   // Validate the body first.
@@ -41,9 +41,9 @@ export async function PATCH(
     allowUnvalidatedProperties: false,
   });
   if (!validation.ok) {
-    return ResponseComposer
-      .composeError(StatusCodes.Status400BadRequest, validation.errors!)
-      .orchestrate();
+    return ApiResponseBuilder
+      .createError(StatusCodes.Status400BadRequest, validation.errors!)
+      .build();
   }
 
   const result = await closure.togglePublic(id, data.isPublic);
@@ -63,9 +63,9 @@ export async function PATCH(
         payload: data,
       });
 
-      return ResponseComposer.compose(StatusCodes.Status200Ok).setBody(s).orchestrate();
+      return ApiResponseBuilder.create(StatusCodes.Status200Ok).withBody(s).build();
     },
-    e => ResponseComposer.composeFromFailure(e).orchestrate(),
+    e => ApiResponseBuilder.createFromFailure(e).build(),
   );
 }
 

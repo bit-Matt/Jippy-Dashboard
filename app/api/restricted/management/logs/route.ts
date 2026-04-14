@@ -1,14 +1,14 @@
 import type { NextRequest } from "next/server";
 
 import { session, SessionCode } from "@/lib/auth";
-import { ResponseComposer, StatusCodes } from "@/lib/http";
+import { ApiResponseBuilder, StatusCodes } from "@/lib/http";
 import { getActivityLogs, logDashboardVisit } from "@/lib/management/activity-logger";
 
 export async function GET(request: NextRequest) {
   const currentSession = await session.verify("administrator_user");
   if (currentSession.code !== SessionCode.Ok) {
-    return ResponseComposer.composeFromSessionValidation(currentSession)
-      .orchestrate();
+    return ApiResponseBuilder.createFromSessionValidation(currentSession)
+      .build();
   }
 
   void logDashboardVisit({
@@ -36,12 +36,12 @@ export async function GET(request: NextRequest) {
     category,
   });
 
-  return ResponseComposer.compose(StatusCodes.Status200Ok)
-    .setBody({
+  return ApiResponseBuilder.create(StatusCodes.Status200Ok)
+    .withBody({
       rows: data.rows,
       total: data.total,
       page: safePage,
       pageSize: safePageSize,
     })
-    .orchestrate();
+    .build();
 }

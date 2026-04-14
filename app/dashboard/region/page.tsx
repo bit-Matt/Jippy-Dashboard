@@ -15,7 +15,7 @@ import {
 } from "@/components/ui/sidebar";
 import { RegionEditorProvider, useRegionEditor } from "@/contexts/RegionEditorContext";
 import { $fetch } from "@/lib/http/client";
-import type { IApiResponse } from "@/lib/http/ResponseComposer";
+import type { IApiResponse } from "@/lib/http/ApiResponseBuilder";
 
 import RegionMapComponent from "./MapComponent";
 

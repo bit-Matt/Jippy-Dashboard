@@ -34,7 +34,7 @@ import { Switch } from "@/components/ui/switch";
 import { ClosureEditorProvider } from "@/contexts/ClosureEditorContext";
 import { RouteEditorProvider, useRouteEditor } from "@/contexts/RouteEditorContext";
 import { $fetch } from "@/lib/http/client";
-import type { IApiResponse } from "@/lib/http/ResponseComposer";
+import type { IApiResponse } from "@/lib/http/ApiResponseBuilder";
 
 import RouteMapComponent from "./MapComponent";
 

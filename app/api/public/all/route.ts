@@ -1,5 +1,5 @@
 import * as closure from "@/lib/management/closure-manager";
-import { ResponseComposer, StatusCodes } from "@/lib/http";
+import { ApiResponseBuilder, StatusCodes } from "@/lib/http";
 import * as region from "@/lib/management/region-manager";
 import * as route from "@/lib/management/route-manager";
 import { unwrap } from "@/lib/one-of";
@@ -12,16 +12,16 @@ export async function GET() {
       unwrap(closure.getAllClosures(true)),
     ]);
 
-    return ResponseComposer.compose(StatusCodes.Status200Ok)
-      .setBody({
+    return ApiResponseBuilder.create(StatusCodes.Status200Ok)
+      .withBody({
         routes: allRoutes,
         regions: allRegions,
         closure: allClosures,
       })
-      .orchestrate();
+      .build();
   } catch {
-    return ResponseComposer.composeError(StatusCodes.Status500InternalServerError, [{
+    return ApiResponseBuilder.createError(StatusCodes.Status500InternalServerError, [{
       message: "Unknown error occurred.",
-    }]).orchestrate();
+    }]).build();
   }
 }

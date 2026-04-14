@@ -1,6 +1,6 @@
 import type { NextRequest } from "next/server";
 
-import { ResponseComposer, StatusCodes } from "@/lib/http";
+import { ApiResponseBuilder, StatusCodes } from "@/lib/http";
 import * as route from "@/lib/management/route-manager";
 import { tryParseJson } from "@/lib/http/RequestUtilities";
 import {oneOf, unwrap, UnwrappedException} from "@/lib/one-of";
@@ -15,20 +15,20 @@ export async function GET(
 ) {
   const currentSession = await session.verify();
   if (currentSession.code !== SessionCode.Ok) {
-    return ResponseComposer.composeFromSessionValidation(currentSession)
-      .orchestrate();
+    return ApiResponseBuilder.createFromSessionValidation(currentSession)
+      .build();
   }
 
   const { id } = await params;
   if (!utils.isUuid(id)) {
-    return ResponseComposer.composeError(StatusCodes.Status404NotFound, [{ message: "No such route found." }])
-      .orchestrate();
+    return ApiResponseBuilder.createError(StatusCodes.Status404NotFound, [{ message: "No such route found." }])
+      .build();
   }
 
   const result = await route.getRouteById(id);
   return oneOf(result).match(
-    s => ResponseComposer.compose(200).setBody(s).orchestrate(),
-    e => ResponseComposer.composeFromFailure(e).orchestrate(),
+    s => ApiResponseBuilder.create(200).withBody(s).build(),
+    e => ApiResponseBuilder.createFromFailure(e).build(),
   );
 }
 
@@ -38,21 +38,21 @@ export async function POST(
 ) {
   const currentSession = await session.verify();
   if (currentSession.code !== SessionCode.Ok) {
-    return ResponseComposer.composeFromSessionValidation(currentSession)
-      .orchestrate();
+    return ApiResponseBuilder.createFromSessionValidation(currentSession)
+      .build();
   }
 
   const { id } = await params;
 
   if (!utils.isUuid(id)) {
-    return ResponseComposer.composeError(StatusCodes.Status404NotFound, [{ message: "No such route found." }])
-      .orchestrate();
+    return ApiResponseBuilder.createError(StatusCodes.Status404NotFound, [{ message: "No such route found." }])
+      .build();
   }
 
   const data = await tryParseJson<RequestBody>(request);
   if (!data) {
-    return ResponseComposer.composeError(StatusCodes.Status400BadRequest, [{ message: "Invalid Payload." }])
-      .orchestrate();
+    return ApiResponseBuilder.createError(StatusCodes.Status400BadRequest, [{ message: "Invalid Payload." }])
+      .build();
   }
 
   // Validate the body first.
@@ -107,13 +107,13 @@ export async function POST(
     allowUnvalidatedProperties: false,
   });
   if (!validation.ok) {
-    return ResponseComposer.composeError(StatusCodes.Status400BadRequest, [validation.errors!])
-      .orchestrate();
+    return ApiResponseBuilder.createError(StatusCodes.Status400BadRequest, [validation.errors!])
+      .build();
   }
 
   if (data.snapshotState === "ready" && currentSession.user?.role !== "administrator_user") {
-    return ResponseComposer.composeError(StatusCodes.Status403Forbidden, [{ message: "Insufficient permissions to set ready state." }])
-      .orchestrate();
+    return ApiResponseBuilder.createError(StatusCodes.Status403Forbidden, [{ message: "Insufficient permissions to set ready state." }])
+      .build();
   }
 
   const [polylineGoingTo, polylineGoingBack] = await Promise.all([
@@ -143,9 +143,9 @@ export async function POST(
         payload: data,
       });
 
-      return ResponseComposer.compose(StatusCodes.Status200Ok).setBody(s).orchestrate();
+      return ApiResponseBuilder.create(StatusCodes.Status200Ok).withBody(s).build();
     },
-    e => ResponseComposer.composeFromFailure(e).orchestrate(),
+    e => ApiResponseBuilder.createFromFailure(e).build(),
   );
 }
 
@@ -155,22 +155,22 @@ export async function PATCH(
 ) {
   const currentSession = await session.verify("administrator_user");
   if (currentSession.code !== SessionCode.Ok) {
-    return ResponseComposer.composeFromSessionValidation(currentSession)
-      .orchestrate();
+    return ApiResponseBuilder.createFromSessionValidation(currentSession)
+      .build();
   }
 
   const { id } = await params;
 
   // Invalid ID format.
   if (!utils.isUuid(id)) {
-    return ResponseComposer.composeError(StatusCodes.Status404NotFound, [{ message: "No closure found with given ID." }])
-      .orchestrate();
+    return ApiResponseBuilder.createError(StatusCodes.Status404NotFound, [{ message: "No closure found with given ID." }])
+      .build();
   }
 
   const data = await tryParseJson<PatchBody>(request);
   if (!data) {
-    return ResponseComposer.composeError(StatusCodes.Status400BadRequest, [{ message: "Invalid Payload." }])
-      .orchestrate();
+    return ApiResponseBuilder.createError(StatusCodes.Status400BadRequest, [{ message: "Invalid Payload." }])
+      .build();
   }
 
   // Validate the body first.
@@ -182,9 +182,9 @@ export async function PATCH(
     allowUnvalidatedProperties: false,
   });
   if (!validation.ok) {
-    return ResponseComposer
-      .composeError(StatusCodes.Status400BadRequest, validation.errors!)
-      .orchestrate();
+    return ApiResponseBuilder
+      .createError(StatusCodes.Status400BadRequest, validation.errors!)
+      .build();
   }
 
   const result = await route.togglePublic(id, data.isPublic);
@@ -204,9 +204,9 @@ export async function PATCH(
         payload: data,
       });
 
-      return ResponseComposer.compose(StatusCodes.Status200Ok).setBody(s).orchestrate();
+      return ApiResponseBuilder.create(StatusCodes.Status200Ok).withBody(s).build();
     },
-    e => ResponseComposer.composeFromFailure(e).orchestrate(),
+    e => ApiResponseBuilder.createFromFailure(e).build(),
   );
 }
 
@@ -216,16 +216,16 @@ export async function DELETE(
 ) {
   const currentSession = await session.verify();
   if (currentSession.code !== SessionCode.Ok) {
-    return ResponseComposer.composeFromSessionValidation(currentSession)
-      .orchestrate();
+    return ApiResponseBuilder.createFromSessionValidation(currentSession)
+      .build();
   }
 
   const { id } = await params;
 
   // Invalid ID format.
   if (!utils.isUuid(id)) {
-    return ResponseComposer.composeError(StatusCodes.Status400BadRequest, [{ message: "Invalid route ID" }])
-      .orchestrate();
+    return ApiResponseBuilder.createError(StatusCodes.Status400BadRequest, [{ message: "Invalid route ID" }])
+      .build();
   }
 
   try {
@@ -233,9 +233,9 @@ export async function DELETE(
 
     // Content is not deletable by a contributor
     if (!isDeletable && currentSession.user!.role !== "administrator_user") {
-      return ResponseComposer
-        .composeError(StatusCodes.Status403Forbidden, { message: "Insufficient permissions" })
-        .orchestrate();
+      return ApiResponseBuilder
+        .createError(StatusCodes.Status403Forbidden, { message: "Insufficient permissions" })
+        .build();
     }
 
     const result = await route.removeRoute(id);
@@ -254,17 +254,17 @@ export async function DELETE(
           entityId: id,
         });
 
-        return ResponseComposer.compose(StatusCodes.Status200Ok)
-          .setBody({ ok: true })
-          .orchestrate();
+        return ApiResponseBuilder.create(StatusCodes.Status200Ok)
+          .withBody({ ok: true })
+          .build();
       },
-      e => ResponseComposer.composeFromFailure(e).orchestrate(),
+      e => ApiResponseBuilder.createFromFailure(e).build(),
     );
   } catch (e) {
     const err = e as unknown as UnwrappedException;
-    return ResponseComposer
-      .composeError(StatusCodes.Status500InternalServerError, { message: err.message })
-      .orchestrate();
+    return ApiResponseBuilder
+      .createError(StatusCodes.Status500InternalServerError, { message: err.message })
+      .build();
   }
 }
 

@@ -1,7 +1,7 @@
 import type { NextRequest } from "next/server";
 
 import { getRoutePolyline } from "@/lib/osm/valhalla";
-import { ResponseComposer, StatusCodes } from "@/lib/http";
+import { ApiResponseBuilder, StatusCodes } from "@/lib/http";
 import * as route from "@/lib/management/route-manager";
 import { tryParseJson } from "@/lib/http/RequestUtilities";
 import { oneOf } from "@/lib/one-of";
@@ -16,19 +16,19 @@ export async function GET(
   const { id, snapshotId } = await params;
 
   if (!utils.isUuid(id)) {
-    return ResponseComposer.composeError(StatusCodes.Status404NotFound, [{ message: "No route found with the given ID." }])
-      .orchestrate();
+    return ApiResponseBuilder.createError(StatusCodes.Status404NotFound, [{ message: "No route found with the given ID." }])
+      .build();
   }
 
   if (!utils.isUuid(snapshotId)) {
-    return ResponseComposer.composeError(StatusCodes.Status404NotFound, [{ message: "No snapshot found with the given ID." }])
-      .orchestrate();
+    return ApiResponseBuilder.createError(StatusCodes.Status404NotFound, [{ message: "No snapshot found with the given ID." }])
+      .build();
   }
 
   const result = await route.getRouteSnapshotById(id, snapshotId);
   return oneOf(result).match(
-    s => ResponseComposer.compose(StatusCodes.Status200Ok).setBody(s).orchestrate(),
-    e => ResponseComposer.composeFromFailure(e).orchestrate(),
+    s => ApiResponseBuilder.create(StatusCodes.Status200Ok).withBody(s).build(),
+    e => ApiResponseBuilder.createFromFailure(e).build(),
   );
 }
 
@@ -38,20 +38,20 @@ export async function PUT(
 ) {
   const currentSession = await session.verify();
   if (currentSession.code !== SessionCode.Ok) {
-    return ResponseComposer.composeFromSessionValidation(currentSession)
-      .orchestrate();
+    return ApiResponseBuilder.createFromSessionValidation(currentSession)
+      .build();
   }
 
   const { id, snapshotId } = await params;
 
   if (!utils.isUuid(id)) {
-    return ResponseComposer.composeError(StatusCodes.Status404NotFound, [{ message: "No such route found." }])
-      .orchestrate();
+    return ApiResponseBuilder.createError(StatusCodes.Status404NotFound, [{ message: "No such route found." }])
+      .build();
   }
 
   if (!utils.isUuid(snapshotId)) {
-    return ResponseComposer.composeError(StatusCodes.Status404NotFound, [{ message: "No such snapshot found." }])
-      .orchestrate();
+    return ApiResponseBuilder.createError(StatusCodes.Status404NotFound, [{ message: "No such snapshot found." }])
+      .build();
   }
 
   const result = await route.copySnapshot(id, snapshotId, currentSession.user!.id);
@@ -71,9 +71,9 @@ export async function PUT(
         metadata: { sourceSnapshotId: snapshotId },
       });
 
-      return ResponseComposer.compose(StatusCodes.Status200Ok).setBody(s).orchestrate();
+      return ApiResponseBuilder.create(StatusCodes.Status200Ok).withBody(s).build();
     },
-    e => ResponseComposer.composeFromFailure(e).orchestrate(),
+    e => ApiResponseBuilder.createFromFailure(e).build(),
   );
 }
 
@@ -83,26 +83,26 @@ export async function PATCH(
 ) {
   const currentSession = await session.verify();
   if (currentSession.code !== SessionCode.Ok) {
-    return ResponseComposer.composeFromSessionValidation(currentSession)
-      .orchestrate();
+    return ApiResponseBuilder.createFromSessionValidation(currentSession)
+      .build();
   }
 
   const { id, snapshotId } = await params;
 
   if (!utils.isUuid(id)) {
-    return ResponseComposer.composeError(StatusCodes.Status404NotFound, [{ message: "No route found with the given ID." }])
-      .orchestrate();
+    return ApiResponseBuilder.createError(StatusCodes.Status404NotFound, [{ message: "No route found with the given ID." }])
+      .build();
   }
 
   if (!utils.isUuid(snapshotId)) {
-    return ResponseComposer.composeError(StatusCodes.Status404NotFound, [{ message: "No snapshot found with the given ID." }])
-      .orchestrate();
+    return ApiResponseBuilder.createError(StatusCodes.Status404NotFound, [{ message: "No snapshot found with the given ID." }])
+      .build();
   }
 
   const data = await tryParseJson<PatchRequestBody>(request);
   if (!data) {
-    return ResponseComposer.composeError(StatusCodes.Status400BadRequest, [{ message: "Invalid payload." }])
-      .orchestrate();
+    return ApiResponseBuilder.createError(StatusCodes.Status400BadRequest, [{ message: "Invalid payload." }])
+      .build();
   }
 
   const hasAnyPatchField =
@@ -117,8 +117,8 @@ export async function PATCH(
     || data.availableTo !== undefined
     || data.points !== undefined;
   if (!hasAnyPatchField) {
-    return ResponseComposer.composeError(StatusCodes.Status400BadRequest, [{ message: "No update fields provided." }])
-      .orchestrate();
+    return ApiResponseBuilder.createError(StatusCodes.Status400BadRequest, [{ message: "No update fields provided." }])
+      .build();
   }
 
   const validation = await validator.validate<PatchRequestBody>(data, {
@@ -175,19 +175,19 @@ export async function PATCH(
     allowUnvalidatedProperties: false,
   });
   if (!validation.ok) {
-    return ResponseComposer.composeError(StatusCodes.Status400BadRequest, [validation.errors!])
-      .orchestrate();
+    return ApiResponseBuilder.createError(StatusCodes.Status400BadRequest, [validation.errors!])
+      .build();
   }
 
   const timeRangeValidation = utils.isValidTimeRange(data.availableFrom, data.availableTo);
   if (!timeRangeValidation) {
-    return ResponseComposer.composeError(StatusCodes.Status400BadRequest, [{ message: "Invalid time range." }])
-      .orchestrate();
+    return ApiResponseBuilder.createError(StatusCodes.Status400BadRequest, [{ message: "Invalid time range." }])
+      .build();
   }
 
   if (data.snapshotState === "ready" && currentSession.user?.role !== "administrator_user") {
-    return ResponseComposer.composeError(StatusCodes.Status403Forbidden, [{ message: "Insufficient permissions to set ready state." }])
-      .orchestrate();
+    return ApiResponseBuilder.createError(StatusCodes.Status403Forbidden, [{ message: "Insufficient permissions to set ready state." }])
+      .build();
   }
 
   const patchPayload: route.UpdateRouteParameters = { ...data };
@@ -219,11 +219,11 @@ export async function PATCH(
         payload: data,
       });
 
-      return ResponseComposer.compose(StatusCodes.Status200Ok)
-        .setBody(success)
-        .orchestrate();
+      return ApiResponseBuilder.create(StatusCodes.Status200Ok)
+        .withBody(success)
+        .build();
     },
-    e => ResponseComposer.composeFromFailure(e).orchestrate(),
+    e => ApiResponseBuilder.createFromFailure(e).build(),
   );
 }
 
@@ -233,20 +233,20 @@ export async function DELETE(
 ) {
   const currentSession = await session.verify();
   if (currentSession.code !== SessionCode.Ok) {
-    return ResponseComposer.composeFromSessionValidation(currentSession)
-      .orchestrate();
+    return ApiResponseBuilder.createFromSessionValidation(currentSession)
+      .build();
   }
 
   const { id, snapshotId } = await params;
 
   if (!utils.isUuid(id)) {
-    return ResponseComposer.composeError(StatusCodes.Status404NotFound, [{ message: "No route found with the given ID." }])
-      .orchestrate();
+    return ApiResponseBuilder.createError(StatusCodes.Status404NotFound, [{ message: "No route found with the given ID." }])
+      .build();
   }
 
   if (!utils.isUuid(snapshotId)) {
-    return ResponseComposer.composeError(StatusCodes.Status404NotFound, [{ message: "No snapshot found with the given ID." }])
-      .orchestrate();
+    return ApiResponseBuilder.createError(StatusCodes.Status404NotFound, [{ message: "No snapshot found with the given ID." }])
+      .build();
   }
 
   const result = await route.deleteSnapshot(id, snapshotId);
@@ -265,11 +265,11 @@ export async function DELETE(
         entityId: snapshotId,
       });
 
-      return ResponseComposer.compose(StatusCodes.Status200Ok)
-        .setBody(success)
-        .orchestrate();
+      return ApiResponseBuilder.create(StatusCodes.Status200Ok)
+        .withBody(success)
+        .build();
     },
-    e => ResponseComposer.composeFromFailure(e).orchestrate(),
+    e => ApiResponseBuilder.createFromFailure(e).build(),
   );
 }
 

@@ -2,7 +2,7 @@ import type { NextRequest } from "next/server";
 
 import * as accounts from "@/lib/accounts";
 import { session as auth, SessionCode } from "@/lib/auth";
-import { ResponseComposer, StatusCodes } from "@/lib/http";
+import { ApiResponseBuilder, StatusCodes } from "@/lib/http";
 import { oneOf } from "@/lib/one-of";
 import { utils } from "@/lib/validator";
 import { logActivity } from "@/lib/management/activity-logger";
@@ -13,15 +13,15 @@ export async function DELETE(
 ) {
   const session = await auth.verify("administrator_user");
   if (!session || session.code !== SessionCode.Ok) {
-    return ResponseComposer.composeFromSessionValidation(session).orchestrate();
+    return ApiResponseBuilder.createFromSessionValidation(session).build();
   }
 
   // Get ID from parameter
   const { id } = await params;
   if (!utils.isUuid(id)) {
-    return ResponseComposer
-      .composeError(StatusCodes.Status400BadRequest, "Invalid ID.")
-      .orchestrate();
+    return ApiResponseBuilder
+      .createError(StatusCodes.Status400BadRequest, "Invalid ID.")
+      .build();
   }
 
   // Attempt to delete
@@ -44,9 +44,9 @@ export async function DELETE(
         },
       });
 
-      return ResponseComposer.compose(StatusCodes.Status204NoContent).orchestrate();
+      return ApiResponseBuilder.create(StatusCodes.Status204NoContent).build();
     },
-    e => ResponseComposer.composeFromFailure(e).orchestrate(),
+    e => ApiResponseBuilder.createFromFailure(e).build(),
   );
 }
 
@@ -56,16 +56,16 @@ export async function POST(
 ) {
   const session = await auth.verify("administrator_user");
   if (!session || session.code !== SessionCode.Ok) {
-    return ResponseComposer
-      .composeFromSessionValidation(session)
-      .orchestrate();
+    return ApiResponseBuilder
+      .createFromSessionValidation(session)
+      .build();
   }
 
   const { id } = await params;
   if (!utils.isUuid(id)) {
-    return ResponseComposer
-      .composeError(StatusCodes.Status400BadRequest, "Invalid ID.")
-      .orchestrate();
+    return ApiResponseBuilder
+      .createError(StatusCodes.Status400BadRequest, "Invalid ID.")
+      .build();
   }
 
   const result = await accounts.resendInvitation(id);
@@ -88,10 +88,10 @@ export async function POST(
         },
       });
 
-      return ResponseComposer.compose(StatusCodes.Status200Ok)
-        .setBody({ errors: s.errors, sent: !Boolean(s.errors) })
-        .orchestrate();
+      return ApiResponseBuilder.create(StatusCodes.Status200Ok)
+        .withBody({ errors: s.errors, sent: !Boolean(s.errors) })
+        .build();
     },
-    e => ResponseComposer.composeFromFailure(e).orchestrate(),
+    e => ApiResponseBuilder.createFromFailure(e).build(),
   );
 }

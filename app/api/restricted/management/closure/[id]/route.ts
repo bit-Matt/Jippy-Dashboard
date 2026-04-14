@@ -1,7 +1,7 @@
 import type { NextRequest } from "next/server";
 
 import * as closure from "@/lib/management/closure-manager";
-import { ResponseComposer, StatusCodes } from "@/lib/http";
+import { ApiResponseBuilder, StatusCodes } from "@/lib/http";
 import { tryParseJson } from "@/lib/http/RequestUtilities";
 import {oneOf, unwrap, UnwrappedException} from "@/lib/one-of";
 import { utils, validator } from "@/lib/validator";
@@ -14,22 +14,22 @@ export async function PATCH(
 ) {
   const currentSession = await session.verify();
   if (currentSession.code !== SessionCode.Ok) {
-    return ResponseComposer.composeFromSessionValidation(currentSession)
-      .orchestrate();
+    return ApiResponseBuilder.createFromSessionValidation(currentSession)
+      .build();
   }
 
   const { id } = await params;
 
   // Invalid ID format.
   if (!utils.isUuid(id)) {
-    return ResponseComposer.composeError(StatusCodes.Status404NotFound, [{ message: "No closure found with given ID." }])
-      .orchestrate();
+    return ApiResponseBuilder.createError(StatusCodes.Status404NotFound, [{ message: "No closure found with given ID." }])
+      .build();
   }
 
   const data = await tryParseJson<PatchRequestBody>(request);
   if (!data) {
-    return ResponseComposer.composeError(StatusCodes.Status400BadRequest, [{ message: "Invalid Payload." }])
-      .orchestrate();
+    return ApiResponseBuilder.createError(StatusCodes.Status400BadRequest, [{ message: "Invalid Payload." }])
+      .build();
   }
 
   // Validate the body first.
@@ -38,8 +38,8 @@ export async function PATCH(
     || data.closureDescription !== undefined
     || data.points !== undefined;
   if (!hasAnyPatchField) {
-    return ResponseComposer.composeError(StatusCodes.Status400BadRequest, [{ message: "No update fields provided." }])
-      .orchestrate();
+    return ApiResponseBuilder.createError(StatusCodes.Status400BadRequest, [{ message: "No update fields provided." }])
+      .build();
   }
 
   const validation = await validator.validate<PatchRequestBody>(data, {
@@ -76,8 +76,8 @@ export async function PATCH(
     allowUnvalidatedProperties: false,
   });
   if (!validation.ok) {
-    return ResponseComposer.composeError(StatusCodes.Status400BadRequest, [validation.errors!])
-      .orchestrate();
+    return ApiResponseBuilder.createError(StatusCodes.Status400BadRequest, [validation.errors!])
+      .build();
   }
 
   const result = await closure.updateClosure(id, data);
@@ -97,11 +97,11 @@ export async function PATCH(
         payload: data,
       });
 
-      return ResponseComposer.compose(StatusCodes.Status200Ok)
-        .setBody(success)
-        .orchestrate();
+      return ApiResponseBuilder.create(StatusCodes.Status200Ok)
+        .withBody(success)
+        .build();
     },
-    e => ResponseComposer.composeFromFailure(e).orchestrate(),
+    e => ApiResponseBuilder.createFromFailure(e).build(),
   );
 }
 
@@ -111,16 +111,16 @@ export async function DELETE(
 ) {
   const currentSession = await session.verify();
   if (currentSession.code !== SessionCode.Ok) {
-    return ResponseComposer.composeFromSessionValidation(currentSession)
-      .orchestrate();
+    return ApiResponseBuilder.createFromSessionValidation(currentSession)
+      .build();
   }
 
   const { id } = await params;
 
   // Invalid ID format.
   if (!utils.isUuid(id)) {
-    return ResponseComposer.composeError(StatusCodes.Status404NotFound, [{ message: "Invalid closure ID" }])
-      .orchestrate();
+    return ApiResponseBuilder.createError(StatusCodes.Status404NotFound, [{ message: "Invalid closure ID" }])
+      .build();
   }
 
   try {
@@ -128,8 +128,8 @@ export async function DELETE(
 
     // Content is not deletable
     if (!isDeletable && currentSession.user!.role !== "administrator_user") {
-      return ResponseComposer.composeError(StatusCodes.Status403Forbidden, { message: "Insufficient Permissions" })
-        .orchestrate();
+      return ApiResponseBuilder.createError(StatusCodes.Status403Forbidden, { message: "Insufficient Permissions" })
+        .build();
     }
 
     // Delete the closure
@@ -149,17 +149,17 @@ export async function DELETE(
           entityId: id,
         });
 
-        return ResponseComposer.compose(StatusCodes.Status200Ok)
-          .setBody({ ok: true })
-          .orchestrate();
+        return ApiResponseBuilder.create(StatusCodes.Status200Ok)
+          .withBody({ ok: true })
+          .build();
       },
-      e => ResponseComposer.composeFromFailure(e).orchestrate(),
+      e => ApiResponseBuilder.createFromFailure(e).build(),
     );
   } catch (e) {
     const err = e as unknown as UnwrappedException;
-    return ResponseComposer
-      .composeError(StatusCodes.Status500InternalServerError, { message: err.message })
-      .orchestrate();
+    return ApiResponseBuilder
+      .createError(StatusCodes.Status500InternalServerError, { message: err.message })
+      .build();
   }
 }
 

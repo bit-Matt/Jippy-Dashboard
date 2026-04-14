@@ -1,5 +1,5 @@
 import { session, SessionCode } from "@/lib/auth";
-import { ResponseComposer, StatusCodes } from "@/lib/http";
+import { ApiResponseBuilder, StatusCodes } from "@/lib/http";
 import { getActivityById } from "@/lib/management/activity-logger";
 
 export async function GET(
@@ -8,20 +8,20 @@ export async function GET(
 ) {
   const currentSession = await session.verify("administrator_user");
   if (currentSession.code !== SessionCode.Ok) {
-    return ResponseComposer.composeFromSessionValidation(currentSession)
-      .orchestrate();
+    return ApiResponseBuilder.createFromSessionValidation(currentSession)
+      .build();
   }
 
   const { id } = await params;
   const row = await getActivityById(id);
 
   if (!row) {
-    return ResponseComposer.composeError(StatusCodes.Status404NotFound, [{
+    return ApiResponseBuilder.createError(StatusCodes.Status404NotFound, [{
       message: "No activity log found.",
-    }]).orchestrate();
+    }]).build();
   }
 
-  return ResponseComposer.compose(StatusCodes.Status200Ok)
-    .setBody(row)
-    .orchestrate();
+  return ApiResponseBuilder.create(StatusCodes.Status200Ok)
+    .withBody(row)
+    .build();
 }
