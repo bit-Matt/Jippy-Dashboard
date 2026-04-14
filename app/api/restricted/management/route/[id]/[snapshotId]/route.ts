@@ -9,35 +9,6 @@ import { utils, validator } from "@/lib/validator";
 import { session, SessionCode } from "@/lib/auth";
 import { logActivity } from "@/lib/management/activity-logger";
 
-const TIME_PATTERN = /^([01]\d|2[0-3]):([0-5]\d)$/;
-
-const validateTimeRange = (availableFrom?: string, availableTo?: string) => {
-  if (availableFrom === undefined && availableTo === undefined) {
-    return { ok: true as const };
-  }
-
-  if (availableFrom === undefined || availableTo === undefined) {
-    return { ok: false as const, error: "Both availableFrom and availableTo are required when updating route availability." };
-  }
-
-  const from = availableFrom;
-  const to = availableTo;
-
-  if (!TIME_PATTERN.test(from)) {
-    return { ok: false as const, error: "Invalid availableFrom time. Use HH:mm format." };
-  }
-
-  if (!TIME_PATTERN.test(to)) {
-    return { ok: false as const, error: "Invalid availableTo time. Use HH:mm format." };
-  }
-
-  if (from > to) {
-    return { ok: false as const, error: "availableFrom must be earlier than or equal to availableTo." };
-  }
-
-  return { ok: true as const };
-};
-
 export async function GET(
   request: NextRequest,
   { params }: RouteContext<"/api/restricted/management/route/[id]/[snapshotId]">,
@@ -54,7 +25,7 @@ export async function GET(
       .orchestrate();
   }
 
-  const result = await route.getRouteById(id, snapshotId);
+  const result = await route.getRouteSnapshotById(id, snapshotId);
   return oneOf(result).match(
     s => ResponseComposer.compose(StatusCodes.Status200Ok).setBody(s).orchestrate(),
     e => ResponseComposer.composeFromFailure(e).orchestrate(),
@@ -166,16 +137,8 @@ export async function PATCH(
       routeColor: { type: "string", formatter: "hex-color" },
       routeDetails: { type: "string", formatter: "non-empty-string" },
       vehicleTypeId: { type: "string", formatter: "uuid" },
-      availableFrom: { type: "string", formatterFn: async (value) => {
-        if (value === undefined) return { ok: true };
-        if (!TIME_PATTERN.test(value)) return { ok: false, error: "Invalid availableFrom time. Use HH:mm format." };
-        return { ok: true };
-      } },
-      availableTo: { type: "string", formatterFn: async (value) => {
-        if (value === undefined) return { ok: true };
-        if (!TIME_PATTERN.test(value)) return { ok: false, error: "Invalid availableTo time. Use HH:mm format." };
-        return { ok: true };
-      } },
+      availableFrom: { type: "string", formatter: "time-hh-mm" },
+      availableTo: { type: "string", formatter: "time-hh-mm" },
       points: {
         type: "object",
         formatterFn: async (values) => {
@@ -216,9 +179,9 @@ export async function PATCH(
       .orchestrate();
   }
 
-  const timeRangeValidation = validateTimeRange(data.availableFrom, data.availableTo);
-  if (!timeRangeValidation.ok) {
-    return ResponseComposer.composeError(StatusCodes.Status400BadRequest, [{ message: timeRangeValidation.error }])
+  const timeRangeValidation = utils.isValidTimeRange(data.availableFrom, data.availableTo);
+  if (!timeRangeValidation) {
+    return ResponseComposer.composeError(StatusCodes.Status400BadRequest, [{ message: "Invalid time range." }])
       .orchestrate();
   }
 

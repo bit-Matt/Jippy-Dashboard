@@ -1,2 +1,0 @@
-CREATE TYPE "public"."route_sequence_type" AS ENUM('going_to', 'going_back');--> statement-breakpoint
-ALTER TABLE "routeSequences" ADD COLUMN "sequence_type" "route_sequence_type" DEFAULT 'going_to' NOT NULL;

@@ -3,11 +3,34 @@ import type { NextRequest } from "next/server";
 import { ResponseComposer, StatusCodes } from "@/lib/http";
 import * as route from "@/lib/management/route-manager";
 import { tryParseJson } from "@/lib/http/RequestUtilities";
-import { oneOf } from "@/lib/one-of";
+import {oneOf, unwrap, UnwrappedException} from "@/lib/one-of";
 import { getRoutePolyline } from "@/lib/osm/valhalla";
 import { utils, validator } from "@/lib/validator";
 import { session, SessionCode } from "@/lib/auth";
 import { logActivity } from "@/lib/management/activity-logger";
+
+export async function GET(
+  request: NextRequest,
+  { params }: RouteContext<"/api/restricted/management/route/[id]">,
+) {
+  const currentSession = await session.verify();
+  if (currentSession.code !== SessionCode.Ok) {
+    return ResponseComposer.composeFromSessionValidation(currentSession)
+      .orchestrate();
+  }
+
+  const { id } = await params;
+  if (!utils.isUuid(id)) {
+    return ResponseComposer.composeError(StatusCodes.Status404NotFound, [{ message: "No such route found." }])
+      .orchestrate();
+  }
+
+  const result = await route.getRouteById(id);
+  return oneOf(result).match(
+    s => ResponseComposer.compose(200).setBody(s).orchestrate(),
+    e => ResponseComposer.composeFromFailure(e).orchestrate(),
+  );
+}
 
 export async function POST(
   request: NextRequest,
@@ -49,6 +72,8 @@ export async function POST(
       routeColor: { type: "string", formatter: "hex-color" },
       routeDetails: { type: "string", formatter: "non-empty-string" },
       vehicleTypeId: { type: "string", formatter: "uuid" },
+      availableFrom: { type: "string", formatter: "time-hh-mm" },
+      availableTo: { type: "string", formatter: "time-hh-mm" },
       points: {
         type: "object",
         formatterFn: async (values) => {
@@ -109,12 +134,12 @@ export async function POST(
         actorRole: currentSession.user!.role,
         category: "write_operation",
         action: "route_snapshot_created",
-        summary: `Created route snapshot ${s.snapshotName}`,
+        summary: `Created route snapshot ${data.snapshotName}`,
         routePath: `/api/restricted/management/route/${id}`,
         httpMethod: "POST",
         statusCode: StatusCodes.Status200Ok,
         entityType: "route_snapshot",
-        entityId: s.activeSnapshotId,
+        entityId: s.id,
         payload: data,
       });
 
@@ -142,18 +167,18 @@ export async function PATCH(
       .orchestrate();
   }
 
-  const data = await tryParseJson<SwitchPatchBody>(request);
+  const data = await tryParseJson<PatchBody>(request);
   if (!data) {
     return ResponseComposer.composeError(StatusCodes.Status400BadRequest, [{ message: "Invalid Payload." }])
       .orchestrate();
   }
 
   // Validate the body first.
-  const validation = await validator.validate<SwitchPatchBody>(data, {
+  const validation = await validator.validate<PatchBody>(data, {
     properties: {
-      snapshotId: { type: "string", formatter: "uuid" },
+      isPublic: { type: "boolean" },
     },
-    requiredProperties: ["snapshotId"],
+    requiredProperties: ["isPublic"],
     allowUnvalidatedProperties: false,
   });
   if (!validation.ok) {
@@ -162,15 +187,15 @@ export async function PATCH(
       .orchestrate();
   }
 
-  const result = await route.switchSnapshot(id, data.snapshotId);
+  const result = await route.togglePublic(id, data.isPublic);
   return oneOf(result).match(
     s => {
       void logActivity({
         actorUserId: currentSession.user!.id,
         actorRole: currentSession.user!.role,
-        category: "active_snapshot_changed",
-        action: "route_active_snapshot_changed",
-        summary: `Switched active snapshot for route ${id}`,
+        category: "publish_state_changed",
+        action: "route_publish_state_changed",
+        summary: `Switch publication status for ID: ${id}`,
         routePath: `/api/restricted/management/route/${id}`,
         httpMethod: "PATCH",
         statusCode: StatusCodes.Status200Ok,
@@ -189,7 +214,7 @@ export async function DELETE(
   request: NextRequest,
   { params }: RouteContext<"/api/restricted/management/route/[id]">,
 ) {
-  const currentSession = await session.verify("administrator_user");
+  const currentSession = await session.verify();
   if (currentSession.code !== SessionCode.Ok) {
     return ResponseComposer.composeFromSessionValidation(currentSession)
       .orchestrate();
@@ -203,32 +228,48 @@ export async function DELETE(
       .orchestrate();
   }
 
-  const result = await route.removeRoute(id);
-  return oneOf(result).match(
-    () => {
-      void logActivity({
-        actorUserId: currentSession.user!.id,
-        actorRole: currentSession.user!.role,
-        category: "write_operation",
-        action: "route_deleted",
-        summary: `Deleted route ${id}`,
-        routePath: `/api/restricted/management/route/${id}`,
-        httpMethod: "DELETE",
-        statusCode: StatusCodes.Status200Ok,
-        entityType: "route",
-        entityId: id,
-      });
+  try {
+    const isDeletable = await unwrap(route.isAllContentDeletableByContributor(id));
 
-      return ResponseComposer.compose(StatusCodes.Status200Ok)
-        .setBody({ ok: true })
+    // Content is not deletable by a contributor
+    if (!isDeletable && currentSession.user!.role !== "administrator_user") {
+      return ResponseComposer
+        .composeError(StatusCodes.Status403Forbidden, { message: "Insufficient permissions" })
         .orchestrate();
-    },
-    e => ResponseComposer.composeFromFailure(e).orchestrate(),
-  );
+    }
+
+    const result = await route.removeRoute(id);
+    return oneOf(result).match(
+      () => {
+        void logActivity({
+          actorUserId: currentSession.user!.id,
+          actorRole: currentSession.user!.role,
+          category: "write_operation",
+          action: "route_deleted",
+          summary: `Deleted route ${id}`,
+          routePath: `/api/restricted/management/route/${id}`,
+          httpMethod: "DELETE",
+          statusCode: StatusCodes.Status200Ok,
+          entityType: "route",
+          entityId: id,
+        });
+
+        return ResponseComposer.compose(StatusCodes.Status200Ok)
+          .setBody({ ok: true })
+          .orchestrate();
+      },
+      e => ResponseComposer.composeFromFailure(e).orchestrate(),
+    );
+  } catch (e) {
+    const err = e as unknown as UnwrappedException;
+    return ResponseComposer
+      .composeError(StatusCodes.Status500InternalServerError, { message: err.message })
+      .orchestrate();
+  }
 }
 
-type SwitchPatchBody = {
-  snapshotId: string;
+type PatchBody = {
+  isPublic: boolean;
 }
 
 type RequestBody = {
@@ -239,6 +280,8 @@ type RequestBody = {
   routeColor: string;
   routeDetails: string;
   vehicleTypeId: string;
+  availableFrom: string;
+  availableTo: string;
   points: {
     goingTo: Array<{
       sequence: number;

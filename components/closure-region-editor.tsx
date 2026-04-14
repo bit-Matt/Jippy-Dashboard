@@ -2,73 +2,28 @@
 
 import { ChevronLeft, PenTool, Trash2 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-import useSWR from "swr";
 
-import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { useClosureEditor } from "@/contexts/ClosureEditorContext";
+
 import { $fetch } from "@/lib/http/client";
 import type { IApiResponse } from "@/lib/http/ResponseComposer";
-import type { ClosureObject } from "@/lib/management/index";
-import { useClosureEditor } from "@/contexts/ClosureEditorContext";
+import type { ClosureObject } from "@/contracts/responses";
+import { getErrorMessage } from "@/contracts/parsers";
 
 interface ClosureRegionEditorProps {
   onSaved: () => void | Promise<void>;
 }
 
-const getErrorMessage = (error: unknown, fallbackMessage: string) => {
-  if (error instanceof Error && error.message) {
-    return error.message;
-  }
-
-  if (typeof error === "string" && error.trim().length > 0) {
-    return error;
-  }
-
-  if (error && typeof error === "object") {
-    const errorRecord = error as {
-      message?: unknown;
-      title?: unknown;
-      details?: { message?: unknown } | unknown;
-    };
-
-    if (typeof errorRecord.message === "string" && errorRecord.message.trim().length > 0) {
-      return errorRecord.message;
-    }
-
-    if (
-      errorRecord.details &&
-      typeof errorRecord.details === "object" &&
-      "message" in errorRecord.details &&
-      typeof errorRecord.details.message === "string" &&
-      errorRecord.details.message.trim().length > 0
-    ) {
-      return errorRecord.details.message;
-    }
-
-    if (typeof errorRecord.title === "string" && errorRecord.title.trim().length > 0) {
-      return errorRecord.title;
-    }
-  }
-
-  return fallbackMessage;
-};
-
 export default function ClosureRegionEditor({ onSaved }: ClosureRegionEditorProps) {
   const {
     mode,
     activeClosureId,
-    activeSnapshotId,
     activeClosureTool,
     hasDefinedPolygon,
     draft,
@@ -76,13 +31,9 @@ export default function ClosureRegionEditor({ onSaved }: ClosureRegionEditorProp
     clearPolygon,
     setClosureName,
     setClosureDescription,
-    setVersionName,
-    setSnapshotState,
     finishClosureToolEditing,
     stopEditing,
   } = useClosureEditor();
-  const { data: me } = useSWR<MeResponse>("/api/me", $fetch);
-  const isAdministrator = me?.data?.data?.role === "administrator_user";
 
   const [isSaving, setIsSaving] = useState(false);
   const initialDraftRef = useRef<string>("");
@@ -101,14 +52,11 @@ export default function ClosureRegionEditor({ onSaved }: ClosureRegionEditorProp
     initialDraftRef.current = JSON.stringify({
       mode,
       activeClosureId,
-      activeSnapshotId,
-      versionName: draft.versionName,
-      snapshotState: draft.snapshotState,
       closureName: draft.closureName,
       closureDescription: draft.closureDescription,
       points: draft.points.map((point) => ({ sequence: point.sequence, point: point.point })),
     });
-  }, [activeClosureId, activeSnapshotId, draft, mode]);
+  }, [activeClosureId, draft, mode]);
 
   if (!draft || (mode !== "creating" && mode !== "editing")) {
     return null;
@@ -118,9 +66,6 @@ export default function ClosureRegionEditor({ onSaved }: ClosureRegionEditorProp
     const currentDraftState = JSON.stringify({
       mode,
       activeClosureId,
-      activeSnapshotId,
-      versionName: draft.versionName,
-      snapshotState: draft.snapshotState,
       closureName: draft.closureName,
       closureDescription: draft.closureDescription,
       points: draft.points.map((point) => ({ sequence: point.sequence, point: point.point })),
@@ -129,7 +74,9 @@ export default function ClosureRegionEditor({ onSaved }: ClosureRegionEditorProp
     const isDirty = initialDraftRef.current !== "" && currentDraftState !== initialDraftRef.current;
     if (isDirty) {
       const shouldDiscard = window.confirm("You have unsaved closure changes. Discard and go back?");
-      if (!shouldDiscard) return;
+      if (!shouldDiscard) {
+        return;
+      }
     }
 
     stopEditing();
@@ -165,20 +112,15 @@ export default function ClosureRegionEditor({ onSaved }: ClosureRegionEditorProp
         : "Failed to create closure region.";
 
       if (mode === "creating") {
-        const endpoint = activeClosureId
-          ? `/api/restricted/management/closure/${activeClosureId}`
-          : "/api/restricted/management/closure";
-        const { error } = await $fetch<IApiResponse<ClosureObject>>(endpoint, {
+        const { error } = await $fetch<IApiResponse<ClosureObject>>("/api/restricted/management/closure", {
           method: "POST",
           body: {
-            versionName: draftToSave.versionName,
-            snapshotState: draftToSave.snapshotState,
             closureName: draftToSave.closureName,
             closureDescription: draftToSave.closureDescription,
             shape: draftToSave.shape || "polygon",
-            points: draftToSave.points.map(p => ({
-              sequence: p.sequence,
-              point: p.point,
+            points: draftToSave.points.map((point) => ({
+              sequence: point.sequence,
+              point: point.point,
             })),
           },
         });
@@ -188,18 +130,21 @@ export default function ClosureRegionEditor({ onSaved }: ClosureRegionEditorProp
           alert(getErrorMessage(error, fallbackMessage));
           return;
         }
-      } else if (mode === "editing" && activeClosureId && activeSnapshotId) {
-        const { error } = await $fetch<IApiResponse<ClosureObject>>(`/api/restricted/management/closure/${activeClosureId}/${activeSnapshotId}`, {
+      } else if (mode === "editing") {
+        if (!activeClosureId) {
+          alert("Closure ID is unavailable. Please re-open the editor and try again.");
+          return;
+        }
+
+        const { error } = await $fetch<IApiResponse<ClosureObject>>(`/api/restricted/management/closure/${activeClosureId}`, {
           method: "PATCH",
           body: {
-            versionName: draftToSave.versionName,
-            snapshotState: draftToSave.snapshotState,
             closureName: draftToSave.closureName,
             closureDescription: draftToSave.closureDescription,
             shape: draftToSave.shape || "polygon",
-            points: draftToSave.points.map(p => ({
-              sequence: p.sequence,
-              point: p.point,
+            points: draftToSave.points.map((point) => ({
+              sequence: point.sequence,
+              point: point.point,
             })),
           },
         });
@@ -256,36 +201,11 @@ export default function ClosureRegionEditor({ onSaved }: ClosureRegionEditorProp
         <CardContent className="flex max-h-[75vh] flex-col space-y-5 overflow-hidden">
           <div className="space-y-3">
             <div className="grid gap-1.5">
-              <Label htmlFor="closure-version-name">Version Name</Label>
-              <Input
-                id="closure-version-name"
-                value={draft.versionName}
-                onChange={e => setVersionName(e.target.value)}
-                placeholder="e.g. v1"
-              />
-            </div>
-            <div className="grid gap-1.5">
-              <Label>Snapshot State</Label>
-              <Select
-                value={draft.snapshotState}
-                onValueChange={(value) => setSnapshotState(value as "wip" | "for_approval" | "ready")}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Select snapshot state" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="wip">WIP</SelectItem>
-                  <SelectItem value="for_approval">For Approval</SelectItem>
-                  {isAdministrator ? <SelectItem value="ready">Ready</SelectItem> : null}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="grid gap-1.5">
               <Label htmlFor="closure-name">Closure name</Label>
               <Input
                 id="closure-name"
                 value={draft.closureName}
-                onChange={e => setClosureName(e.target.value)}
+                onChange={(event) => setClosureName(event.target.value)}
                 placeholder="e.g. Downtown reroute closure"
               />
             </div>
@@ -294,7 +214,7 @@ export default function ClosureRegionEditor({ onSaved }: ClosureRegionEditorProp
               <Textarea
                 id="closure-description"
                 value={draft.closureDescription}
-                onChange={e => setClosureDescription(e.target.value)}
+                onChange={(event) => setClosureDescription(event.target.value)}
                 placeholder="Why this closure exists, expected impact, or advisory notes"
                 rows={4}
               />
@@ -344,14 +264,3 @@ export default function ClosureRegionEditor({ onSaved }: ClosureRegionEditorProp
     </div>
   );
 }
-
-type MeResponse = {
-  data: {
-    ok: boolean;
-    data: {
-      role: string;
-    };
-  };
-  error?: unknown;
-}
-

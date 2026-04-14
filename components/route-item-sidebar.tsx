@@ -2,25 +2,28 @@
 
 import { X } from "lucide-react";
 
-import type { AllResponse } from "@/components/app-sidebar";
+import type { RouteResponse } from "@/contracts/responses";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
+import { Switch } from "@/components/ui/switch";
 import { normalizeSnapshotStateLabel, type SnapshotListItem } from "@/components/snapshot-types";
 
 interface RouteItemSidebarProps {
-  route: AllResponse["routes"][0];
+  route: RouteResponse;
   snapshots: SnapshotListItem[];
   selectedSnapshotId: string | null;
   activeSnapshotId: string | null;
   isSnapshotLoading: boolean;
   isSnapshotActing: boolean;
   isDeletingRoute: boolean;
+  userRole: string | null;
   onClose: () => void;
   onDeleteRoute: () => void;
   onSelectSnapshot: (snapshotId: string) => void;
   onSetActiveSnapshot: (snapshotId: string) => void;
+  onTogglePublic: (isPublic: boolean) => void;
   onDeleteSnapshot: (snapshotId: string) => void;
   onEditSnapshot: (snapshotId: string) => void;
   onCloneSnapshot: (snapshotId: string) => void;
@@ -35,16 +38,20 @@ export default function RouteItemSidebar({
   isSnapshotLoading,
   isSnapshotActing,
   isDeletingRoute,
+  userRole,
   onClose,
   onDeleteRoute,
   onSelectSnapshot,
   onSetActiveSnapshot,
+  onTogglePublic,
   onDeleteSnapshot,
   onEditSnapshot,
   onCloneSnapshot,
   onCreateBlankSnapshot,
 }: RouteItemSidebarProps) {
+  const isAdministrator = userRole === "administrator_user";
   const selectedSnapshot = snapshots.find((snapshot) => snapshot.id === selectedSnapshotId) ?? null;
+  const displayedSnapshot = selectedSnapshot ?? snapshots.find((snapshot) => snapshot.id === activeSnapshotId) ?? null;
   const canSetActive = !!selectedSnapshot && selectedSnapshot.state === "ready" && selectedSnapshot.id !== activeSnapshotId;
   const canEditOrDelete = !!selectedSnapshot && selectedSnapshot.state !== "ready";
 
@@ -55,10 +62,12 @@ export default function RouteItemSidebar({
           <div>
             <CardTitle className="text-base">Route Details</CardTitle>
             <p className="text-sm font-medium">{route.routeNumber} - {route.routeName}</p>
-            <p className="text-muted-foreground text-xs">Version: {route.snapshotName}</p>
-            <Badge className="mt-1 w-fit" variant={route.snapshotState === "ready" ? "default" : "secondary"}>
-              {normalizeSnapshotStateLabel(route.snapshotState)}
-            </Badge>
+            <p className="text-muted-foreground text-xs">Version: {displayedSnapshot?.name ?? "Unknown"}</p>
+            {displayedSnapshot ? (
+              <Badge className="mt-1 w-fit" variant={displayedSnapshot.state === "ready" ? "default" : "secondary"}>
+                {normalizeSnapshotStateLabel(displayedSnapshot.state)}
+              </Badge>
+            ) : null}
           </div>
           <Button type="button" size="icon" variant="ghost" aria-label="Close route details" onClick={onClose}>
             <X className="h-4 w-4" />
@@ -66,6 +75,36 @@ export default function RouteItemSidebar({
         </div>
       </CardHeader>
       <CardContent className="max-h-[75vh] space-y-3 overflow-y-auto">
+        <div className="space-y-2 rounded-md border p-3">
+          <p className="text-xs text-muted-foreground">Public Visibility</p>
+          <div className="flex items-center justify-between gap-3">
+            <div className="min-w-0 flex-1">
+              <p
+                className={`text-sm font-medium ${
+                  route.isPublic ? "text-emerald-700" : "text-amber-700"
+                }`}
+              >
+                {route.isPublic ? "Published" : "Unpublished"}
+              </p>
+              <p className="text-muted-foreground text-xs">
+                {route.isPublic
+                  ? "Visible in public-facing map data."
+                  : "Only visible in management tools."}
+              </p>
+            </div>
+            {isAdministrator ? (
+              <Switch
+                checked={route.isPublic}
+                disabled={isSnapshotActing}
+                onCheckedChange={onTogglePublic}
+                aria-label="Toggle route visibility"
+              />
+            ) : null}
+          </div>
+          {!isAdministrator ? (
+            <p className="text-muted-foreground text-xs">Only administrators can change visibility.</p>
+          ) : null}
+        </div>
         <Button
           type="button"
           className="w-full"
@@ -124,15 +163,19 @@ export default function RouteItemSidebar({
 
         <div className="space-y-2">
           <p className="text-xs text-muted-foreground">Snapshot Actions</p>
-          <Button
-            type="button"
-            variant="outline"
-            className="w-full"
-            disabled={!canSetActive || isSnapshotActing}
-            onClick={() => selectedSnapshot && onSetActiveSnapshot(selectedSnapshot.id)}
-          >
-            Set As Active
-          </Button>
+          {
+            isAdministrator && (
+              <Button
+                type="button"
+                variant="outline"
+                className="w-full"
+                disabled={!canSetActive || isSnapshotActing}
+                onClick={() => selectedSnapshot && onSetActiveSnapshot(selectedSnapshot.id)}
+              >
+                Set As Active
+              </Button>
+            )
+          }
           <Button
             type="button"
             variant="outline"

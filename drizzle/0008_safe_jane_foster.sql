@@ -1,1 +1,0 @@
-ALTER TABLE "regionStations" ADD COLUMN "address" text DEFAULT 'Unknown' NOT NULL;

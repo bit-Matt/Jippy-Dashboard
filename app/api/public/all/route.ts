@@ -12,20 +12,11 @@ export async function GET() {
       unwrap(closure.getAllClosures(true)),
     ]);
 
-    /* eslint-disable-next-line */
-    const routes = allRoutes.map(({ activeSnapshotId, snapshotName, snapshotState, vehicleTypeRequiresRoute, ...rest }) => rest);
-
-    /* eslint-disable-next-line */
-    const regions = allRegions.map(({ activeSnapshotId, snapshotName, snapshotState, ...rest }) => rest);
-
-    /* eslint-disable-next-line */
-    const closures = allClosures.map(({ activeSnapshotId, versionName, snapshotState, ...rest }) => rest);
-
     return ResponseComposer.compose(StatusCodes.Status200Ok)
       .setBody({
-        routes,
-        regions,
-        closures,
+        routes: allRoutes,
+        regions: allRegions,
+        closure: allClosures,
       })
       .orchestrate();
   } catch {

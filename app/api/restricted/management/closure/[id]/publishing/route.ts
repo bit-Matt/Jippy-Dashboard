@@ -1,34 +1,16 @@
 import type { NextRequest } from "next/server";
 
+import * as closure from "@/lib/management/closure-manager";
 import { ResponseComposer, StatusCodes } from "@/lib/http";
-import * as route from "@/lib/management/route-manager";
 import { tryParseJson } from "@/lib/http/RequestUtilities";
 import { oneOf } from "@/lib/one-of";
 import { utils, validator } from "@/lib/validator";
-import { logActivity } from "@/lib/management/activity-logger";
 import { session, SessionCode } from "@/lib/auth";
-
-export async function GET(
-  request: NextRequest,
-  { params }: RouteContext<"/api/restricted/management/route/[id]/snapshots">,
-) {
-  const { id } = await params;
-
-  if (!utils.isUuid(id)) {
-    return ResponseComposer.composeError(StatusCodes.Status404NotFound, [{ message: "No such route ID found" }])
-      .orchestrate();
-  }
-
-  const result = await route.getAllSnapshotByRouteId(id);
-  return oneOf(result).match(
-    s => ResponseComposer.compose(StatusCodes.Status200Ok).setBody(s).orchestrate(),
-    e => ResponseComposer.composeFromFailure(e).orchestrate(),
-  );
-}
+import { logActivity } from "@/lib/management/activity-logger";
 
 export async function PATCH(
   request: NextRequest,
-  { params }: RouteContext<"/api/restricted/management/route/[id]">,
+  { params }: RouteContext<"/api/restricted/management/closure/[id]/publishing">,
 ) {
   const currentSession = await session.verify("administrator_user");
   if (currentSession.code !== SessionCode.Ok) {
@@ -53,9 +35,9 @@ export async function PATCH(
   // Validate the body first.
   const validation = await validator.validate<SwitchPatchBody>(data, {
     properties: {
-      snapshotId: { type: "string", formatter: "uuid" },
+      isPublic: { type: "boolean" },
     },
-    requiredProperties: ["snapshotId"],
+    requiredProperties: ["isPublic"],
     allowUnvalidatedProperties: false,
   });
   if (!validation.ok) {
@@ -64,19 +46,19 @@ export async function PATCH(
       .orchestrate();
   }
 
-  const result = await route.switchSnapshot(id, data.snapshotId);
+  const result = await closure.togglePublic(id, data.isPublic);
   return oneOf(result).match(
     s => {
       void logActivity({
         actorUserId: currentSession.user!.id,
         actorRole: currentSession.user!.role,
-        category: "active_snapshot_changed",
-        action: "route_active_snapshot_changed",
-        summary: `Switched active snapshot for route ${id}`,
-        routePath: `/api/restricted/management/route/${id}`,
+        category: "publish_state_changed",
+        action: "closure_publish_state_changed",
+        summary: `Switch publication status for ID: ${id}`,
+        routePath: `/api/restricted/management/closure/${id}/publishing`,
         httpMethod: "PATCH",
         statusCode: StatusCodes.Status200Ok,
-        entityType: "route",
+        entityType: "closure",
         entityId: id,
         payload: data,
       });
@@ -88,5 +70,5 @@ export async function PATCH(
 }
 
 type SwitchPatchBody = {
-  snapshotId: string;
+  isPublic: boolean;
 }

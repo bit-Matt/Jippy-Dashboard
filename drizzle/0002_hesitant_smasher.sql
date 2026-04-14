@@ -1,1 +1,0 @@
-ALTER TABLE "routeSequences" ADD COLUMN "address" text DEFAULT 'Unknown Address' NOT NULL;

@@ -34,9 +34,11 @@ import {
 } from "@/components/ui/select";
 
 import { $fetch } from "@/lib/http/client";
+import { getErrorMessage } from "@/contracts/parsers";
 import * as nominatim from "@/lib/osm/nominatim";
-import type { AllResponse } from "@/components/app-sidebar";
+import type { RouteResponse } from "@/contracts/responses";
 import { useRouteEditor } from "@/contexts/RouteEditorContext";
+import type { SnapshotListItem } from "@/components/snapshot-types";
 
 const ROUTE_COLORS = [
   { label: "Sun Yellow", value: "#fff100" },
@@ -51,46 +53,10 @@ const ROUTE_COLORS = [
   { label: "Lime", value: "#bad80a" },
 ];
 
-const getErrorMessage = (error: unknown, fallbackMessage: string) => {
-  if (error instanceof Error && error.message) {
-    return error.message;
-  }
-
-  if (typeof error === "string" && error.trim().length > 0) {
-    return error;
-  }
-
-  if (error && typeof error === "object") {
-    const errorRecord = error as {
-      message?: unknown;
-      title?: unknown;
-      details?: { message?: unknown } | unknown;
-    };
-
-    if (typeof errorRecord.message === "string" && errorRecord.message.trim().length > 0) {
-      return errorRecord.message;
-    }
-
-    if (
-      errorRecord.details &&
-      typeof errorRecord.details === "object" &&
-      "message" in errorRecord.details &&
-      typeof errorRecord.details.message === "string" &&
-      errorRecord.details.message.trim().length > 0
-    ) {
-      return errorRecord.details.message;
-    }
-
-    if (typeof errorRecord.title === "string" && errorRecord.title.trim().length > 0) {
-      return errorRecord.title;
-    }
-  }
-
-  return fallbackMessage;
-};
-
 export default function RouteEditor({
   editingRoute,
+  editingSnapshot,
+  editingSnapshotId,
   snapshotParentRouteId,
   onSaved,
   onClosed,
@@ -143,15 +109,15 @@ export default function RouteEditor({
       return;
     }
 
-    setSnapshotName(editingRoute.snapshotName ?? "Draft");
-    setSnapshotState((editingRoute.snapshotState as "wip" | "for_approval" | "ready") ?? "wip");
+    setSnapshotName(editingSnapshot?.name ?? "Draft");
+    setSnapshotState((editingSnapshot?.state as "wip" | "for_approval" | "ready") ?? "wip");
     setRouteNumber(editingRoute.routeNumber);
     setRouteName(editingRoute.routeName);
     setRouteDetails(editingRoute.routeDetails ?? "");
-    setVehicleTypeId(editingRoute.vehicleTypeId ?? "");
-    setAvailableFrom(editingRoute.availableFrom ?? "00:00");
-    setAvailableTo(editingRoute.availableTo ?? "23:59");
-  }, [editingRoute]);
+    setVehicleTypeId(editingRoute.vehicle.id ?? "");
+    setAvailableFrom(editingRoute.availability.from ?? "00:00");
+    setAvailableTo(editingRoute.availability.to ?? "23:59");
+  }, [editingRoute, editingSnapshot]);
 
   useEffect(() => {
     if (vehicleTypeId) {
@@ -241,10 +207,10 @@ export default function RouteEditor({
       return;
     }
 
-    const isSnapshotEdit = !!editingRoute?.id && !!editingRoute?.activeSnapshotId;
+    const isSnapshotEdit = !!editingRoute?.id && !!editingSnapshotId;
     const isSnapshotCreate = !isSnapshotEdit && !!snapshotParentRouteId;
     const endpoint = isSnapshotEdit
-      ? `/api/restricted/management/route/${editingRoute.id}/${editingRoute.activeSnapshotId}`
+      ? `/api/restricted/management/route/${editingRoute.id}/${editingSnapshotId}`
       : isSnapshotCreate
         ? `/api/restricted/management/route/${snapshotParentRouteId}`
         : "/api/restricted/management/route";
@@ -705,7 +671,9 @@ export default function RouteEditor({
 }
 
 interface RouteEditorProps {
-  editingRoute?: AllResponse["routes"][0] | null
+  editingRoute?: RouteResponse | null
+  editingSnapshot?: SnapshotListItem | null
+  editingSnapshotId?: string | null
   snapshotParentRouteId?: string | null
   onSaved?: () => void
   onClosed?: () => void

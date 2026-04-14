@@ -11,7 +11,7 @@ import "leaflet.vectorgrid";
 import "leaflet/dist/leaflet.css";
 import "@geoman-io/leaflet-geoman-free/dist/leaflet-geoman.css";
 
-import type { AllResponse } from "@/components/app-sidebar";
+import type { ClosureResponse, ClosureResponseList } from "@/contracts/responses";
 import { useClosureEditor } from "@/contexts/ClosureEditorContext";
 
 type ClosureDrawingTool = "none" | "draw-polygon" | "edit-region";
@@ -22,8 +22,8 @@ interface RegionDraftShape {
 }
 
 interface ClosureMapProps {
-	closures?: AllResponse["closures"];
-	onClosureClick?: (closure: AllResponse["closures"][0]) => void;
+	closures?: ClosureResponseList;
+	onClosureClick?: (closure: ClosureResponse) => void;
 	focusedWaypoints?: Array<[number, number]>;
 	focusKey?: string | number | null;
 }
@@ -344,8 +344,8 @@ const ClosureRegionsLayer = ({
   closures,
   onClosureClick,
 }: {
-	closures: AllResponse["closures"];
-	onClosureClick?: (closure: AllResponse["closures"][0]) => void;
+	closures: ClosureResponseList;
+	onClosureClick?: (closure: ClosureResponse) => void;
 }) => {
   return (
     <>

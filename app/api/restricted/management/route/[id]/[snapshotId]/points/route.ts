@@ -1,14 +1,14 @@
 import type { NextRequest } from "next/server";
 
-import * as closure from "@/lib/management/closure-manager";
 import { ResponseComposer, StatusCodes } from "@/lib/http";
+import * as route from "@/lib/management/route-manager";
 import { oneOf } from "@/lib/one-of";
 import { utils } from "@/lib/validator";
 import { session, SessionCode } from "@/lib/auth";
 
 export async function GET(
   request: NextRequest,
-  { params }: RouteContext<"/api/restricted/management/closure/[id]/snapshots">,
+  { params }: { params: Promise<{ id: string; snapshotId: string }> },
 ) {
   const currentSession = await session.verify();
   if (currentSession.code !== SessionCode.Ok) {
@@ -16,16 +16,21 @@ export async function GET(
       .orchestrate();
   }
 
-  const { id } = await params;
+  const { id, snapshotId } = await params;
 
   if (!utils.isUuid(id)) {
-    return ResponseComposer.composeError(StatusCodes.Status404NotFound, [{message: "No such closure ID found"}])
+    return ResponseComposer.composeError(StatusCodes.Status404NotFound, [{ message: "No route found with the given ID." }])
       .orchestrate();
   }
 
-  const result = await closure.getAllSnapshots(id);
+  if (!utils.isUuid(snapshotId)) {
+    return ResponseComposer.composeError(StatusCodes.Status404NotFound, [{ message: "No snapshot found with the given ID." }])
+      .orchestrate();
+  }
+
+  const result = await route.getSnapshotPoints(id, snapshotId);
   return oneOf(result).match(
-    s => ResponseComposer.compose(StatusCodes.Status201Created).setBody(s).orchestrate(),
+    s => ResponseComposer.compose(StatusCodes.Status200Ok).setBody(s).orchestrate(),
     e => ResponseComposer.composeFromFailure(e).orchestrate(),
   );
 }

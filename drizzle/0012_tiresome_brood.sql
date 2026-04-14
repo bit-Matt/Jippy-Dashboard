@@ -1,1 +1,0 @@
-ALTER TABLE "routes" ADD COLUMN "route_details" text DEFAULT '' NOT NULL;

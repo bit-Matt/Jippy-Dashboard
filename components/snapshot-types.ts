@@ -2,6 +2,7 @@ export interface SnapshotListItem {
   id: string;
   name: string;
   state: string;
+  isActive?: boolean;
   createdOn?: string | Date;
   updatedAt?: string | Date;
 }
