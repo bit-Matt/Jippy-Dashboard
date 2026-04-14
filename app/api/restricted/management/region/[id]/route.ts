@@ -4,7 +4,7 @@ import * as region from "@/lib/management/region-manager";
 import { ResponseComposer, StatusCodes } from "@/lib/http";
 import { session, SessionCode } from "@/lib/auth";
 import { tryParseJson } from "@/lib/http/RequestUtilities";
-import { oneOf } from "@/lib/one-of";
+import {oneOf, unwrap, UnwrappedException} from "@/lib/one-of";
 import { utils, validator } from "@/lib/validator";
 import { logActivity } from "@/lib/management/activity-logger";
 
@@ -218,7 +218,7 @@ export async function DELETE(
   request: NextRequest,
   { params }: RouteContext<"/api/restricted/management/region/[id]">,
 ) {
-  const currentSession = await session.verify("administrator_user");
+  const currentSession = await session.verify();
   if (currentSession.code !== SessionCode.Ok) {
     return ResponseComposer.composeFromSessionValidation(currentSession)
       .orchestrate();
@@ -228,32 +228,49 @@ export async function DELETE(
 
   // Invalid ID format.
   if (!utils.isUuid(id)) {
-    return ResponseComposer.composeError(StatusCodes.Status400BadRequest, [{ message: "Invalid route ID" }])
+    return ResponseComposer.composeError(StatusCodes.Status400BadRequest, [{ message: "Invalid region ID" }])
       .orchestrate();
   }
 
-  const result = await region.removeRegion(id);
-  return oneOf(result).match(
-    () => {
-      void logActivity({
-        actorUserId: currentSession.user!.id,
-        actorRole: currentSession.user!.role,
-        category: "write_operation",
-        action: "region_deleted",
-        summary: `Deleted region ${id}`,
-        routePath: `/api/restricted/management/region/${id}`,
-        httpMethod: "DELETE",
-        statusCode: StatusCodes.Status200Ok,
-        entityType: "region",
-        entityId: id,
-      });
+  try {
+    const isDeletable = await unwrap(region.isAllContentDeletableByContributor(id));
 
-      return ResponseComposer.compose(StatusCodes.Status200Ok)
-        .setBody({ ok: true })
+    // Content cannot be deleted by just a contributor
+    if (!isDeletable && currentSession.user!.role !== "administrator_user") {
+      return ResponseComposer
+        .composeError(StatusCodes.Status403Forbidden, { message: "Insufficient permissions" })
         .orchestrate();
-    },
-    e => ResponseComposer.composeFromFailure(e).orchestrate(),
-  );
+    }
+
+    // Proceed with deletion
+    const result = await region.removeRegion(id);
+    return oneOf(result).match(
+      () => {
+        void logActivity({
+          actorUserId: currentSession.user!.id,
+          actorRole: currentSession.user!.role,
+          category: "write_operation",
+          action: "region_deleted",
+          summary: `Deleted region ${id}`,
+          routePath: `/api/restricted/management/region/${id}`,
+          httpMethod: "DELETE",
+          statusCode: StatusCodes.Status200Ok,
+          entityType: "region",
+          entityId: id,
+        });
+
+        return ResponseComposer.compose(StatusCodes.Status200Ok)
+          .setBody({ ok: true })
+          .orchestrate();
+      },
+      e => ResponseComposer.composeFromFailure(e).orchestrate(),
+    );
+  } catch (e) {
+    const err = e as unknown as UnwrappedException;
+    return ResponseComposer
+      .composeError(StatusCodes.Status500InternalServerError, { message: err.message })
+      .orchestrate();
+  }
 }
 
 type SwitchPatchBody = {

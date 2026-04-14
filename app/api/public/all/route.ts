@@ -12,14 +12,11 @@ export async function GET() {
       unwrap(closure.getAllClosures(true)),
     ]);
 
-    /* eslint-disable-next-line */
-    const closures = allClosures.map(({ activeSnapshotId, versionName, snapshotState, ...rest }) => rest);
-
     return ResponseComposer.compose(StatusCodes.Status200Ok)
       .setBody({
         routes: allRoutes,
         regions: allRegions,
-        closures,
+        closure: allClosures,
       })
       .orchestrate();
   } catch {

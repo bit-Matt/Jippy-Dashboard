@@ -34,6 +34,7 @@ import {
 } from "@/components/ui/select";
 
 import { $fetch } from "@/lib/http/client";
+import { getErrorMessage } from "@/contracts/parsers";
 import * as nominatim from "@/lib/osm/nominatim";
 import type { RouteResponse } from "@/contracts/responses";
 import { useRouteEditor } from "@/contexts/RouteEditorContext";
@@ -51,44 +52,6 @@ const ROUTE_COLORS = [
   { label: "Green", value: "#009e49" },
   { label: "Lime", value: "#bad80a" },
 ];
-
-const getErrorMessage = (error: unknown, fallbackMessage: string) => {
-  if (error instanceof Error && error.message) {
-    return error.message;
-  }
-
-  if (typeof error === "string" && error.trim().length > 0) {
-    return error;
-  }
-
-  if (error && typeof error === "object") {
-    const errorRecord = error as {
-      message?: unknown;
-      title?: unknown;
-      details?: { message?: unknown } | unknown;
-    };
-
-    if (typeof errorRecord.message === "string" && errorRecord.message.trim().length > 0) {
-      return errorRecord.message;
-    }
-
-    if (
-      errorRecord.details &&
-      typeof errorRecord.details === "object" &&
-      "message" in errorRecord.details &&
-      typeof errorRecord.details.message === "string" &&
-      errorRecord.details.message.trim().length > 0
-    ) {
-      return errorRecord.details.message;
-    }
-
-    if (typeof errorRecord.title === "string" && errorRecord.title.trim().length > 0) {
-      return errorRecord.title;
-    }
-  }
-
-  return fallbackMessage;
-};
 
 export default function RouteEditor({
   editingRoute,

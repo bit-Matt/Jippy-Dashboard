@@ -220,9 +220,6 @@ export default function RouteListCard({
                             <span className="block truncate">
                               {closure.closureName?.trim() ? closure.closureName : "(untitled)"}
                             </span>
-                            <span className="text-muted-foreground block truncate text-xs">
-                              {closure.versionName} ({closure.snapshotState})
-                            </span>
                           </span>
                         </button>
                       );

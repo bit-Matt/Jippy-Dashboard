@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
+import { Switch } from "@/components/ui/switch";
 import { normalizeSnapshotStateLabel, type SnapshotListItem } from "@/components/snapshot-types";
 
 interface RouteItemSidebarProps {
@@ -48,6 +49,7 @@ export default function RouteItemSidebar({
   onCloneSnapshot,
   onCreateBlankSnapshot,
 }: RouteItemSidebarProps) {
+  const isAdministrator = userRole === "administrator_user";
   const selectedSnapshot = snapshots.find((snapshot) => snapshot.id === selectedSnapshotId) ?? null;
   const displayedSnapshot = selectedSnapshot ?? snapshots.find((snapshot) => snapshot.id === activeSnapshotId) ?? null;
   const canSetActive = !!selectedSnapshot && selectedSnapshot.state === "ready" && selectedSnapshot.id !== activeSnapshotId;
@@ -73,21 +75,36 @@ export default function RouteItemSidebar({
         </div>
       </CardHeader>
       <CardContent className="max-h-[75vh] space-y-3 overflow-y-auto">
-        {userRole === "administrator_user" ? (
-          <Button
-            type="button"
-            className={`w-full ${
-              route.isPublic
-                ? "border-emerald-300 bg-emerald-50 text-emerald-700 hover:border-red-300 hover:bg-red-50 hover:text-red-700"
-                : "border-amber-300 bg-amber-50 text-amber-700 hover:border-emerald-300 hover:bg-emerald-50 hover:text-emerald-700"
-            }`}
-            variant="outline"
-            disabled={isSnapshotActing}
-            onClick={() => onTogglePublic(!route.isPublic)}
-          >
-            {route.isPublic ? "Unpublish" : "Publish"}
-          </Button>
-        ) : null}
+        <div className="space-y-2 rounded-md border p-3">
+          <p className="text-xs text-muted-foreground">Public Visibility</p>
+          <div className="flex items-center justify-between gap-3">
+            <div className="min-w-0 flex-1">
+              <p
+                className={`text-sm font-medium ${
+                  route.isPublic ? "text-emerald-700" : "text-amber-700"
+                }`}
+              >
+                {route.isPublic ? "Published" : "Unpublished"}
+              </p>
+              <p className="text-muted-foreground text-xs">
+                {route.isPublic
+                  ? "Visible in public-facing map data."
+                  : "Only visible in management tools."}
+              </p>
+            </div>
+            {isAdministrator ? (
+              <Switch
+                checked={route.isPublic}
+                disabled={isSnapshotActing}
+                onCheckedChange={onTogglePublic}
+                aria-label="Toggle route visibility"
+              />
+            ) : null}
+          </div>
+          {!isAdministrator ? (
+            <p className="text-muted-foreground text-xs">Only administrators can change visibility.</p>
+          ) : null}
+        </div>
         <Button
           type="button"
           className="w-full"
@@ -146,15 +163,19 @@ export default function RouteItemSidebar({
 
         <div className="space-y-2">
           <p className="text-xs text-muted-foreground">Snapshot Actions</p>
-          <Button
-            type="button"
-            variant="outline"
-            className="w-full"
-            disabled={!canSetActive || isSnapshotActing}
-            onClick={() => selectedSnapshot && onSetActiveSnapshot(selectedSnapshot.id)}
-          >
-            Set As Active
-          </Button>
+          {
+            isAdministrator && (
+              <Button
+                type="button"
+                variant="outline"
+                className="w-full"
+                disabled={!canSetActive || isSnapshotActing}
+                onClick={() => selectedSnapshot && onSetActiveSnapshot(selectedSnapshot.id)}
+              >
+                Set As Active
+              </Button>
+            )
+          }
           <Button
             type="button"
             variant="outline"

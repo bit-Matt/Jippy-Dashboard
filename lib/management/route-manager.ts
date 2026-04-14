@@ -1,9 +1,9 @@
-import { and, eq, sql } from "drizzle-orm";
+import {and, count, eq, sql} from "drizzle-orm";
 
 import { db } from "@/lib/db";
 import { routes, routeSnapshots, routeSequences, vehicleTypes } from "@/lib/db/schema";
 import { ErrorCodes, Failure, Result, Success } from "@/lib/one-of/types";
-import { unwrap } from "../one-of";
+import { unwrap } from "@/lib/one-of";
 
 /**
  * Fetches all routes from the denormalized `routes` table.
@@ -328,6 +328,7 @@ export async function getSnapshotPoints(routeId: string, snapshotId: string): Pr
  * @param routeId - The ID of the route for which a snapshot will be created.
  * @param params - Snapshot creation payload, including route metadata, optional polylines,
  * and directional point sequences.
+ * @param ownerId - The owner of the snapshot.
  * @returns A `Result<RouteSnapshotObject>`:
  * - `Success<RouteSnapshotObject>` with the created snapshot data when successful.
  * - `Failure` with `ErrorCodes.ResourceNotFound` if the route does not exist.
@@ -467,6 +468,7 @@ export async function createSnapshot(routeId: string, params: AddRouteParameters
  *
  * @param routeId - The ID of the route that owns the snapshot.
  * @param sourceSnapshotId - The ID of the snapshot to copy.
+ * @param ownerId - The owner of the snapshot
  * @returns A `Result<SnapshotItem>`:
  * - `Success<SnapshotItem>` with the new snapshot `{ id, name, state }`.
  * - `Failure` with `ErrorCodes.ResourceNotFound` if the source snapshot is not found.
@@ -569,6 +571,23 @@ export async function deleteSnapshot(routeId: string, snapshotId: string): Promi
     return new Success(undefined);
   } catch (e) {
     return new Failure(ErrorCodes.Fatal, "Unable to delete snapshot", { routeId, snapshotId }, e);
+  }
+}
+
+export async function isAllContentDeletableByContributor(routeId: string): Promise<Result<boolean>> {
+  try {
+    const [undeletable] = await db
+      .select({ count: count() })
+      .from(routeSnapshots)
+      .where(
+        and(
+          eq(routeSnapshots.routeId, routeId),
+          eq(routeSnapshots.snapshotState, "ready"),
+        ),
+      );
+    return new Success(undeletable.count === 0);
+  } catch (e) {
+    return new Failure(ErrorCodes.Fatal, "Unable to count total deletable content", {}, e);
   }
 }
 
@@ -712,6 +731,7 @@ export async function switchSnapshot(routeId: string, snapshotId: string): Promi
  * format.
  *
  * @param params - Route data to create, including metadata, polylines, and route points.
+ * @param ownerId - The owner of the parameter
  * @returns A `Result<RouteSnapshotObject>` containing the newly created route, or a failure if creation fails.
  */
 export async function addRoute(params: AddRouteParameters, ownerId: string): Promise<Result<RouteSnapshotObject>> {
@@ -719,7 +739,7 @@ export async function addRoute(params: AddRouteParameters, ownerId: string): Pro
     const [route] = await db
       .insert(routes)
       .values({
-        activeSnapshotId: "unset",
+        activeSnapshotId: "00000000-0000-0000-0000-000000000000",
         ownerId,
         vehicleTypeId: params.vehicleTypeId,
         routeNumber: params.routeNumber,
@@ -801,21 +821,6 @@ export async function updateRouteSnapshot(
   params: UpdateRouteParameters,
 ): Promise<Result<RouteSnapshotObject>> {
   try {
-    if (params.vehicleTypeId !== undefined) {
-      const [vehicleType] = await db
-        .select({ id: vehicleTypes.id })
-        .from(vehicleTypes)
-        .where(eq(vehicleTypes.id, params.vehicleTypeId))
-        .limit(1);
-      if (!vehicleType) {
-        return new Failure(ErrorCodes.ValidationFailure, "Vehicle type not found.", {
-          routeId,
-          snapshotId,
-          vehicleTypeId: params.vehicleTypeId,
-        });
-      }
-    }
-
     // Check if the snapshot is editable
     const [snapshotToEdit] = await db
       .select({ id: routeSnapshots.id, state: routeSnapshots.snapshotState })
@@ -853,20 +858,53 @@ export async function updateRouteSnapshot(
         ...(params.routeDetails !== undefined && { routeDetails: params.routeDetails }),
         ...(params.availableFrom !== undefined && { availableFrom: params.availableFrom }),
         ...(params.availableTo !== undefined && { availableTo: params.availableTo }),
-        ...(params.vehicleTypeId !== undefined && { vehicleTypeId: params.vehicleTypeId }),
         ...(params.polylineGoingTo !== undefined && { polylineGoingTo: params.polylineGoingTo }),
         ...(params.polylineGoingBack !== undefined && { polylineGoingBack: params.polylineGoingBack }),
       };
+
+      // Check if the vehicle type specified do exist. If not, just don't bother updating it.
+      // Idk, maybe we should just fail it or just ignore it, for now we'll just ignore it.
+      let vehicleTypeId: string | null = null;
+      if (params.vehicleTypeId) {
+        const [vehicleToUse] = await tx
+          .select({ id: vehicleTypes.id })
+          .from(vehicleTypes)
+          .where(
+            and(
+              eq(vehicleTypes.id, params.vehicleTypeId),
+              eq(vehicleTypes.requiresRoute, true),
+            ),
+          );
+
+        if (vehicleToUse) vehicleTypeId = vehicleToUse.id;
+      }
 
       if (Object.keys(routePatch).length > 0) {
         // Update and grab the fresh row
         const [routeData] = await tx
           .update(routeSnapshots)
-          .set(routePatch)
+          .set({
+            ...routePatch,
+            ...(vehicleTypeId !== null ? { vehicleTypeId } : {}),
+          })
           .where(eq(routeSnapshots.id, snapshotToEdit.id))
           .returning();
 
         if (!routeData) tx.rollback();
+
+        // There's this synchronization issue on the main route table when the snapshot is updated. This is true only
+        // for routes with an active snapshot that is not marked as ready and is unpublished.
+        await tx.update(routes)
+          .set({
+            ...routePatch,
+            ...(vehicleTypeId !== null ? { vehicleTypeId } : {}),
+          })
+          .where(
+            and(
+              eq(routes.id, routeData.routeId),
+              eq(routes.activeSnapshotId, routeData.id),
+            ),
+          );
       }
 
       if (params.points) {

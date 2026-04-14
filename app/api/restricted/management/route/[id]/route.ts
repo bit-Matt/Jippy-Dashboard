@@ -3,7 +3,7 @@ import type { NextRequest } from "next/server";
 import { ResponseComposer, StatusCodes } from "@/lib/http";
 import * as route from "@/lib/management/route-manager";
 import { tryParseJson } from "@/lib/http/RequestUtilities";
-import { oneOf } from "@/lib/one-of";
+import {oneOf, unwrap, UnwrappedException} from "@/lib/one-of";
 import { getRoutePolyline } from "@/lib/osm/valhalla";
 import { utils, validator } from "@/lib/validator";
 import { session, SessionCode } from "@/lib/auth";
@@ -214,7 +214,7 @@ export async function DELETE(
   request: NextRequest,
   { params }: RouteContext<"/api/restricted/management/route/[id]">,
 ) {
-  const currentSession = await session.verify("administrator_user");
+  const currentSession = await session.verify();
   if (currentSession.code !== SessionCode.Ok) {
     return ResponseComposer.composeFromSessionValidation(currentSession)
       .orchestrate();
@@ -228,28 +228,44 @@ export async function DELETE(
       .orchestrate();
   }
 
-  const result = await route.removeRoute(id);
-  return oneOf(result).match(
-    () => {
-      void logActivity({
-        actorUserId: currentSession.user!.id,
-        actorRole: currentSession.user!.role,
-        category: "write_operation",
-        action: "route_deleted",
-        summary: `Deleted route ${id}`,
-        routePath: `/api/restricted/management/route/${id}`,
-        httpMethod: "DELETE",
-        statusCode: StatusCodes.Status200Ok,
-        entityType: "route",
-        entityId: id,
-      });
+  try {
+    const isDeletable = await unwrap(route.isAllContentDeletableByContributor(id));
 
-      return ResponseComposer.compose(StatusCodes.Status200Ok)
-        .setBody({ ok: true })
+    // Content is not deletable by a contributor
+    if (!isDeletable && currentSession.user!.role !== "administrator_user") {
+      return ResponseComposer
+        .composeError(StatusCodes.Status403Forbidden, { message: "Insufficient permissions" })
         .orchestrate();
-    },
-    e => ResponseComposer.composeFromFailure(e).orchestrate(),
-  );
+    }
+
+    const result = await route.removeRoute(id);
+    return oneOf(result).match(
+      () => {
+        void logActivity({
+          actorUserId: currentSession.user!.id,
+          actorRole: currentSession.user!.role,
+          category: "write_operation",
+          action: "route_deleted",
+          summary: `Deleted route ${id}`,
+          routePath: `/api/restricted/management/route/${id}`,
+          httpMethod: "DELETE",
+          statusCode: StatusCodes.Status200Ok,
+          entityType: "route",
+          entityId: id,
+        });
+
+        return ResponseComposer.compose(StatusCodes.Status200Ok)
+          .setBody({ ok: true })
+          .orchestrate();
+      },
+      e => ResponseComposer.composeFromFailure(e).orchestrate(),
+    );
+  } catch (e) {
+    const err = e as unknown as UnwrappedException;
+    return ResponseComposer
+      .composeError(StatusCodes.Status500InternalServerError, { message: err.message })
+      .orchestrate();
+  }
 }
 
 type PatchBody = {

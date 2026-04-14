@@ -1,4 +1,4 @@
-import {and, eq, sql} from "drizzle-orm";
+import {and, count, eq, sql} from "drizzle-orm";
 
 import {db} from "@/lib/db";
 import {region, regionSequences, regionSnapshots, regionStations} from "@/lib/db/schema";
@@ -12,10 +12,10 @@ import {unwrap} from "@/lib/one-of";
  * which holds the applied active snapshot information. Points and stations are resolved
  * from the active snapshot. No snapshot-level metadata (version name, state) is returned.
  *
- * @param readyActiveOnly - When `true`, only regions with `isPublic` set to `true` are returned.
+ * @param forPublic - When `true`, only regions with `isPublic` set to `true` are returned.
  * @returns A `Promise<Result<RegionObject[]>>` containing the list of regions, or a failure if fetching fails.
  */
-export async function getAllRegions(forPublic = false): Promise<Result<RegionBaseObject[] | RegionListObject[]>> {
+export async function getAllRegions(forPublic = true): Promise<Result<RegionBaseObject[] | RegionListObject[]>> {
   try {
     const sqlTemplates = {
       points: sql<PointObject[]>`(
@@ -482,6 +482,23 @@ export async function deleteSnapshot(regionId: string, snapshotId: string): Prom
   }
 }
 
+export async function isAllContentDeletableByContributor(regionId: string): Promise<Result<boolean>> {
+  try {
+    const [undeletable] = await db
+      .select({ count: count() })
+      .from(regionSnapshots)
+      .where(
+        and(
+          eq(regionSnapshots.regionId, regionId),
+          eq(regionSnapshots.snapshotState, "ready"),
+        ),
+      );
+    return new Success(undeletable.count === 0);
+  } catch (e) {
+    return new Failure(ErrorCodes.Fatal, "Unable to count total deletable content", {}, e);
+  }
+}
+
 /**
  * Switches a region's active snapshot to the specified snapshot and updates the region's
  * denormalized fields (`name`, `color`, `shapeType`) to match the snapshot.
@@ -592,7 +609,7 @@ export async function createRegion(payload: RegionAddParameters, ownerId: string
         name: payload.regionName,
         color: payload.regionColor,
         shapeType: payload.regionShape,
-        activeSnapshotId: "unset",
+        activeSnapshotId: "00000000-0000-0000-0000-000000000000",
         ownerId,
       })
       .returning();
@@ -695,18 +712,21 @@ export async function updateRegionSnapshot(
           .update(regionSnapshots)
           .set(regionPatch)
           .where(eq(regionSnapshots.id, snapshotToEdit.id))
-          .returning({ id: region.id });
+          .returning({ id: regionSnapshots.id, refRegionId: regionSnapshots.regionId });
 
         if (!updatedRegion) tx.rollback();
-      } else {
-        // If no parent fields are updated, just check if it exists
-        const [existing] = await tx
-          .select({ id: region.id })
-          .from(region)
-          .where(eq(region.id, regionId))
-          .limit(1);
 
-        if (!existing) tx.rollback();
+        // There's this synchronization issue on the main region table when the snapshot is updated. This is true only
+        // for region with an active snapshot that is not marked as ready and is unpublished.
+        await tx
+          .update(region)
+          .set(regionPatch)
+          .where(
+            and(
+              eq(region.id, updatedRegion.refRegionId),
+              eq(region.activeSnapshotId, updatedRegion.id),
+            ),
+          );
       }
 
       if (params.points !== undefined) {

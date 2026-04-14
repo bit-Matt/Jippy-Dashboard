@@ -1,17 +1,17 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import useSWR from "swr";
 
 import { AppSidebar } from "@/components/app-sidebar";
 import ClosureItemSidebar from "@/components/closure-item-sidebar";
 import ClosureRegionEditor from "@/components/closure-region-editor";
 import RouteListCard from "@/components/route-list-card";
-import type { ClosureResponse, ClosureResponseList } from "@/contracts/responses";
-import { type SnapshotListItem } from "@/components/snapshot-types";
 import {
   SidebarInset,
   SidebarProvider,
 } from "@/components/ui/sidebar";
+import type { ClosureResponse, ClosureResponseList } from "@/contracts/responses";
 import { ClosureEditorProvider, useClosureEditor } from "@/contexts/ClosureEditorContext";
 import { RouteEditorProvider } from "@/contexts/RouteEditorContext";
 import { $fetch } from "@/lib/http/client";
@@ -25,18 +25,17 @@ function ClosureDashboardContent() {
   const [selectedClosure, setSelectedClosure] = useState<ClosureResponse | null>(null);
   const [selectedClosureId, setSelectedClosureId] = useState<string | null>(null);
   const [closureFocusKey, setClosureFocusKey] = useState<string | number | null>(null);
-  const [isSnapshotLoading, setIsSnapshotLoading] = useState(false);
-  const [isSnapshotActing, setIsSnapshotActing] = useState(false);
+  const [isPublishing, setIsPublishing] = useState(false);
   const [isDeletingClosure, setIsDeletingClosure] = useState(false);
-  const [closureSnapshots, setClosureSnapshots] = useState<SnapshotListItem[]>([]);
-  const [selectedClosureSnapshotId, setSelectedClosureSnapshotId] = useState<string | null>(null);
-  const [activeClosureSnapshotId, setActiveClosureSnapshotId] = useState<string | null>(null);
   const selectedClosureRef = useRef<ClosureResponse | null>(null);
+
+  type MeResponse = { data: { ok: boolean; data: { role: string } }; error?: unknown };
+  const { data: me } = useSWR<MeResponse>("/api/me", $fetch);
+  const userRole = me?.data?.data?.role ?? null;
 
   const {
     mode: closureMode,
     startCreating,
-    startCreatingSnapshot,
     startEditing,
     stopEditing,
   } = useClosureEditor();
@@ -52,37 +51,6 @@ function ClosureDashboardContent() {
 
     return [selectedClosure];
   }, [closures, selectedClosure]);
-
-  const fetchClosureSnapshot = useCallback(async (closureId: string, snapshotId: string) => {
-    const { data, error } = await $fetch<IApiResponse<ClosureResponse>>(`/api/restricted/management/closure/${closureId}/${snapshotId}`, {
-      method: "GET",
-    });
-
-    if (error) {
-      console.error("Failed to load closure snapshot:", error);
-      return null;
-    }
-
-    return data.data;
-  }, []);
-
-  const loadClosureSnapshots = useCallback(async (closure: ClosureResponse) => {
-    setIsSnapshotLoading(true);
-    const { data, error } = await $fetch<IApiResponse<SnapshotListItem[]>>(`/api/restricted/management/closure/${closure.id}/snapshots`, {
-      method: "GET",
-    });
-
-    if (error) {
-      console.error("Failed to load closure snapshots:", error);
-      setIsSnapshotLoading(false);
-      return;
-    }
-
-    setClosureSnapshots(data.data);
-    setSelectedClosureSnapshotId(closure.activeSnapshotId);
-    setActiveClosureSnapshotId(closure.activeSnapshotId);
-    setIsSnapshotLoading(false);
-  }, []);
 
   const fetchClosures = useCallback(async () => {
     setIsFetchingClosures(true);
@@ -101,30 +69,19 @@ function ClosureDashboardContent() {
     setClosures(nextClosures);
 
     if (selectedClosureRef.current) {
-      const selectedClosureSnapshotId = selectedClosureRef.current.activeSnapshotId;
       const refreshedClosure = nextClosures.find((closure) => closure.id === selectedClosureRef.current?.id) ?? null;
 
       if (!refreshedClosure) {
         setSelectedClosure(null);
         setSelectedClosureId(null);
-        setClosureSnapshots([]);
-        setSelectedClosureSnapshotId(null);
-        setActiveClosureSnapshotId(null);
       } else {
-        const preservedSnapshot = selectedClosureSnapshotId && selectedClosureSnapshotId !== refreshedClosure.activeSnapshotId
-          ? await fetchClosureSnapshot(refreshedClosure.id, selectedClosureSnapshotId)
-          : null;
-
-        const nextSelectedClosure = preservedSnapshot ?? refreshedClosure;
-        setSelectedClosure(nextSelectedClosure);
-        setSelectedClosureId(nextSelectedClosure.id);
-        setActiveClosureSnapshotId(refreshedClosure.activeSnapshotId);
-        void loadClosureSnapshots(refreshedClosure);
+        setSelectedClosure(refreshedClosure);
+        setSelectedClosureId(refreshedClosure.id);
       }
     }
 
     setIsFetchingClosures(false);
-  }, [fetchClosureSnapshot, loadClosureSnapshots]);
+  }, []);
 
   useEffect(() => {
     const timerId = window.setTimeout(() => {
@@ -153,14 +110,11 @@ function ClosureDashboardContent() {
     setSelectedClosure(closure);
     setSelectedClosureId(closure.id);
     setClosureFocusKey(`${closure.id}-${Date.now()}`);
-    void loadClosureSnapshots(closure);
   };
 
   const handleClearSelectedClosure = () => {
     setSelectedClosure(null);
     setSelectedClosureId(null);
-    setSelectedClosureSnapshotId(null);
-    setActiveClosureSnapshotId(null);
     setClosureFocusKey(null);
     stopEditing();
   };
@@ -172,13 +126,68 @@ function ClosureDashboardContent() {
     startEditing(closure);
   };
 
-  const handleDeleteClosure = async () => {
-    if (!selectedClosure || isDeletingClosure) return;
+  const handleEditClosure = () => {
+    if (!selectedClosure) {
+      return;
+    }
 
-    const shouldDelete = window.confirm("Delete this closure and all its snapshots? This action cannot be undone.");
-    if (!shouldDelete) return;
+    openClosureEditor(selectedClosure);
+  };
+
+  const handleTogglePublic = async (nextState: boolean) => {
+    if (!selectedClosure || isPublishing) {
+      return;
+    }
+
+    const closureId = selectedClosure.id;
+    setIsPublishing(true);
+
+    const { error } = await $fetch<IApiResponse<{ id: string; isPublic: boolean }>>(
+      `/api/restricted/management/closure/${closureId}/publishing`,
+      {
+        method: "PATCH",
+        body: { isPublic: nextState },
+      },
+    );
+
+    if (error) {
+      console.error("Failed to toggle closure publication:", error);
+      setIsPublishing(false);
+      return;
+    }
+
+    setClosures((previousClosures) => previousClosures.map((closure) => (
+      closure.id === closureId
+        ? { ...closure, isPublic: nextState }
+        : closure
+    )));
+
+    setSelectedClosure((previousClosure) => {
+      if (!previousClosure || previousClosure.id !== closureId) {
+        return previousClosure;
+      }
+
+      return {
+        ...previousClosure,
+        isPublic: nextState,
+      };
+    });
+
+    setIsPublishing(false);
+  };
+
+  const handleDeleteClosure = async () => {
+    if (!selectedClosure || isDeletingClosure) {
+      return;
+    }
+
+    const shouldDelete = window.confirm("Delete this closure? This action cannot be undone.");
+    if (!shouldDelete) {
+      return;
+    }
 
     setIsDeletingClosure(true);
+
     const { error } = await $fetch(`/api/restricted/management/closure/${selectedClosure.id}`, {
       method: "DELETE",
     });
@@ -191,123 +200,10 @@ function ClosureDashboardContent() {
 
     setSelectedClosure(null);
     setSelectedClosureId(null);
-    setSelectedClosureSnapshotId(null);
     stopEditing();
 
     await fetchClosures();
     setIsDeletingClosure(false);
-  };
-
-  const handleViewClosureSnapshot = async (snapshotId: string) => {
-    if (!selectedClosure) return;
-    setIsSnapshotActing(true);
-    const closureSnapshot = await fetchClosureSnapshot(selectedClosure.id, snapshotId);
-    setIsSnapshotActing(false);
-    if (!closureSnapshot) return;
-
-    setSelectedClosure(closureSnapshot);
-    setSelectedClosureId(closureSnapshot.id);
-    setClosureFocusKey(`${closureSnapshot.id}-${Date.now()}`);
-    stopEditing();
-  };
-
-  const handleEditClosureSnapshot = async (snapshotId: string) => {
-    if (!selectedClosure) return;
-    const selectedSnapshot = closureSnapshots.find((snapshot) => snapshot.id === snapshotId);
-    if (!selectedSnapshot || selectedSnapshot.state === "ready") return;
-
-    setIsSnapshotActing(true);
-    const closureSnapshot = await fetchClosureSnapshot(selectedClosure.id, snapshotId);
-    setIsSnapshotActing(false);
-    if (!closureSnapshot) return;
-
-    openClosureEditor(closureSnapshot);
-  };
-
-  const handleCloneClosureSnapshot = async (snapshotId: string) => {
-    if (!selectedClosure) return;
-
-    setIsSnapshotActing(true);
-    const { data, error } = await $fetch<IApiResponse<SnapshotListItem>>(`/api/restricted/management/closure/${selectedClosure.id}/${snapshotId}`, {
-      method: "PUT",
-    });
-    if (error) {
-      console.error("Failed to clone closure snapshot:", error);
-      setIsSnapshotActing(false);
-      return;
-    }
-
-    const closureSnapshot = await fetchClosureSnapshot(selectedClosure.id, data.data.id);
-    setIsSnapshotActing(false);
-    if (!closureSnapshot) return;
-
-    openClosureEditor(closureSnapshot);
-    setSelectedClosureSnapshotId(data.data.id);
-  };
-
-  const handleSetActiveClosureSnapshot = async (snapshotId: string) => {
-    if (!selectedClosure) return;
-
-    const selectedSnapshot = closureSnapshots.find((snapshot) => snapshot.id === snapshotId);
-    if (!selectedSnapshot || selectedSnapshot.state !== "ready") return;
-
-    setIsSnapshotActing(true);
-    const { data, error } = await $fetch<IApiResponse<ClosureResponse>>(`/api/restricted/management/closure/${selectedClosure.id}`, {
-      method: "PATCH",
-      body: { snapshotId },
-    });
-
-    if (error) {
-      console.error("Failed to switch closure snapshot:", error);
-      setIsSnapshotActing(false);
-      return;
-    }
-
-    setSelectedClosure(data.data);
-    setSelectedClosureId(data.data.id);
-    setSelectedClosureSnapshotId(snapshotId);
-    setActiveClosureSnapshotId(snapshotId);
-    setClosureFocusKey(`${data.data.id}-${Date.now()}`);
-    setIsSnapshotActing(false);
-    void loadClosureSnapshots(data.data);
-  };
-
-  const handleCreateBlankClosureSnapshot = () => {
-    if (!selectedClosure) return;
-
-    startCreatingSnapshot(selectedClosure.id);
-  };
-
-  const handleDeleteClosureSnapshot = async (snapshotId: string) => {
-    if (!selectedClosure) return;
-
-    const selectedSnapshot = closureSnapshots.find((snapshot) => snapshot.id === snapshotId);
-    if (!selectedSnapshot || selectedSnapshot.state === "ready") return;
-
-    const shouldDelete = window.confirm(`Delete snapshot \"${selectedSnapshot.name}\"? This action cannot be undone.`);
-    if (!shouldDelete) return;
-
-    setIsSnapshotActing(true);
-    const { error } = await $fetch(`/api/restricted/management/closure/${selectedClosure.id}/${snapshotId}`, {
-      method: "DELETE",
-    });
-
-    if (error) {
-      console.error("Failed to delete closure snapshot:", error);
-      setIsSnapshotActing(false);
-      return;
-    }
-
-    const nextSnapshots = closureSnapshots.filter((snapshot) => snapshot.id !== snapshotId);
-    setClosureSnapshots(nextSnapshots);
-    setSelectedClosureSnapshotId(nextSnapshots[0]?.id ?? null);
-    setIsSnapshotActing(false);
-    await fetchClosures();
-  };
-
-  const handleSelectClosureSnapshot = async (snapshotId: string) => {
-    setSelectedClosureSnapshotId(snapshotId);
-    await handleViewClosureSnapshot(snapshotId);
   };
 
   return (
@@ -348,36 +244,22 @@ function ClosureDashboardContent() {
             >
               <ClosureItemSidebar
                 closure={selectedClosure}
-                snapshots={closureSnapshots}
-                selectedSnapshotId={selectedClosureSnapshotId}
-                activeSnapshotId={activeClosureSnapshotId}
-                isSnapshotLoading={isSnapshotLoading}
-                isSnapshotActing={isSnapshotActing}
+                userRole={userRole}
+                isPublishing={isPublishing}
                 isDeletingClosure={isDeletingClosure}
                 onClose={handleClearSelectedClosure}
+                onEditClosure={handleEditClosure}
                 onDeleteClosure={handleDeleteClosure}
-                onSelectSnapshot={handleSelectClosureSnapshot}
-                onSetActiveSnapshot={handleSetActiveClosureSnapshot}
-                onDeleteSnapshot={handleDeleteClosureSnapshot}
-                onEditSnapshot={handleEditClosureSnapshot}
-                onCloneSnapshot={handleCloneClosureSnapshot}
-                onCreateBlankSnapshot={handleCreateBlankClosureSnapshot}
+                onTogglePublic={handleTogglePublic}
               />
             </div>
           ) : null}
 
-          <ClosureRegionEditor onSaved={async () => {
-            await fetchClosures();
-
-            if (selectedClosure?.id && selectedClosure?.activeSnapshotId) {
-              const refreshedSnapshot = await fetchClosureSnapshot(selectedClosure.id, selectedClosure.activeSnapshotId);
-              if (refreshedSnapshot) {
-                setSelectedClosure(refreshedSnapshot);
-                setSelectedClosureId(refreshedSnapshot.id);
-                setClosureFocusKey(`${refreshedSnapshot.id}-${Date.now()}`);
-              }
-            }
-          }} />
+          <ClosureRegionEditor
+            onSaved={async () => {
+              await fetchClosures();
+            }}
+          />
         </div>
       </SidebarInset>
     </SidebarProvider>

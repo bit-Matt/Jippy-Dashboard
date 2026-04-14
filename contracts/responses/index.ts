@@ -97,19 +97,26 @@ export interface ClosurePointResponse {
 
 export interface ClosureResponse {
   id: string;
-  activeSnapshotId: string;
-  versionName: string;
-  snapshotState: string;
   closureName: string;
   closureDescription: string;
   shape: string;
+  isPublic: boolean;
   points: ClosurePointResponse[];
 }
 
 export type ClosureResponseList = ClosureResponse[];
 
-export interface DashboardAllResponse {
-  routes: RouteResponseList;
-  regions: RegionResponseList;
-  closures: ClosureResponseList;
+export interface ClosurePointObject {
+  id: string;
+  sequence: number;
+  point: [number, number];
+}
+
+export interface ClosureObject {
+  id: string;
+  closureName: string;
+  closureDescription: string;
+  shape: string;
+  isPublic: boolean;
+  points: Array<ClosurePointObject>;
 }
