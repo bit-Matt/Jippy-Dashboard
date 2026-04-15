@@ -20,10 +20,11 @@ import {
 } from "@/lib/routing/leg-assembler";
 import {
   WALK_ONLY_THRESHOLD_METERS,
+  MIN_TRANSIT_RIDE_METERS,
   VIRTUAL_START_ID,
   VIRTUAL_END_ID,
 } from "@/lib/routing/constants";
-import type { Graph, LatLng, NavigateResponse, RouteLeg } from "@/lib/routing/types";
+import type { Graph, LatLng, NavigateResponse, PathSegment, RouteLeg } from "@/lib/routing/types";
 
 /**
  * Computes the optimal multimodal route from `start` to `end`.
@@ -64,7 +65,7 @@ export async function computeRoute(
   applyClosurePenalties(adjacency, nodes, transitData.closures);
 
   // Inject virtual start/end nodes
-  const { hasAccessEdges, hasEgressEdges } = injectUserNodes(
+  const { hasAccessEdges, hasEgressEdges } = await injectUserNodes(
     start,
     end,
     transitData.routes,
@@ -93,7 +94,15 @@ export async function computeRoute(
   // -----------------------------------------------------------------------
   // Reconstruct path into segments
   // -----------------------------------------------------------------------
-  const segments = reconstructPath(nodePath, graph);
+  let segments = reconstructPath(nodePath, graph);
+
+  if (segments.length === 0) {
+    return assembleResponse(await buildWalkOnlyRoute(start, end));
+  }
+
+  // Drop transit segments too short to justify boarding a vehicle.
+  // Adjacent walk legs will naturally extend to cover the gap.
+  segments = filterShortSegments(segments);
 
   if (segments.length === 0) {
     return assembleResponse(await buildWalkOnlyRoute(start, end));
@@ -124,6 +133,22 @@ export async function computeRoute(
   allLegs.push(...egressLegs);
 
   return assembleResponse(allLegs);
+}
+
+// ---------------------------------------------------------------------------
+// Filter out transit segments too short to justify boarding
+// ---------------------------------------------------------------------------
+
+function filterShortSegments(segments: PathSegment[]): PathSegment[] {
+  return segments.filter((seg) => {
+    let dist = 0;
+    for (let i = 0; i < seg.nodes.length - 1; i++) {
+      const a = seg.nodes[i];
+      const b = seg.nodes[i + 1];
+      dist += haversineMeters([a.lat, a.lng], [b.lat, b.lng]);
+    }
+    return dist >= MIN_TRANSIT_RIDE_METERS;
+  });
 }
 
 // ---------------------------------------------------------------------------

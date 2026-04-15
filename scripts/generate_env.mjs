@@ -83,6 +83,7 @@ async function main() {
   utils.env.write("next.public.nominatim.url", "http://localhost:6701");
   utils.env.write("next.public.valhalla.url", "http://localhost:6702");
   utils.env.write("next.public.tileserver.url", "http://localhost:6703");
+  utils.env.write("next.public.graphhopper.url", "http://localhost:6704");
 
   // Generate a connection string
   const dbConnectionOptions = {
@@ -104,7 +105,7 @@ async function main() {
   await utils.env.export(path.join(__dirname, "../.env"));
 
   // Download required files for any osm related applications
-  console.log("Downloading required files for nominatim, valhalla and tileserver...");
+  console.log("Downloading required files for nominatim, valhalla, tileserver and graphhopper...");
   await utils.db.preDockerConfigure();
 
   console.log("Building...");

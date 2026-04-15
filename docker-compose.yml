@@ -78,6 +78,29 @@ services:
       start_period: 30m
     networks:
       - defaultNetwork
+  graphhopper:
+    image: israelhikingmap/graphhopper:latest
+    container_name: graphhopper
+    restart: unless-stopped
+    ports:
+      - "6704:8989"
+    volumes:
+      - ./.osm-data/graphhopper:/data
+      - ./.osm-data/philippines-latest.osm.pbf:/data/philippines-latest.osm.pbf
+    environment:
+      - JAVA_OPTS=-Xmx2g -Xms2g -Ddw.graphhopper.graph.encoded_values=car_access,car_average_speed,country,road_class,roundabout,max_speed,foot_access,foot_average_speed,foot_priority,foot_road_access,hike_rating,average_slope,bike_access,bike_average_speed,bike_priority,bike_road_access,bike_network,mtb_rating,ferry_speed,road_environment
+    command: >
+      -i /data/philippines-latest.osm.pbf
+      -o /data/graph-cache 
+      --host 0.0.0.0
+    healthcheck:
+      test: [ "CMD-SHELL", "curl -f http://localhost:8989/info || exit 1" ]
+      interval: 30s
+      timeout: 10s
+      retries: 9999
+      start_period: 10m
+    networks:
+      - defaultNetwork
 
 networks:
   defaultNetwork:

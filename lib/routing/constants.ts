@@ -8,7 +8,7 @@ export const WALK_PENALTY_MULTIPLIER = 2.0;
 /** Walking distance (meters) below which cost is linear; above this cost escalates quadratically */
 export const WALK_COMFORT_METERS = 150;
 
-/** Rate at which walk cost escalates beyond the comfort threshold (higher = steeper penalty) */
+/** The rate at which walk cost escalates beyond the comfort threshold (higher = steeper penalty) */
 export const WALK_ESCALATION_RATE = 0.008;
 
 /** Cost multiplier for transit (ride) edges. Values < 1 make riding cheaper than
@@ -19,6 +19,10 @@ export const TRANSIT_COST_FACTOR = 0.5;
 /** Flat penalty (in meters-equivalent) added for each vehicle transfer */
 export const TRANSFER_PENALTY_METERS = 120;
 
+/** Minimum transit ride distance (meters) that justifies boarding a vehicle.
+ *  Segments shorter than this are dropped — the user should just walk instead. */
+export const MIN_TRANSIT_RIDE_METERS = 300;
+
 /** Multiplier applied to edges that intersect a road closure polygon */
 export const CLOSURE_PENALTY_MULTIPLIER = 5.0;
 
@@ -27,10 +31,10 @@ export const CLOSURE_PENALTY_MULTIPLIER = 5.0;
  *  are often 30-100m apart. 100m captures real-world transfer opportunities. */
 export const TRANSFER_PROXIMITY_METERS = 100;
 
-/** If straight-line A→B distance is below this, return a pure walk route */
+/** If the straight-line A → B distance is below this, return a pure walk route */
 export const WALK_ONLY_THRESHOLD_METERS = 200;
 
-/** If the nearest transit line/station is farther than this from A or B, return walk-only */
+/** If the nearest transit line/station is farther than this from A or B, return walks-only */
 export const MAX_TRANSIT_PROXIMITY_METERS = 5_000;
 
 /** Average walking speed in km/h */

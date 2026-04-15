@@ -5,7 +5,6 @@
 import turfDistance from "@turf/distance";
 import { point as turfPoint, lineString as turfLineString, polygon as turfPolygon } from "@turf/helpers";
 import turfLineIntersect from "@turf/line-intersect";
-import turfNearestPointOnLine from "@turf/nearest-point-on-line";
 import booleanPointInPolygon from "@turf/boolean-point-in-polygon";
 
 import { unwrap } from "@/lib/one-of";
@@ -305,13 +304,22 @@ export function applyClosurePenalties(
 // 6. Inject virtual start/end nodes with walk edges to nearby polyline nodes
 // ---------------------------------------------------------------------------
 
-export function injectUserNodes(
+/** Max candidates per route+direction to query GraphHopper for real walk distance */
+const ACCESS_CANDIDATES_PER_DIRECTION = 16;
+/** Global cap on total GraphHopper queries for access edges */
+const MAX_ACCESS_QUERIES = 30;
+/** Max candidates per route+direction for egress GraphHopper queries */
+const EGRESS_CANDIDATES_PER_DIRECTION = 16;
+/** Global cap on total GraphHopper queries for egress edges */
+const MAX_EGRESS_QUERIES = 30;
+
+export async function injectUserNodes(
   start: LatLng,
   end: LatLng,
   routes: TransitRoute[],
   nodes: Map<string, GraphNode>,
   adjacency: Map<string, GraphEdge[]>,
-): { hasAccessEdges: boolean; hasEgressEdges: boolean } {
+): Promise<{ hasAccessEdges: boolean; hasEgressEdges: boolean }> {
   // Create virtual nodes
   nodes.set(VIRTUAL_START_ID, {
     id: VIRTUAL_START_ID,
@@ -345,61 +353,93 @@ export function injectUserNodes(
   let hasAccessEdges = false;
   let hasEgressEdges = false;
 
-  for (const route of routes) {
-    // Process each direction of each route
-    for (const dir of ["goingTo", "goingBack"] as const) {
-      const coords = dir === "goingTo" ? route.decodedGoingTo : route.decodedGoingBack;
-      if (coords.length < 2) continue;
+  // --- ACCESS: Collect candidates, query GraphHopper for real walk distances ---
+  // The algorithm can't know actual walking distance from geometric distance
+  // alone (roads may not follow straight lines). We select the top-N nearest
+  // candidates per route+direction by geometric distance, then query
+  // GraphHopper in parallel to get real road-network walking distances.
+  const accessDegThreshold = MAX_TRANSIT_PROXIMITY_METERS / 111_320;
 
-      // Build turf linestring for nearest-point-on-line projection
-      const lineCoords = coords.map(([lat, lng]) => [lng, lat] as [number, number]);
-      const line = turfLineString(lineCoords);
+  const candidatesByGroup = new Map<string, { nodeId: string; geoDist: number }[]>();
 
-      // --- ACCESS: Project start point onto this polyline ---
-      const startProj = turfNearestPointOnLine(line, turfPoint([start[1], start[0]]));
-      const startDist = turfDistance(
-        turfPoint([start[1], start[0]]),
-        startProj,
-        { units: "meters" },
-      );
+  for (const [nodeId, node] of nodes) {
+    if (node.routeId === "__virtual__") continue;
 
-      if (startDist <= MAX_TRANSIT_PROXIMITY_METERS) {
-        // Find the nearest polyline vertex index
-        const projIdx = startProj.properties.index ?? 0;
-        // Snap to the closest actual vertex (projIdx or projIdx+1)
-        const nodeIdx = findClosestVertex(coords, projIdx, startProj.geometry.coordinates);
+    // Fast degree-based pre-filter
+    if (Math.abs(node.lat - start[0]) > accessDegThreshold) continue;
+    if (Math.abs(node.lng - start[1]) > accessDegThreshold * 1.5) continue;
 
-        // Directional filter: route from boarding point should generally head toward B
-        const routeDir = getRouteDirection(coords, nodeIdx);
-        const dotProduct = routeDir[0] * abLat + routeDir[1] * abLng;
+    const dist = haversineMeters([node.lat, node.lng], start);
+    if (dist > MAX_TRANSIT_PROXIMITY_METERS) continue;
 
-        if (dotProduct > 0) {
-          const targetNodeId = `${route.id}:${dir}:${nodeIdx}`;
-          if (nodes.has(targetNodeId)) {
-            const walkCost = progressiveWalkCost(startDist);
-            adjacency.get(VIRTUAL_START_ID)!.push({
-              from: VIRTUAL_START_ID,
-              to: targetNodeId,
-              distance: startDist,
-              cost: walkCost,
-              type: "walk",
-              routeId: route.id,
-              routeName: route.routeName,
-            });
-            hasAccessEdges = true;
-          }
-        }
-      }
+    // Find the decoded polyline for this node's route+direction
+    const route = routes.find((r) => r.id === node.routeId);
+    if (!route) continue;
 
+    const coords = node.direction === "goingTo" ? route.decodedGoingTo : route.decodedGoingBack;
+    if (coords.length < 2) continue;
+
+    // Directional filter: route from boarding point should generally head toward B
+    const routeDir = getRouteDirection(coords, node.polylineIndex);
+    const dotProduct = routeDir[0] * abLat + routeDir[1] * abLng;
+    if (dotProduct <= 0) continue;
+
+    const groupKey = `${node.routeId}:${node.direction}`;
+    let group = candidatesByGroup.get(groupKey);
+    if (!group) {
+      group = [];
+      candidatesByGroup.set(groupKey, group);
     }
+    group.push({ nodeId, geoDist: dist });
   }
 
-  // --- EGRESS: Create edges from ALL nearby route nodes to VIRTUAL_END ---
-  // Instead of only the single nearest-projected node per route, we connect
-  // every graph node within range so that A* can exit from any reachable
-  // node after a transfer. This is critical for multi-route (transfer) paths
-  // where the single-projection approach can miss reachable exit points.
-  const egressDegThreshold = MAX_TRANSIT_PROXIMITY_METERS / 111_320; // approx degrees
+  // Keep top-N per group, then cap globally
+  const accessCandidates: { nodeId: string; geoDist: number }[] = [];
+  for (const [, group] of candidatesByGroup) {
+    group.sort((a, b) => a.geoDist - b.geoDist);
+    accessCandidates.push(...group.slice(0, ACCESS_CANDIDATES_PER_DIRECTION));
+  }
+  accessCandidates.sort((a, b) => a.geoDist - b.geoDist);
+  const cappedCandidates = accessCandidates.slice(0, MAX_ACCESS_QUERIES);
+
+  // Query GraphHopper in parallel for real walking distances
+  const { getWalkDistance } = await import("@/lib/routing/graphhopper-walk");
+  const walkResults = await Promise.all(
+    cappedCandidates.map(async (candidate) => {
+      const node = nodes.get(candidate.nodeId)!;
+      try {
+        const realDist = await getWalkDistance(start, [node.lat, node.lng]);
+        return { nodeId: candidate.nodeId, realDist };
+      } catch {
+        // Fall back to geometric estimate with typical detour factor
+        return { nodeId: candidate.nodeId, realDist: candidate.geoDist * 1.4 };
+      }
+    }),
+  );
+
+  // Create access edges with real walking distances
+  for (const { nodeId, realDist } of walkResults) {
+    if (!isFinite(realDist)) continue;
+    const node = nodes.get(nodeId)!;
+    const walkCost = progressiveWalkCost(realDist);
+    adjacency.get(VIRTUAL_START_ID)!.push({
+      from: VIRTUAL_START_ID,
+      to: nodeId,
+      distance: realDist,
+      cost: walkCost,
+      type: "walk",
+      routeId: node.routeId,
+      routeName: node.routeName,
+    });
+    hasAccessEdges = true;
+  }
+
+  // --- EGRESS: Collect candidates, query GraphHopper for real walk distances ---
+  // Same approach as access: select top-N nearest candidates per route+direction
+  // by geometric distance, then query GraphHopper in parallel for real distances.
+  const egressDegThreshold = MAX_TRANSIT_PROXIMITY_METERS / 111_320;
+
+  const egressByGroup = new Map<string, { nodeId: string; geoDist: number }[]>();
 
   for (const [nodeId, node] of nodes) {
     if (node.routeId === "__virtual__") continue;
@@ -411,7 +451,41 @@ export function injectUserNodes(
     const dist = haversineMeters([node.lat, node.lng], end);
     if (dist > MAX_TRANSIT_PROXIMITY_METERS) continue;
 
-    const walkCost = progressiveWalkCost(dist);
+    const groupKey = `${node.routeId}:${node.direction}`;
+    let group = egressByGroup.get(groupKey);
+    if (!group) {
+      group = [];
+      egressByGroup.set(groupKey, group);
+    }
+    group.push({ nodeId, geoDist: dist });
+  }
+
+  // Keep top-N per group, then cap globally
+  const egressCandidates: { nodeId: string; geoDist: number }[] = [];
+  for (const [, group] of egressByGroup) {
+    group.sort((a, b) => a.geoDist - b.geoDist);
+    egressCandidates.push(...group.slice(0, EGRESS_CANDIDATES_PER_DIRECTION));
+  }
+  egressCandidates.sort((a, b) => a.geoDist - b.geoDist);
+  const cappedEgress = egressCandidates.slice(0, MAX_EGRESS_QUERIES);
+
+  // Query GraphHopper in parallel for real walking distances
+  const egressResults = await Promise.all(
+    cappedEgress.map(async (candidate) => {
+      const node = nodes.get(candidate.nodeId)!;
+      try {
+        const realDist = await getWalkDistance([node.lat, node.lng], end);
+        return { nodeId: candidate.nodeId, realDist };
+      } catch {
+        return { nodeId: candidate.nodeId, realDist: candidate.geoDist * 1.4 };
+      }
+    }),
+  );
+
+  // Create egress edges with real walking distances
+  for (const { nodeId, realDist } of egressResults) {
+    if (!isFinite(realDist)) continue;
+    const walkCost = progressiveWalkCost(realDist);
 
     let nodeEdges = adjacency.get(nodeId);
     if (!nodeEdges) {
@@ -421,7 +495,7 @@ export function injectUserNodes(
     nodeEdges.push({
       from: nodeId,
       to: VIRTUAL_END_ID,
-      distance: dist,
+      distance: realDist,
       cost: walkCost,
       type: "walk",
     });
@@ -451,23 +525,6 @@ export function progressiveWalkCost(distMeters: number): number {
   const baseCost = WALK_COMFORT_METERS * WALK_PENALTY_MULTIPLIER;
   const excess = distMeters - WALK_COMFORT_METERS;
   return baseCost + excess * WALK_PENALTY_MULTIPLIER * (1 + excess * WALK_ESCALATION_RATE);
-}
-
-function findClosestVertex(
-  coords: LatLng[],
-  segmentIndex: number,
-  projCoord: number[],
-): number {
-  const projLat = projCoord[1];
-  const projLng = projCoord[0];
-
-  const idx1 = segmentIndex;
-  const idx2 = Math.min(segmentIndex + 1, coords.length - 1);
-
-  const d1 = (coords[idx1][0] - projLat) ** 2 + (coords[idx1][1] - projLng) ** 2;
-  const d2 = (coords[idx2][0] - projLat) ** 2 + (coords[idx2][1] - projLng) ** 2;
-
-  return d1 <= d2 ? idx1 : idx2;
 }
 
 function getRouteDirection(coords: LatLng[], fromIdx: number): [number, number] {

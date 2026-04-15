@@ -7,7 +7,7 @@ import { point as turfPoint, lineString as turfLineString, polygon as turfPolygo
 import booleanPointInPolygon from "@turf/boolean-point-in-polygon";
 
 import { encodePolyline } from "@/lib/routing/polyline";
-import { getWalkRoute } from "@/lib/routing/valhalla-walk";
+import { getWalkRoute } from "@/lib/routing/graphhopper-walk";
 import { haversineMeters } from "@/lib/routing/graph-builder";
 import {
   generateWalkInstructions,
