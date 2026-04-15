@@ -6,6 +6,7 @@ import { v7 as uuidv7 } from "uuid";
 export const roles = pgEnum("role", ["administrator_user", "regular_user"]);
 export const snapshotState = pgEnum("snapshot_state", ["ready", "wip", "for_approval"]);
 export const sequenceType = pgEnum("route_sequence_type", ["going_to", "going_back"]);
+export const restrictionType = pgEnum("restriction_type", ["universal", "specific"]);
 
 // ============================================================================
 // BETTER AUTH RELEATED STUFF
@@ -422,6 +423,82 @@ export const roadClosurePoints = pgTable("road_closure_points", {
 }, (t) => [
   index("spatial_index_road_closure_region").using("gist", t.point),
   index("road_closure_region_ref_idx").on(t.roadClosureId),
+]);
+
+export const stops = pgTable("stops", {
+  id: uuid("id")
+    .primaryKey()
+    .$default(() => uuidv7()),
+
+  name: text("name").notNull(),
+  restrictionType: restrictionType("restriction_type").notNull(),
+
+  // Metadata
+  isPublic: boolean("is_public").default(false).notNull(),
+  ownerId: text("owner_id")
+    .references(() => user.id, { onDelete: "set null" }),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at")
+    .defaultNow()
+    .$onUpdate(() => new Date())
+    .notNull(),
+});
+
+export const stopPoints = pgTable("stop_points", {
+  id: uuid("id")
+    .primaryKey()
+    .$default(() => uuidv7()),
+
+  // Data
+  sequenceNumber: integer("sequence_number").notNull(),
+  point: geometry("point", { type: "point", mode: "tuple", srid: 4326 }).notNull(),
+
+  // Metadata
+  stopId: uuid("stop_id")
+    .notNull()
+    .references(() => stops.id, { onDelete: "cascade" }),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at")
+    .defaultNow()
+    .$onUpdate(() => new Date())
+    .notNull(),
+}, (t) => [
+  index("spatial_index_stop_points").using("gist", t.point),
+  index("stop_points_ref_idx").on(t.stopId, t.sequenceNumber),
+]);
+
+export const stopRoutes = pgTable("stop_routes", {
+  id: uuid("id")
+    .primaryKey()
+    .$default(() => uuidv7()),
+
+  stopId: uuid("stop_id")
+    .notNull()
+    .references(() => stops.id, { onDelete: "cascade" }),
+  routeId: uuid("route_id")
+    .notNull()
+    .references(() => routes.id, { onDelete: "cascade" }),
+
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (t) => [
+  index("stop_routes_ref_idx").on(t.stopId),
+]);
+
+export const stopVehicleTypes = pgTable("stop_vehicle_types", {
+  id: uuid("id")
+    .primaryKey()
+    .$default(() => uuidv7()),
+
+  stopId: uuid("stop_id")
+    .notNull()
+    .references(() => stops.id, { onDelete: "cascade" }),
+  vehicleTypeId: uuid("vehicle_type_id")
+    .notNull()
+    .references(() => vehicleTypes.id, { onDelete: "cascade" }),
+
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (t) => [
+  index("stop_vehicle_types_ref_idx").on(t.stopId),
 ]);
 
 export const activityLogs = pgTable(

@@ -120,3 +120,23 @@ export interface ClosureObject {
   isPublic: boolean;
   points: Array<ClosurePointObject>;
 }
+
+export type StopRestrictionType = "universal" | "specific";
+
+export interface StopPointResponse {
+  id: string;
+  sequence: number;
+  point: [number, number];
+}
+
+export interface StopResponse {
+  id: string;
+  name: string;
+  restrictionType: StopRestrictionType;
+  isPublic: boolean;
+  points: StopPointResponse[];
+  routeIds: string[];
+  vehicleTypeIds: string[];
+}
+
+export type StopResponseList = StopResponse[];
