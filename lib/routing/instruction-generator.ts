@@ -2,8 +2,6 @@
 // Turn-by-turn instruction generation for each leg type
 // ---------------------------------------------------------------------------
 
-import { reverse } from "@/lib/osm/nominatim";
-
 import type {
   Instruction,
   ValhallaManeuver,
@@ -70,8 +68,10 @@ export async function generateJeepneyInstructions(
   // Determine heading direction from route name + direction
   const directionLabel = segment.direction === "goingTo" ? "its destination" : "its origin";
 
+  // Reverse geocode boarding point for a human-readable location
+  const boardLocation = await reverseGeocodePoint(firstNode.lat, firstNode.lng);
   instructions.push({
-    text: `Board the ${segment.routeName} jeepney heading towards ${directionLabel}.`,
+    text: `Board the ${segment.routeName} jeepney at ${boardLocation} heading towards ${directionLabel}.`,
     maneuver_type: "board",
   });
 
@@ -117,15 +117,23 @@ function formatDistance(meters: number): string {
   return `${Math.round(meters)} m`;
 }
 
+const NOMINATIM_BASE = process.env.NEXT_PUBLIC_NOMINATIM_URL ?? "";
+
 async function reverseGeocodePoint(lat: number, lng: number): Promise<string> {
   try {
-    const { data } = await reverse({ lat, lon: lng, zoom: 18 });
+    const url = `${NOMINATIM_BASE}/reverse?lat=${lat}&lon=${lng}&zoom=18&addressdetails=1&format=jsonv2`;
+    const res = await fetch(url, { signal: AbortSignal.timeout(3000) });
+    if (!res.ok) throw new Error(`Nominatim ${res.status}`);
+    const data = await res.json();
     if (data?.display_name) {
-      // Return a short version: road + suburb
-      const road = data.address?.road;
-      const suburb = data.address?.suburb || data.address?.village;
+      const addr = data.address;
+      const road = addr?.road;
+      const neighbourhood = addr?.neighbourhood;
+      const suburb = addr?.suburb || addr?.village || addr?.quarter;
       if (road && suburb) return `${road}, ${suburb}`;
+      if (road && neighbourhood) return `${road}, ${neighbourhood}`;
       if (road) return road;
+      if (suburb) return suburb;
       return data.display_name.split(",").slice(0, 2).join(",").trim();
     }
   } catch {
