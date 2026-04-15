@@ -7,6 +7,7 @@ export const roles = pgEnum("role", ["administrator_user", "regular_user"]);
 export const snapshotState = pgEnum("snapshot_state", ["ready", "wip", "for_approval"]);
 export const sequenceType = pgEnum("route_sequence_type", ["going_to", "going_back"]);
 export const restrictionType = pgEnum("restriction_type", ["universal", "specific"]);
+export const closureTypeEnum = pgEnum("closure_type", ["indefinite", "scheduled"]);
 
 // ============================================================================
 // BETTER AUTH RELEATED STUFF
@@ -390,6 +391,8 @@ export const roadClosures = pgTable("road_closure", {
   name: text("name").notNull(),
   description: text("description").notNull(),
   shape: text("shape").notNull(),
+  closureType: closureTypeEnum("closure_type").default("indefinite").notNull(),
+  endDate: timestamp("end_date"),
 
   // Metadata
   isPublic: boolean("is_public_viewable").default(false).notNull(),

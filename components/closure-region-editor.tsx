@@ -1,14 +1,18 @@
 "use client";
 
-import { ChevronLeft, PenTool, Trash2 } from "lucide-react";
+import { CalendarIcon, ChevronLeft, PenTool, Trash2 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { z } from "zod";
+import { format } from "date-fns";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Calendar } from "@/components/ui/calendar";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { useClosureEditor } from "@/contexts/ClosureEditorContext";
 
@@ -21,12 +25,18 @@ const closurePayloadSchema = z.object({
   closureName: z.string(),
   closureDescription: z.string(),
   shape: z.string().min(1).default("polygon"),
+  closureType: z.enum(["indefinite", "scheduled"]),
+  endDate: z.date().nullable(),
   points: z.array(
     z.object({
       sequence: z.number(),
       point: z.tuple([z.number().finite(), z.number().finite()]),
     }),
   ).min(3, "Please add at least 3 points for the closure region."),
+}).superRefine((data, ctx) => {
+  if (data.closureType === "scheduled" && !data.endDate) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, message: "End date is required for scheduled closures.", path: ["endDate"] });
+  }
 });
 
 interface ClosureRegionEditorProps {
@@ -44,6 +54,8 @@ export default function ClosureRegionEditor({ onSaved }: ClosureRegionEditorProp
     clearPolygon,
     setClosureName,
     setClosureDescription,
+    setClosureType,
+    setEndDate,
     finishClosureToolEditing,
     stopEditing,
   } = useClosureEditor();
@@ -67,6 +79,8 @@ export default function ClosureRegionEditor({ onSaved }: ClosureRegionEditorProp
       activeClosureId,
       closureName: draft.closureName,
       closureDescription: draft.closureDescription,
+      closureType: draft.closureType,
+      endDate: draft.endDate?.toISOString() ?? null,
       points: draft.points.map((point) => ({ sequence: point.sequence, point: point.point })),
     });
   }, [activeClosureId, draft, mode]);
@@ -81,6 +95,8 @@ export default function ClosureRegionEditor({ onSaved }: ClosureRegionEditorProp
       activeClosureId,
       closureName: draft.closureName,
       closureDescription: draft.closureDescription,
+      closureType: draft.closureType,
+      endDate: draft.endDate?.toISOString() ?? null,
       points: draft.points.map((point) => ({ sequence: point.sequence, point: point.point })),
     });
 
@@ -116,6 +132,8 @@ export default function ClosureRegionEditor({ onSaved }: ClosureRegionEditorProp
       closureName: draftToSave.closureName,
       closureDescription: draftToSave.closureDescription,
       shape: draftToSave.shape || "polygon",
+      closureType: draftToSave.closureType,
+      endDate: draftToSave.endDate,
       points: draftToSave.points.map((point) => ({
         sequence: point.sequence,
         point: point.point,
@@ -141,6 +159,8 @@ export default function ClosureRegionEditor({ onSaved }: ClosureRegionEditorProp
             closureName: draftToSave.closureName,
             closureDescription: draftToSave.closureDescription,
             shape: draftToSave.shape || "polygon",
+            closureType: draftToSave.closureType,
+            endDate: draftToSave.closureType === "scheduled" ? draftToSave.endDate?.toISOString() : undefined,
             points: draftToSave.points.map((point) => ({
               sequence: point.sequence,
               point: point.point,
@@ -165,6 +185,8 @@ export default function ClosureRegionEditor({ onSaved }: ClosureRegionEditorProp
             closureName: draftToSave.closureName,
             closureDescription: draftToSave.closureDescription,
             shape: draftToSave.shape || "polygon",
+            closureType: draftToSave.closureType,
+            endDate: draftToSave.closureType === "scheduled" ? draftToSave.endDate?.toISOString() : undefined,
             points: draftToSave.points.map((point) => ({
               sequence: point.sequence,
               point: point.point,
@@ -242,6 +264,51 @@ export default function ClosureRegionEditor({ onSaved }: ClosureRegionEditorProp
                 rows={4}
               />
             </div>
+            <div className="grid gap-1.5">
+              <Label htmlFor="closure-type">Closure Type</Label>
+              <Select
+                value={draft.closureType}
+                onValueChange={(value: "indefinite" | "scheduled") => {
+                  setClosureType(value);
+                  if (value === "indefinite") {
+                    setEndDate(null);
+                  }
+                }}
+              >
+                <SelectTrigger id="closure-type">
+                  <SelectValue placeholder="Select type" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="indefinite">Indefinite</SelectItem>
+                  <SelectItem value="scheduled">Scheduled</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            {draft.closureType === "scheduled" && (
+              <div className="grid gap-1.5">
+                <Label>End Date</Label>
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="w-full justify-start text-left font-normal"
+                    >
+                      <CalendarIcon className="mr-2 h-4 w-4" />
+                      {draft.endDate ? format(draft.endDate, "PPP") : <span className="text-muted-foreground">Pick an end date</span>}
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-auto p-0" align="start">
+                    <Calendar
+                      mode="single"
+                      selected={draft.endDate ?? undefined}
+                      onSelect={(date) => setEndDate(date ?? null)}
+                      initialFocus
+                    />
+                  </PopoverContent>
+                </Popover>
+              </div>
+            )}
           </div>
 
           <p className="text-xs text-muted-foreground">

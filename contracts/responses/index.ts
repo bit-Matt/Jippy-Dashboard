@@ -100,6 +100,8 @@ export interface ClosureResponse {
   closureName: string;
   closureDescription: string;
   shape: string;
+  closureType: "indefinite" | "scheduled";
+  endDate: string | null;
   isPublic: boolean;
   points: ClosurePointResponse[];
 }
@@ -117,6 +119,8 @@ export interface ClosureObject {
   closureName: string;
   closureDescription: string;
   shape: string;
+  closureType: "indefinite" | "scheduled";
+  endDate: string | null;
   isPublic: boolean;
   points: Array<ClosurePointObject>;
 }

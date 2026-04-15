@@ -81,8 +81,18 @@ export async function POST(req: NextRequest) {
         },
       },
       shape: { type: "string", formatter: "non-empty-string" },
+      closureType: {
+        type: "string",
+        formatterFn: async (value) => {
+          if (value !== "indefinite" && value !== "scheduled") {
+            return { ok: false, error: "closureType must be 'indefinite' or 'scheduled'." };
+          }
+          return { ok: true };
+        },
+      },
+      endDate: { type: "string" },
     },
-    requiredProperties: ["closureName", "closureDescription", "points", "shape"],
+    requiredProperties: ["closureName", "closureDescription", "points", "shape", "closureType"],
     allowUnvalidatedProperties: false,
   });
   if (!validation.ok) {
@@ -91,7 +101,24 @@ export async function POST(req: NextRequest) {
       .build();
   }
 
-  const result = await closure.createClosure(data, currentSession.user!.id);
+  // Cross-field: scheduled closures require a valid endDate.
+  if (data.closureType === "scheduled") {
+    const parsedEnd = data.endDate ? new Date(data.endDate) : null;
+    if (!parsedEnd || isNaN(parsedEnd.getTime())) {
+      return ApiResponseBuilder
+        .createError(StatusCodes.Status400BadRequest, [{ message: "endDate is required and must be a valid date for scheduled closures." }])
+        .build();
+    }
+  }
+
+  const result = await closure.createClosure({
+    closureName: data.closureName,
+    closureDescription: data.closureDescription,
+    shape: data.shape,
+    points: data.points,
+    closureType: data.closureType,
+    endDate: data.closureType === "scheduled" ? new Date(data.endDate!) : null,
+  }, currentSession.user!.id);
   return oneOf(result).match(
     s => {
       void logActivity({
@@ -122,4 +149,6 @@ type RequestBody = {
     point: [number, number];
   }>;
   shape: string;
+  closureType: "indefinite" | "scheduled";
+  endDate?: string;
 }

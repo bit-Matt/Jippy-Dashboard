@@ -1,4 +1,4 @@
-import {eq, sql} from "drizzle-orm";
+import {and, eq, gt, or, sql} from "drizzle-orm";
 
 import {db} from "@/lib/db";
 import {roadClosurePoints, roadClosures} from "@/lib/db/schema";
@@ -35,16 +35,29 @@ export async function getAllClosures(forPublic: boolean = true): Promise<Result<
           closureName: roadClosures.name,
           closureDescription: roadClosures.description,
           shape: roadClosures.shape,
+          closureType: roadClosures.closureType,
+          endDate: roadClosures.endDate,
           points: pointsAggregation,
         })
         .from(roadClosures)
         .leftJoin(roadClosurePoints, eq(roadClosurePoints.roadClosureId, roadClosures.id))
-        .where(eq(roadClosures.isPublic, true))
+        .where(and(
+          eq(roadClosures.isPublic, true),
+          or(
+            eq(roadClosures.closureType, "indefinite"),
+            and(
+              eq(roadClosures.closureType, "scheduled"),
+              gt(roadClosures.endDate, sql`NOW()`),
+            ),
+          ),
+        ))
         .groupBy(
           roadClosures.id,
           roadClosures.name,
           roadClosures.description,
           roadClosures.shape,
+          roadClosures.closureType,
+          roadClosures.endDate,
         );
 
       return new Success(result satisfies ClosureBaseObject[]);
@@ -56,6 +69,8 @@ export async function getAllClosures(forPublic: boolean = true): Promise<Result<
         closureName: roadClosures.name,
         closureDescription: roadClosures.description,
         shape: roadClosures.shape,
+        closureType: roadClosures.closureType,
+        endDate: roadClosures.endDate,
         points: pointsAggregation,
         isPublic: roadClosures.isPublic,
       })
@@ -66,6 +81,8 @@ export async function getAllClosures(forPublic: boolean = true): Promise<Result<
         roadClosures.name,
         roadClosures.description,
         roadClosures.shape,
+        roadClosures.closureType,
+        roadClosures.endDate,
         roadClosures.isPublic,
       );
 
@@ -90,6 +107,8 @@ export async function createClosure(payload: ClosureAddParameters, ownerId: stri
           name: payload.closureName,
           description: payload.closureDescription,
           shape: payload.shape,
+          closureType: payload.closureType,
+          endDate: payload.endDate,
           isPublic: false,
           ownerId,
         })
@@ -98,6 +117,8 @@ export async function createClosure(payload: ClosureAddParameters, ownerId: stri
           name: roadClosures.name,
           description: roadClosures.description,
           shape: roadClosures.shape,
+          closureType: roadClosures.closureType,
+          endDate: roadClosures.endDate,
           isPublic: roadClosures.isPublic,
         });
 
@@ -123,6 +144,8 @@ export async function createClosure(payload: ClosureAddParameters, ownerId: stri
         closureName: newClosure.name,
         closureDescription: newClosure.description,
         shape: newClosure.shape,
+        closureType: newClosure.closureType,
+        endDate: newClosure.endDate,
         isPublic: newClosure.isPublic,
         points: pointRows.map((row) => ({
           id: row.id,
@@ -200,6 +223,8 @@ export async function updateClosure(closureId: string, params: ClosureUpdatePara
         ...(params.closureName !== undefined && { name: params.closureName }),
         ...(params.closureDescription !== undefined && { description: params.closureDescription }),
         ...(params.shape !== undefined && { shape: params.shape }),
+        ...(params.closureType !== undefined && { closureType: params.closureType }),
+        ...(params.endDate !== undefined && { endDate: params.endDate }),
       };
 
       let updatedRoadClosure: {
@@ -207,6 +232,8 @@ export async function updateClosure(closureId: string, params: ClosureUpdatePara
         name: string;
         description: string;
         shape: string;
+        closureType: "indefinite" | "scheduled";
+        endDate: Date | null;
         isPublic: boolean;
       };
 
@@ -220,6 +247,8 @@ export async function updateClosure(closureId: string, params: ClosureUpdatePara
             name: roadClosures.name,
             description: roadClosures.description,
             shape: roadClosures.shape,
+            closureType: roadClosures.closureType,
+            endDate: roadClosures.endDate,
             isPublic: roadClosures.isPublic,
           });
 
@@ -235,6 +264,8 @@ export async function updateClosure(closureId: string, params: ClosureUpdatePara
             name: roadClosures.name,
             description: roadClosures.description,
             shape: roadClosures.shape,
+            closureType: roadClosures.closureType,
+            endDate: roadClosures.endDate,
             isPublic: roadClosures.isPublic,
           })
           .from(roadClosures)
@@ -296,6 +327,8 @@ export async function updateClosure(closureId: string, params: ClosureUpdatePara
         closureName: updatedRoadClosure.name,
         closureDescription: updatedRoadClosure.description,
         shape: updatedRoadClosure.shape,
+        closureType: updatedRoadClosure.closureType,
+        endDate: updatedRoadClosure.endDate,
         isPublic: updatedRoadClosure.isPublic,
         points,
       } satisfies ClosureObject;
@@ -359,6 +392,8 @@ export interface ClosureBaseObject {
   closureName: string;
   closureDescription: string;
   shape: string;
+  closureType: "indefinite" | "scheduled";
+  endDate: Date | null;
   points: Array<PointObject>;
 }
 
@@ -370,6 +405,8 @@ export interface ClosureAddParameters {
   closureName: string;
   closureDescription: string;
   shape: string;
+  closureType: "indefinite" | "scheduled";
+  endDate: Date | null;
   points: Array<Omit<PointObject, "id">>;
 }
 
@@ -377,6 +414,8 @@ export interface ClosureUpdateParameters {
   closureName?: string;
   closureDescription?: string;
   shape?: string;
+  closureType?: "indefinite" | "scheduled";
+  endDate?: Date | null;
   points?: Array<Omit<PointObject, "id">>;
 }
 

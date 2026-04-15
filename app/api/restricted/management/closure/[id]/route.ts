@@ -36,7 +36,9 @@ export async function PATCH(
   const hasAnyPatchField = data.shape !== undefined
     || data.closureName !== undefined
     || data.closureDescription !== undefined
-    || data.points !== undefined;
+    || data.points !== undefined
+    || data.closureType !== undefined
+    || data.endDate !== undefined;
   if (!hasAnyPatchField) {
     return ApiResponseBuilder.createError(StatusCodes.Status400BadRequest, [{ message: "No update fields provided." }])
       .build();
@@ -71,6 +73,16 @@ export async function PATCH(
           return { ok: true };
         },
       },
+      closureType: {
+        type: "string",
+        formatterFn: async (value) => {
+          if (value !== "indefinite" && value !== "scheduled") {
+            return { ok: false, error: "closureType must be 'indefinite' or 'scheduled'." };
+          }
+          return { ok: true };
+        },
+      },
+      endDate: { type: "string" },
     },
     requiredProperties: [],
     allowUnvalidatedProperties: false,
@@ -80,7 +92,27 @@ export async function PATCH(
       .build();
   }
 
-  const result = await closure.updateClosure(id, data);
+  // Cross-field: if switching to scheduled, a valid endDate is required.
+  if (data.closureType === "scheduled") {
+    const parsedEnd = data.endDate ? new Date(data.endDate) : null;
+    if (!parsedEnd || isNaN(parsedEnd.getTime())) {
+      return ApiResponseBuilder
+        .createError(StatusCodes.Status400BadRequest, [{ message: "endDate is required and must be a valid date for scheduled closures." }])
+        .build();
+    }
+  }
+
+  const updateParams: Parameters<typeof closure.updateClosure>[1] = {
+    ...(data.closureName !== undefined && { closureName: data.closureName }),
+    ...(data.closureDescription !== undefined && { closureDescription: data.closureDescription }),
+    ...(data.shape !== undefined && { shape: data.shape }),
+    ...(data.points !== undefined && { points: data.points }),
+    ...(data.closureType !== undefined && { closureType: data.closureType }),
+    ...(data.closureType === "indefinite" && { endDate: null }),
+    ...(data.closureType === "scheduled" && { endDate: new Date(data.endDate!) }),
+  };
+
+  const result = await closure.updateClosure(id, updateParams);
   return oneOf(result).match(
     success => {
       void logActivity({
@@ -167,6 +199,8 @@ type PatchRequestBody = {
   shape?: string;
   closureName?: string;
   closureDescription?: string;
+  closureType?: "indefinite" | "scheduled";
+  endDate?: string;
   points?: Array<{
     sequence: number;
     point: [number, number];
