@@ -346,7 +346,7 @@ export async function createSnapshot(routeId: string, params: AddRouteParameters
     }
 
     const [vehicleType] = await db
-      .select({ id: vehicleTypes.id })
+      .select({ id: vehicleTypes.id, name: vehicleTypes.name })
       .from(vehicleTypes)
       .where(eq(vehicleTypes.id, params.vehicleTypeId))
       .limit(1);
@@ -421,7 +421,7 @@ export async function createSnapshot(routeId: string, params: AddRouteParameters
         },
         vehicle: {
           id: snapshot.vehicleTypeId,
-          name: "",
+          name: vehicleType.name,
         },
         polylines: {
           to: snapshot.polylineGoingTo,
@@ -757,7 +757,14 @@ export async function addRoute(params: AddRouteParameters, ownerId: string): Pro
     }
 
     // Create the snapshot
-    const snapshot = await unwrap(createSnapshot(route.id, params, ownerId));
+    const snapshotResult = await createSnapshot(route.id, params, ownerId);
+    if (snapshotResult instanceof Failure) {
+      // Clean up the orphaned route since snapshot creation failed
+      await db.delete(routes).where(eq(routes.id, route.id));
+      return snapshotResult;
+    }
+
+    const snapshot = snapshotResult.value;
 
     // Apply the snapshot as the active state:
     await db.update(routes)
