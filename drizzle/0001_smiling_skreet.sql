@@ -196,18 +196,6 @@ CREATE TABLE "vehicle_types" (
 	CONSTRAINT "vehicle_types_name_unique" UNIQUE("name")
 );
 --> statement-breakpoint
-INSERT INTO "vehicle_types" ("id", "name", "requires_route")
-    VALUES ('00000000-0000-7000-8000-000000000001', 'Modernized', true)
-    ON CONFLICT ("name") DO NOTHING;
---> statement-breakpoint
-UPDATE "routes"
-    SET "vehicle_type_id" = '00000000-0000-7000-8000-000000000001'
-    WHERE "vehicle_type_id" IS NULL;
---> statement-breakpoint
-UPDATE "route_snapshots"
-    SET "vehicle_type_id" = '00000000-0000-7000-8000-000000000001'
-    WHERE "vehicle_type_id" IS NULL;
---> statement-breakpoint
 CREATE TABLE "verification" (
 	"id" text PRIMARY KEY NOT NULL,
 	"identifier" text NOT NULL,

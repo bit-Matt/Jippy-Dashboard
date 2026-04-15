@@ -55,8 +55,8 @@ export async function getUserById(id: string): Promise<Result<User>> {
     };
 
     return new Success(payload);
-  } catch {
-    return new Failure(ErrorCodes.Fatal, "Internal exception.");
+  } catch (e) {
+    return new Failure(ErrorCodes.Fatal, "Internal exception.", { id }, e);
   }
 }
 
