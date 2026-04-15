@@ -2,6 +2,7 @@
 
 import { ChevronLeft, PenTool, Trash2 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
+import { z } from "zod";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -15,6 +16,18 @@ import { $fetch } from "@/lib/http/client";
 import type { IApiResponse } from "@/lib/http/ApiResponseBuilder";
 import type { ClosureObject } from "@/contracts/responses";
 import { getErrorMessage } from "@/contracts/parsers";
+
+const closurePayloadSchema = z.object({
+  closureName: z.string(),
+  closureDescription: z.string(),
+  shape: z.string().min(1).default("polygon"),
+  points: z.array(
+    z.object({
+      sequence: z.number(),
+      point: z.tuple([z.number().finite(), z.number().finite()]),
+    }),
+  ).min(3, "Please add at least 3 points for the closure region."),
+});
 
 interface ClosureRegionEditorProps {
   onSaved: () => void | Promise<void>;
@@ -99,8 +112,18 @@ export default function ClosureRegionEditor({ onSaved }: ClosureRegionEditorProp
       return;
     }
 
-    if (draftToSave.points.length < 3) {
-      alert("Please add at least 3 points for the closure region.");
+    const parsed = closurePayloadSchema.safeParse({
+      closureName: draftToSave.closureName,
+      closureDescription: draftToSave.closureDescription,
+      shape: draftToSave.shape || "polygon",
+      points: draftToSave.points.map((point) => ({
+        sequence: point.sequence,
+        point: point.point,
+      })),
+    });
+
+    if (!parsed.success) {
+      alert(parsed.error.issues.map((i) => i.message).join("\n"));
       return;
     }
 

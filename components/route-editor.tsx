@@ -3,6 +3,7 @@
 import { ChevronLeft, MapPin, Trash2 } from "lucide-react";
 import { useState, useEffect, useRef, type DragEvent } from "react";
 import useSWR from "swr";
+import { z } from "zod";
 
 import { Card, CardContent, CardHeader} from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -39,6 +40,16 @@ import * as nominatim from "@/lib/osm/nominatim";
 import type { RouteResponse } from "@/contracts/responses";
 import { useRouteEditor } from "@/contexts/RouteEditorContext";
 import type { SnapshotListItem } from "@/components/snapshot-types";
+
+const routePayloadSchema = z.object({
+  routeNumber: z.string().trim().min(1, "Route number is required."),
+  routeName: z.string().trim().min(1, "Route name is required."),
+  availableFrom: z.string().min(1, "Available From is required."),
+  availableTo: z.string().min(1, "Available To is required."),
+}).refine((data) => data.availableFrom <= data.availableTo, {
+  message: "Route availability is invalid. Ensure Available From is earlier than or equal to Available To.",
+  path: ["availableFrom"],
+});
 
 const ROUTE_COLORS = [
   { label: "Sun Yellow", value: "#fff100" },
@@ -192,13 +203,15 @@ export default function RouteEditor({
   }, [waypoints]);
 
   const handleSaveRoute = async () => {
-    if (!availableFrom || !availableTo || availableFrom > availableTo) {
-      alert("Route availability is invalid. Ensure Available From is earlier than or equal to Available To.");
-      return;
-    }
+    const parsed = routePayloadSchema.safeParse({
+      routeNumber,
+      routeName,
+      availableFrom,
+      availableTo,
+    });
 
-    if (!routeNumber.trim() || !routeName.trim()) {
-      console.warn("Route number and name are required");
+    if (!parsed.success) {
+      alert(parsed.error.issues.map((i) => i.message).join("\n"));
       return;
     }
 

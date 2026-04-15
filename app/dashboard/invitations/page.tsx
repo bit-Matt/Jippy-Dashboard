@@ -3,6 +3,7 @@
 import { Plus, RefreshCcw, Trash } from "lucide-react";
 import { type InputEvent, type SubmitEvent, useState } from "react";
 import useSWR from "swr";
+import { z } from "zod";
 
 import { $fetch, type BetterFetchResponse } from "@/lib/http/client";
 import { AppSidebar } from "@/components/app-sidebar";
@@ -33,6 +34,10 @@ import {
 import { Spinner } from "@/components/ui/spinner";
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
 import Typography from "@/components/typography";
+
+const invitationSchema = z.object({
+  email: z.string().email("Please enter a valid email address."),
+});
 
 export default function Invitations() {
   const { data, error, isLoading, mutate } = useSWR<BetterFetchResponse<InvitationListResponse, ApiResponseException>>(
@@ -185,6 +190,12 @@ function InvitationForm({ handleInvite }: { handleInvite: (invitation: Invitatio
 
   const handleSubmit = async (e: SubmitEvent<HTMLFormElement>) => {
     e.preventDefault();
+
+    const parsed = invitationSchema.safeParse({ email });
+    if (!parsed.success) {
+      alert(parsed.error.issues.map((i) => i.message).join("\n"));
+      return;
+    }
 
     const { data } = await $fetch<InvitationResponse, ApiResponseException>("/api/restricted/accounts/invitations", {
       method: "POST",

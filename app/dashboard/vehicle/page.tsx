@@ -3,6 +3,7 @@
 import { Pencil, Plus, Trash2 } from "lucide-react";
 import { type FormEvent, useMemo, useState } from "react";
 import useSWR from "swr";
+import { z } from "zod";
 
 import { AppSidebar } from "@/components/app-sidebar";
 import { Button } from "@/components/ui/button";
@@ -29,6 +30,11 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { $fetch } from "@/lib/http/client";
+
+const vehicleSchema = z.object({
+  name: z.string().trim().min(1, "Vehicle type name is required."),
+  requiresRoute: z.boolean(),
+});
 
 type VehicleTypeItem = {
   id: string;
@@ -75,7 +81,13 @@ export default function VehicleTypesPage() {
 
   const handleCreate = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (!createName.trim()) {
+    const parsed = vehicleSchema.safeParse({
+      name: createName,
+      requiresRoute: createRequiresRoute,
+    });
+
+    if (!parsed.success) {
+      alert(parsed.error.issues.map((i) => i.message).join("\n"));
       return;
     }
 
@@ -83,8 +95,8 @@ export default function VehicleTypesPage() {
     const { error: createError } = await $fetch("/api/restricted/management/vehicle", {
       method: "POST",
       body: {
-        name: createName.trim(),
-        requiresRoute: createRequiresRoute,
+        name: parsed.data.name,
+        requiresRoute: parsed.data.requiresRoute,
       },
     });
 
@@ -110,7 +122,17 @@ export default function VehicleTypesPage() {
 
   const handleEdit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (!editId || !editName.trim()) {
+    if (!editId) {
+      return;
+    }
+
+    const parsed = vehicleSchema.safeParse({
+      name: editName,
+      requiresRoute: editRequiresRoute,
+    });
+
+    if (!parsed.success) {
+      alert(parsed.error.issues.map((i) => i.message).join("\n"));
       return;
     }
 
@@ -118,8 +140,8 @@ export default function VehicleTypesPage() {
     const { error: editError } = await $fetch(`/api/restricted/management/vehicle/${editId}`, {
       method: "PATCH",
       body: {
-        name: editName.trim(),
-        requiresRoute: editRequiresRoute,
+        name: parsed.data.name,
+        requiresRoute: parsed.data.requiresRoute,
       },
     });
 

@@ -3,6 +3,7 @@
 import { Check, ChevronLeft, PenTool, Pencil, Square, Trash2 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import useSWR from "swr";
+import { z } from "zod";
 
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -20,6 +21,20 @@ import { useRegionEditor } from "@/contexts/RegionEditorContext";
 import { $fetch } from "@/lib/http/client";
 
 import * as nominatim from "@/lib/osm/nominatim";
+
+const regionSaveSchema = z.object({
+  hasDefinedPolygon: z.literal(true, {
+    errorMap: () => ({ message: "A polygon or rectangle must be defined before saving." }),
+  }),
+  stations: z.array(
+    z.object({
+      availableFrom: z.string().min(1),
+      availableTo: z.string().min(1),
+    }).refine((s) => s.availableFrom <= s.availableTo, {
+      message: "Available From must be earlier than or equal to Available To.",
+    }),
+  ),
+});
 
 const REGION_COLORS = [
   { label: "Sun Yellow", value: "#fff100" },
@@ -162,13 +177,16 @@ export default function RegionEditor() {
   }, [stations, stationAddressCoords, stationAddresses, loadingAddresses]);
 
   const handleSaveRegion = () => {
-    if (!hasDefinedPolygon) {
-      console.warn("A polygon or rectangle must be defined before saving.");
-      return;
-    }
+    const parsed = regionSaveSchema.safeParse({
+      hasDefinedPolygon,
+      stations: stations.map((s) => ({
+        availableFrom: s.availableFrom,
+        availableTo: s.availableTo,
+      })),
+    });
 
-    if (hasInvalidStationAvailability) {
-      alert("One or more station availability windows are invalid. Ensure Available From is earlier than or equal to Available To.");
+    if (!parsed.success) {
+      alert(parsed.error.issues.map((i) => i.message).join("\n"));
       return;
     }
 

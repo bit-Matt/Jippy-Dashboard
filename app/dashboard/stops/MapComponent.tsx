@@ -354,12 +354,11 @@ export default function StopMapComponent({
   }, []);
 
   const isEditing = panelMode === "editor";
-  const draftPoints = draft?.points ?? [];
   const linePoints = useMemo(() => {
-    return [...draftPoints]
+    return [...(draft?.points ?? [])]
       .sort((a, b) => a.sequence - b.sequence)
       .map((point) => point.point);
-  }, [draftPoints]);
+  }, [draft?.points]);
 
   return (
     <div className="relative h-full w-full">
