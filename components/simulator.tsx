@@ -1,8 +1,11 @@
 "use client";
 
-import { useState } from "react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { z } from "zod";
+import { AlertCircle, Bus, Footprints, MapPin } from "lucide-react";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   InputGroup,
   InputGroupAddon,
@@ -11,22 +14,110 @@ import {
 } from "@/components/ui/input-group";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
-import { MapPin } from "lucide-react";
+import type { NavigateRouteLeg, NavigateRouteResponse } from "@/contracts/responses";
 
-const SAMPLE_DIRECTIONS = [
-  "",
-  "",
-];
+const SimulateSchema = z.object({
+  start: z.tuple([z.number(), z.number()]),
+  end: z.tuple([z.number(), z.number()]),
+});
 
-export default function Simulator() {
-  const [directions, setDirections] = useState<string[]>([]);
+const LEG_FALLBACK_COLOR = "#6B7280";
 
-  const handleSimulate = () => {
-    setDirections(SAMPLE_DIRECTIONS);
+const LEG_ICONS: Record<string, React.ReactNode> = {
+  WALK: <Footprints className="h-3 w-3" />,
+  JEEPNEY: <Bus className="h-3 w-3" />,
+  TRICYCLE: <Bus className="h-3 w-3" />,
+};
+
+function formatDistance(km: number): string {
+  if (km < 1) return `${Math.round(km * 1000)} m`;
+  return `${km.toFixed(2)} km`;
+}
+
+function formatDuration(seconds: number): string {
+  const mins = Math.round(seconds / 60);
+  if (mins < 60) return `${mins} min`;
+  const h = Math.floor(mins / 60);
+  const m = mins % 60;
+  return m > 0 ? `${h}h ${m}m` : `${h}h`;
+}
+
+function LegCard({ leg }: { leg: NavigateRouteLeg }) {
+  const color = leg.color ?? LEG_FALLBACK_COLOR;
+  return (
+    <div
+      className="rounded-lg border border-border bg-background overflow-hidden"
+      style={{ borderLeftColor: color, borderLeftWidth: 4 }}
+    >
+      <div className="p-3 space-y-2">
+        <div className="flex items-center gap-2 flex-wrap">
+          <Badge variant="secondary" className="flex items-center gap-1">
+            {LEG_ICONS[leg.type]}
+            {leg.type}
+          </Badge>
+          {leg.route_name && (
+            <span className="text-sm font-medium">{leg.route_name}</span>
+          )}
+        </div>
+        <div className="flex gap-3 text-xs text-muted-foreground">
+          <span>{formatDistance(leg.distance)}</span>
+          <span>{formatDuration(leg.duration)}</span>
+        </div>
+        {leg.instructions.length > 0 && (
+          <ol className="space-y-1 list-none pl-0">
+            {leg.instructions.map((instruction, i) => (
+              <li key={i} className="flex items-start gap-2 text-xs">
+                <span className="mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-muted text-[10px] font-semibold">
+                  {i + 1}
+                </span>
+                <span className="text-muted-foreground">{instruction.text}</span>
+              </li>
+            ))}
+          </ol>
+        )}
+      </div>
+    </div>
+  );
+}
+
+export interface SimulatorProps {
+  startAddress: string;
+  endAddress: string;
+  startPoint: [number, number] | null;
+  endPoint: [number, number] | null;
+  pickingMode: "start" | "end" | null;
+  isSimulating: boolean;
+  result: NavigateRouteResponse | null;
+  error: string | null;
+  onPickingModeChange: (mode: "start" | "end" | null) => void;
+  onSimulate: () => void;
+}
+
+export default function Simulator({
+  startAddress,
+  endAddress,
+  startPoint,
+  endPoint,
+  pickingMode,
+  isSimulating,
+  result,
+  error,
+  onPickingModeChange,
+  onSimulate,
+}: SimulatorProps) {
+  const validation = SimulateSchema.safeParse({ start: startPoint, end: endPoint });
+  const canSimulate = validation.success && !isSimulating;
+
+  const handleStartPin = () => {
+    onPickingModeChange(pickingMode === "start" ? null : "start");
+  };
+
+  const handleEndPin = () => {
+    onPickingModeChange(pickingMode === "end" ? null : "end");
   };
 
   return (
-    <div className="absolute top-2 left-6 z-99999 w-1/4">
+    <div className="absolute top-2 left-6 z-99999 w-80 max-h-[calc(100vh-2rem)] overflow-y-auto">
       <Card>
         <CardHeader>
           <CardTitle>Simulator</CardTitle>
@@ -38,11 +129,15 @@ export default function Simulator() {
               <InputGroup>
                 <InputGroupInput
                   readOnly
-                  value=""
-                  placeholder="Starting address"
+                  value={startAddress}
+                  placeholder="Click the pin to pick a starting point"
                 />
                 <InputGroupAddon align="inline-end" className="pr-2">
-                  <InputGroupButton aria-label="Pin start location">
+                  <InputGroupButton
+                    aria-label="Pin start location"
+                    onClick={handleStartPin}
+                    className={pickingMode === "start" ? "text-primary" : ""}
+                  >
                     <MapPin />
                   </InputGroupButton>
                 </InputGroupAddon>
@@ -53,11 +148,15 @@ export default function Simulator() {
               <InputGroup>
                 <InputGroupInput
                   readOnly
-                  value=""
-                  placeholder="Destination address"
+                  value={endAddress}
+                  placeholder="Click the pin to pick a destination"
                 />
                 <InputGroupAddon align="inline-end" className="pr-2">
-                  <InputGroupButton aria-label="Pin destination location">
+                  <InputGroupButton
+                    aria-label="Pin destination location"
+                    onClick={handleEndPin}
+                    className={pickingMode === "end" ? "text-primary" : ""}
+                  >
                     <MapPin />
                   </InputGroupButton>
                 </InputGroupAddon>
@@ -65,24 +164,39 @@ export default function Simulator() {
             </div>
           </div>
 
-          <Button className="w-full" onClick={handleSimulate}>
-						Simulate
+          {pickingMode && (
+            <p className="text-xs text-muted-foreground text-center">
+              Click on the map to set the {pickingMode === "start" ? "starting point" : "destination"}
+            </p>
+          )}
+
+          <Button
+            className="w-full"
+            onClick={onSimulate}
+            disabled={!canSimulate}
+          >
+            {isSimulating ? "Simulating..." : "Simulate"}
           </Button>
 
-          {directions.length > 0 && (
+          {error && (
+            <Alert variant="destructive">
+              <AlertCircle className="h-4 w-4" />
+              <AlertDescription>{error}</AlertDescription>
+            </Alert>
+          )}
+
+          {result && (
             <>
               <Separator />
               <div className="space-y-3">
-                <Label>Directions</Label>
+                <div className="flex gap-4 text-sm text-muted-foreground">
+                  <span>{formatDistance(result.total_distance)}</span>
+                  <span>{formatDuration(result.total_duration)}</span>
+                  <span>{result.total_transfers} transfer{result.total_transfers !== 1 ? "s" : ""}</span>
+                </div>
                 <div className="space-y-2">
-                  {directions.map((step, index) => (
-                    <div
-                      key={`${step}-${index}`}
-                      className="flex items-start gap-3 rounded-lg border border-border bg-background p-3"
-                    >
-                      <span className="mt-1 block h-5 w-5 rounded-sm border border-border" />
-                      <span className="text-sm">{step}</span>
-                    </div>
+                  {result.legs.map((leg, i) => (
+                    <LegCard key={i} leg={leg} />
                   ))}
                 </div>
               </div>

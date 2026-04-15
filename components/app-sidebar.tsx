@@ -1,7 +1,7 @@
 "use client";
 
 import { type ComponentProps } from "react";
-import { Command, Map, ShieldCheck, SquareDashed, TrafficCone } from "lucide-react";
+import { Command, Map, Navigation, ShieldCheck, SquareDashed, TrafficCone } from "lucide-react";
 import useSWR from "swr";
 
 import { NavMain } from "@/components/nav-main";
@@ -47,6 +47,12 @@ export function AppSidebar({
       url: "/dashboard/stops",
       isActive: true,
       icon: TrafficCone,
+    },
+    {
+      title: "Simulator",
+      url: "/dashboard/simulator",
+      isActive: true,
+      icon: Navigation,
     },
   ];
 

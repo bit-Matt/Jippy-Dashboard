@@ -36,6 +36,13 @@
       "when": 1776248218164,
       "tag": "0004_mixed_hemingway",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1776254924624,
+      "tag": "0005_daffy_living_lightning",
+      "breakpoints": true
     }
   ]
 }

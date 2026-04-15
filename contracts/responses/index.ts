@@ -144,3 +144,39 @@ export interface StopResponse {
 }
 
 export type StopResponseList = StopResponse[];
+
+// -- Navigate API response types -------------------------------------------
+
+export type NavigateManeuverType =
+  | "depart"
+  | "turn"
+  | "board"
+  | "alight"
+  | "transfer"
+  | "arrive";
+
+export type NavigateLegType = "WALK" | "TRICYCLE" | "JEEPNEY";
+
+export interface NavigateInstruction {
+  text: string;
+  maneuver_type: NavigateManeuverType;
+}
+
+export interface NavigateRouteLeg {
+  type: NavigateLegType;
+  route_name: string | null;
+  polyline: string;
+  color: string | null;
+  distance: number;
+  duration: number;
+  instructions: NavigateInstruction[];
+  bbox: [number, number, number, number];
+}
+
+export interface NavigateRouteResponse {
+  legs: NavigateRouteLeg[];
+  total_distance: number;
+  total_duration: number;
+  total_transfers: number;
+  global_bbox: [number, number, number, number];
+}
