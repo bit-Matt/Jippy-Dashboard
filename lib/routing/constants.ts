@@ -6,10 +6,15 @@
 export const WALK_PENALTY_MULTIPLIER = 2.0;
 
 /** Walking distance (meters) below which cost is linear; above this cost escalates quadratically */
-export const WALK_COMFORT_METERS = 400;
+export const WALK_COMFORT_METERS = 150;
 
 /** Rate at which walk cost escalates beyond the comfort threshold (higher = steeper penalty) */
-export const WALK_ESCALATION_RATE = 0.003;
+export const WALK_ESCALATION_RATE = 0.008;
+
+/** Cost multiplier for transit (ride) edges. Values < 1 make riding cheaper than
+ *  the equivalent walking distance, encouraging the algorithm to stay on transit
+ *  and use transfers rather than exit early and walk long distances. */
+export const TRANSIT_COST_FACTOR = 0.5;
 
 /** Flat penalty (in meters-equivalent) added for each vehicle transfer */
 export const TRANSFER_PENALTY_METERS = 120;
@@ -17,8 +22,10 @@ export const TRANSFER_PENALTY_METERS = 120;
 /** Multiplier applied to edges that intersect a road closure polygon */
 export const CLOSURE_PENALTY_MULTIPLIER = 5.0;
 
-/** Max distance (meters) between nodes on different routes to create a transfer edge */
-export const TRANSFER_PROXIMITY_METERS = 25;
+/** Max distance (meters) between nodes on different routes to create a transfer edge.
+ *  25m was too tight — polyline vertices from different routes at an intersection
+ *  are often 30-100m apart. 100m captures real-world transfer opportunities. */
+export const TRANSFER_PROXIMITY_METERS = 100;
 
 /** If straight-line A→B distance is below this, return a pure walk route */
 export const WALK_ONLY_THRESHOLD_METERS = 200;

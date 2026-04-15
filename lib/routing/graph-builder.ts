@@ -19,6 +19,7 @@ import {
   MAX_TRANSIT_PROXIMITY_METERS,
   TRANSFER_PENALTY_METERS,
   TRANSFER_PROXIMITY_METERS,
+  TRANSIT_COST_FACTOR,
   VIRTUAL_END_ID,
   VIRTUAL_START_ID,
   WALK_COMFORT_METERS,
@@ -165,7 +166,7 @@ function addDirectionEdges(
       from: fromId,
       to: toId,
       distance: dist,
-      cost: dist,
+      cost: dist * TRANSIT_COST_FACTOR,
       type: "transit",
       routeId: route.id,
       routeName: route.routeName,
@@ -187,24 +188,37 @@ export function buildTransferEdges(
     index.insert(nodeId, node.lat, node.lng);
   }
 
-  // For each node, find nearby nodes on different routes/directions
+  // For each node, find nearby nodes on different routes/directions.
+  // To avoid an explosion of edges when routes run parallel, we keep
+  // only the CLOSEST transfer target per (otherRouteId, otherDirection).
   for (const [nodeId, node] of nodes) {
     const nearby = index.queryNearby(node.lat, node.lng, TRANSFER_PROXIMITY_METERS);
+
+    // Collect best candidate per route+direction
+    const bestPerRoute = new Map<string, { otherId: string; dist: number }>();
 
     for (const otherId of nearby) {
       if (otherId === nodeId) continue;
 
       const other = nodes.get(otherId)!;
-      // Only create transfers between different routes or different directions of same route
       if (node.routeId === other.routeId && node.direction === other.direction) continue;
 
       const dist = haversineMeters([node.lat, node.lng], [other.lat, other.lng]);
       if (dist > TRANSFER_PROXIMITY_METERS) continue;
 
+      const key = `${other.routeId}:${other.direction}`;
+      const existing = bestPerRoute.get(key);
+      if (!existing || dist < existing.dist) {
+        bestPerRoute.set(key, { otherId, dist });
+      }
+    }
+
+    // Create transfer edges only to the closest node per other route+direction
+    for (const [, { otherId, dist }] of bestPerRoute) {
+      const other = nodes.get(otherId)!;
       const walkCost = dist * WALK_PENALTY_MULTIPLIER;
       const totalCost = walkCost + TRANSFER_PENALTY_METERS;
 
-      // Add bidirectional transfer edges (if not already present)
       addEdgeIfAbsent(adjacency, {
         from: nodeId,
         to: otherId,

@@ -4,7 +4,7 @@
 
 import { MinHeap } from "@/lib/routing/min-heap";
 import { haversineMeters } from "@/lib/routing/graph-builder";
-import { MAX_ASTAR_ITERATIONS } from "@/lib/routing/constants";
+import { MAX_ASTAR_ITERATIONS, TRANSIT_COST_FACTOR } from "@/lib/routing/constants";
 import type { Graph, GraphNode, PathSegment, LatLng } from "@/lib/routing/types";
 
 /**
@@ -124,7 +124,9 @@ export function reconstructPath(
 // ---------------------------------------------------------------------------
 
 function heuristic(node: GraphNode, target: LatLng): number {
-  return haversineMeters([node.lat, node.lng], target);
+  // Scale by TRANSIT_COST_FACTOR to stay admissible: transit edges cost
+  // dist * factor, so straight-line distance must also be scaled down.
+  return haversineMeters([node.lat, node.lng], target) * TRANSIT_COST_FACTOR;
 }
 
 function reconstructNodePath(cameFrom: Map<string, string>, endId: string): string[] {
