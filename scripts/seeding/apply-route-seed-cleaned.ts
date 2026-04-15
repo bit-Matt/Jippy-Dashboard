@@ -50,7 +50,7 @@ async function main() {
 
       const routePayload: AddRouteParameters = {
         snapshotName: "v1",
-        snapshotState: "wip",
+        snapshotState: "ready",
         routeNumber: route.routeNumber,
         routeName: route.routeName,
         routeColor: route.routeColor,
