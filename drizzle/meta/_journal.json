@@ -43,6 +43,13 @@
       "when": 1776254924624,
       "tag": "0005_daffy_living_lightning",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1776340146598,
+      "tag": "0006_outgoing_forge",
+      "breakpoints": true
     }
   ]
 }
