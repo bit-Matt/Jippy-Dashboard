@@ -81,6 +81,9 @@ services:
   graphhopper:
     image: israelhikingmap/graphhopper:latest
     container_name: graphhopper
+    depends_on:
+      valhalla:
+        condition: service_healthy
     restart: unless-stopped
     ports:
       - "6704:8989"
