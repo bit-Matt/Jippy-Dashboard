@@ -160,6 +160,9 @@ export const routes = pgTable(
     availableTo: text("available_to")
       .notNull()
       .default("23:59"),
+    fleetCount: integer("fleet_count")
+      .notNull()
+      .default(100),
     polylineGoingTo: text("polyline_going_to")
       .notNull(),
     polylineGoingBack: text("polyline_going_back")
@@ -208,6 +211,9 @@ export const routeSnapshots = pgTable(
     availableTo: text("available_to")
       .notNull()
       .default("23:59"),
+    fleetCount: integer("fleet_count")
+      .notNull()
+      .default(100),
     polylineGoingTo: text("polyline_going_to")
       .notNull(),
     polylineGoingBack: text("polyline_going_back")
