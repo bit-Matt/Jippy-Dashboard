@@ -44,6 +44,7 @@ import type { SnapshotListItem } from "@/components/snapshot-types";
 const routePayloadSchema = z.object({
   routeNumber: z.string().trim().min(1, "Route number is required."),
   routeName: z.string().trim().min(1, "Route name is required."),
+  fleetCount: z.number().int("Fleet count must be a whole number.").min(1, "Fleet count must be at least 1."),
   availableFrom: z.string().min(1, "Available From is required."),
   availableTo: z.string().min(1, "Available To is required."),
 }).refine((data) => data.availableFrom <= data.availableTo, {
@@ -78,6 +79,7 @@ export default function RouteEditor({
   const [routeName, setRouteName] = useState("");
   const [routeDetails, setRouteDetails] = useState("");
   const [vehicleTypeId, setVehicleTypeId] = useState("");
+  const [fleetCount, setFleetCount] = useState<number>(100);
   const [availableFrom, setAvailableFrom] = useState("00:00");
   const [availableTo, setAvailableTo] = useState("23:59");
   const [isDetailsDialogOpen, setIsDetailsDialogOpen] = useState(false);
@@ -115,6 +117,7 @@ export default function RouteEditor({
       setRouteName("");
       setRouteDetails("");
       setVehicleTypeId("");
+      setFleetCount(100);
       setAvailableFrom("00:00");
       setAvailableTo("23:59");
       return;
@@ -126,6 +129,7 @@ export default function RouteEditor({
     setRouteName(editingRoute.routeName);
     setRouteDetails(editingRoute.routeDetails ?? "");
     setVehicleTypeId(editingRoute.vehicle.id ?? "");
+    setFleetCount(editingRoute.fleetCount ?? 100);
     setAvailableFrom(editingRoute.availability.from ?? "00:00");
     setAvailableTo(editingRoute.availability.to ?? "23:59");
   }, [editingRoute, editingSnapshot]);
@@ -206,6 +210,7 @@ export default function RouteEditor({
     const parsed = routePayloadSchema.safeParse({
       routeNumber,
       routeName,
+      fleetCount,
       availableFrom,
       availableTo,
     });
@@ -246,6 +251,7 @@ export default function RouteEditor({
           routeColor: selectedColor,
           routeDetails: routeDetails,
           vehicleTypeId,
+          fleetCount,
           availableFrom,
           availableTo,
           points: {
@@ -275,6 +281,7 @@ export default function RouteEditor({
       setSnapshotState("wip");
       setRouteDetails("");
       setVehicleTypeId(vehicleTypesResponse?.data?.data?.[0]?.id ?? "");
+      setFleetCount(100);
       setAvailableFrom("00:00");
       setAvailableTo("23:59");
       clearAllWaypoints();
@@ -302,6 +309,7 @@ export default function RouteEditor({
     setSnapshotState("wip");
     setRouteDetails("");
     setVehicleTypeId(vehicleTypesResponse?.data?.data?.[0]?.id ?? "");
+    setFleetCount(100);
     setAvailableFrom("00:00");
     setAvailableTo("23:59");
     clearAllWaypoints();
@@ -359,7 +367,8 @@ export default function RouteEditor({
   };
 
   const isRouteAvailabilityValid = Boolean(availableFrom) && Boolean(availableTo) && availableFrom <= availableTo;
-  const canSave = waypointCounts.goingTo >= 2 && waypointCounts.goingBack >= 2 && Boolean(vehicleTypeId);
+  const isFleetCountValid = Number.isInteger(fleetCount) && fleetCount >= 1;
+  const canSave = waypointCounts.goingTo >= 2 && waypointCounts.goingBack >= 2 && Boolean(vehicleTypeId) && isFleetCountValid;
   const isAdministrator = me?.data?.data?.role === "administrator_user";
   const selectedVehicle = vehicleTypesResponse?.data?.data?.find((vehicle) => vehicle.id === vehicleTypeId);
 
@@ -463,25 +472,48 @@ export default function RouteEditor({
                       : "No route details added yet."}
                   </p>
                 </div>
-                <div className="space-y-2">
-                  <Label>Vehicle Type</Label>
-                  <Select value={vehicleTypeId} onValueChange={setVehicleTypeId}>
-                    <SelectTrigger className="w-full">
-                      <SelectValue placeholder="Select vehicle type" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {vehicleTypesResponse?.data?.data?.map((vehicleType) => (
-                        <SelectItem key={vehicleType.id} value={vehicleType.id}>
-                          {vehicleType.name} ({vehicleType.requiresRoute ? "Requires Route" : "Freeform"})
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  {!selectedVehicle ? (
-                    <p className="text-xs text-destructive">
-                      Vehicle type is required.
-                    </p>
-                  ) : null}
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-start">
+                  <div className="min-w-0 flex-1 space-y-2">
+                    <Label>Vehicle Type</Label>
+                    <Select value={vehicleTypeId} onValueChange={setVehicleTypeId}>
+                      <SelectTrigger className="w-full">
+                        <SelectValue placeholder="Select vehicle type" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {vehicleTypesResponse?.data?.data?.map((vehicleType) => (
+                          <SelectItem key={vehicleType.id} value={vehicleType.id}>
+                            {vehicleType.name} ({vehicleType.requiresRoute ? "Requires Route" : "Freeform"})
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    {!selectedVehicle ? (
+                      <p className="text-xs text-destructive">
+                        Vehicle type is required.
+                      </p>
+                    ) : null}
+                  </div>
+
+                  <div className="w-full space-y-2 sm:w-32">
+                    <Label htmlFor="route-fleet-count">Fleet Count</Label>
+                    <Input
+                      id="route-fleet-count"
+                      type="number"
+                      min={1}
+                      step={1}
+                      inputMode="numeric"
+                      value={fleetCount}
+                      onChange={(e) => {
+                        const nextValue = Number(e.target.value);
+                        setFleetCount(Number.isFinite(nextValue) ? nextValue : 0);
+                      }}
+                    />
+                    {!isFleetCountValid ? (
+                      <p className="text-xs text-destructive">
+                        Fleet count must be at least 1.
+                      </p>
+                    ) : null}
+                  </div>
                 </div>
                 <div className="space-y-2">
                   <Label>Availability Window</Label>

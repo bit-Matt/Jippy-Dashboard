@@ -51,7 +51,7 @@ export async function loadTransitData(): Promise<TransitData> {
     unwrap(closureManager.getAllClosures(true)),
   ]);
 
-  const routes: TransitRoute[] = (allRoutes as routeManager.RouteListItem[]).map((r) => ({
+  const routes: TransitRoute[] = allRoutes.map((r) => ({
     id: r.id,
     routeNumber: r.routeNumber,
     routeName: r.routeName,

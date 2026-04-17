@@ -55,6 +55,7 @@ async function main() {
         routeName: route.routeName,
         routeColor: route.routeColor,
         routeDetails: "Seeded, needed to be filled",
+        fleetCount: 100,
         vehicleTypeId: "00000000-0000-7000-8000-000000000001",
         polylineGoingTo: goingToPolyline,
         polylineGoingBack: goingBackPolyline,

@@ -71,6 +71,7 @@ export async function POST(
       routeName: { type: "string", formatter: "non-empty-string" },
       routeColor: { type: "string", formatter: "hex-color" },
       routeDetails: { type: "string", formatter: "non-empty-string" },
+      fleetCount: { type: "number", formatter: "positive-integer" },
       vehicleTypeId: { type: "string", formatter: "uuid" },
       availableFrom: { type: "string", formatter: "time-hh-mm" },
       availableTo: { type: "string", formatter: "time-hh-mm" },
@@ -103,7 +104,7 @@ export async function POST(
         },
       },
     },
-    requiredProperties: ["routeNumber", "routeName", "routeColor", "routeDetails", "vehicleTypeId", "points"],
+    requiredProperties: ["routeNumber", "routeName", "routeColor", "routeDetails", "fleetCount", "vehicleTypeId", "points"],
     allowUnvalidatedProperties: false,
   });
   if (!validation.ok) {
@@ -279,6 +280,7 @@ type RequestBody = {
   routeName: string;
   routeColor: string;
   routeDetails: string;
+  fleetCount: number;
   vehicleTypeId: string;
   availableFrom: string;
   availableTo: string;

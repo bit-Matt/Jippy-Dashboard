@@ -68,6 +68,21 @@ validator.addFormat("valid-number", {
   },
 });
 
+validator.addFormat("positive-integer", {
+  forType: "number",
+  formatterFn: async (v) => {
+    const value = Number(v);
+    if (!Number.isInteger(value) || value < 1) {
+      return {
+        ok: false,
+        error: "Value must be an integer greater than or equal to 1.",
+      };
+    }
+
+    return { ok: true };
+  },
+});
+
 validator.addFormat("strong-password", {
   forType: "string",
   formatterFn: async (value) => {

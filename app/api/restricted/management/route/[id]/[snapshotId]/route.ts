@@ -112,6 +112,7 @@ export async function PATCH(
     || data.routeName !== undefined
     || data.routeColor !== undefined
     || data.routeDetails !== undefined
+    || data.fleetCount !== undefined
     || data.vehicleTypeId !== undefined
     || data.availableFrom !== undefined
     || data.availableTo !== undefined
@@ -136,6 +137,7 @@ export async function PATCH(
       routeName: { type: "string", formatter: "non-empty-string" },
       routeColor: { type: "string", formatter: "hex-color" },
       routeDetails: { type: "string", formatter: "non-empty-string" },
+      fleetCount: { type: "number", formatter: "positive-integer" },
       vehicleTypeId: { type: "string", formatter: "uuid" },
       availableFrom: { type: "string", formatter: "time-hh-mm" },
       availableTo: { type: "string", formatter: "time-hh-mm" },
@@ -179,10 +181,12 @@ export async function PATCH(
       .build();
   }
 
-  const timeRangeValidation = utils.isValidTimeRange(data.availableFrom, data.availableTo);
-  if (!timeRangeValidation) {
-    return ApiResponseBuilder.createError(StatusCodes.Status400BadRequest, [{ message: "Invalid time range." }])
-      .build();
+  if (data.availableFrom !== undefined || data.availableTo !== undefined) {
+    const timeRangeValidation = utils.isValidTimeRange(data.availableFrom, data.availableTo);
+    if (!timeRangeValidation) {
+      return ApiResponseBuilder.createError(StatusCodes.Status400BadRequest, [{ message: "Invalid time range." }])
+        .build();
+    }
   }
 
   if (data.snapshotState === "ready" && currentSession.user?.role !== "administrator_user") {
@@ -280,6 +284,7 @@ type PatchRequestBody = {
   routeName?: string;
   routeColor?: string;
   routeDetails?: string;
+  fleetCount?: number;
   vehicleTypeId?: string;
   availableFrom?: string;
   availableTo?: string;
