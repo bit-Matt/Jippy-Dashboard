@@ -126,6 +126,35 @@ export interface NavigateResponse {
   global_bbox: [number, number, number, number];
 }
 
+// -- Weight profile for multi-suggestion routing ----------------------------
+
+export type SuggestionLabel = "fastest" | "least_walking" | "simplest" | "explorer";
+
+export interface WeightProfile {
+  walkPenaltyMultiplier: number;
+  walkComfortMeters: number;
+  walkEscalationRate: number;
+  transitCostFactor: number;
+  transferPenaltyMeters: number;
+  boardingCostFactor: number;
+  closurePenaltyMultiplier: number;
+  /** Route IDs whose transit edges get a diversity penalty (Explorer only) */
+  penalizedRouteIds?: Set<string>;
+  /** Multiplier applied to penalized route transit edges */
+  diversityPenalty?: number;
+  /** Maximum allowed vehicle transfers (Explorer guardrail) */
+  maxTransfers?: number;
+}
+
+export interface RouteSuggestion {
+  label: SuggestionLabel;
+  route: NavigateResponse;
+}
+
+export interface MultiNavigateResponse {
+  suggestions: RouteSuggestion[];
+}
+
 // -- Valhalla walking types -------------------------------------------------
 
 export interface ValhallaManeuver {

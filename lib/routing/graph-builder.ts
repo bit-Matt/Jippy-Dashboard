@@ -14,17 +14,10 @@ import * as closureManager from "@/lib/management/closure-manager";
 
 import { GridIndex } from "@/lib/routing/spatial-index";
 import {
-  BOARDING_COST_FACTOR,
-  CLOSURE_PENALTY_MULTIPLIER,
   MAX_TRANSIT_PROXIMITY_METERS,
-  TRANSFER_PENALTY_METERS,
   TRANSFER_PROXIMITY_METERS,
-  TRANSIT_COST_FACTOR,
   VIRTUAL_END_ID,
   VIRTUAL_START_ID,
-  WALK_COMFORT_METERS,
-  WALK_ESCALATION_RATE,
-  WALK_PENALTY_MULTIPLIER,
 } from "@/lib/routing/constants";
 import type {
   GraphEdge,
@@ -34,10 +27,43 @@ import type {
   TransitData,
   TransitRegion,
   TransitRoute,
+  WeightProfile,
 } from "@/lib/routing/types";
 
 // Re-export decodePolyline/encodePolyline utilities
 export { decodePolyline, encodePolyline } from "./polyline";
+
+// ---------------------------------------------------------------------------
+// Base-graph types — topology + raw distances, shared across profiles
+// ---------------------------------------------------------------------------
+
+export interface BaseEdge {
+  from: string;
+  to: string;
+  distance: number;
+  type: "transit" | "transfer" | "walk";
+  routeId?: string;
+  routeName?: string;
+  /** For transfer edges: the walking distance between the two nodes */
+  transferWalkDist?: number;
+  /** True if the edge intersects a road-closure polygon */
+  closureAffected?: boolean;
+}
+
+export interface BaseGraph {
+  nodes: Map<string, GraphNode>;
+  /** Raw edges keyed by source node — distances only, no profile costs */
+  baseEdges: Map<string, BaseEdge[]>;
+  /** Per-route boarding cost (raw, before profile factor) = (roundTrip / fleet) / 2 */
+  rawBoardingCosts: Map<string, number>;
+  /** Access walk candidates: nodeId → raw walk distance in meters */
+  accessWalkDistances: Map<string, number>;
+  /** Egress walk candidates: nodeId → raw walk distance in meters */
+  egressWalkDistances: Map<string, number>;
+  /** Whether any access / egress edges were found */
+  hasAccessEdges: boolean;
+  hasEgressEdges: boolean;
+}
 
 // ---------------------------------------------------------------------------
 // 1. Load transit data from database
@@ -120,16 +146,14 @@ function addDirectionNodes(
 }
 
 // ---------------------------------------------------------------------------
-// 3. Compute per-route boarding cost based on fleet size
+// 3. Compute per-route RAW boarding cost (before profile factor)
 // ---------------------------------------------------------------------------
 
 /**
- * Boarding cost estimates expected wait time in meters-equivalent.
- * Formula: (routeRoundTripDistance / fleetCount) / 2 * BOARDING_COST_FACTOR
- *
- * Routes with more fleets have lower boarding cost (shorter wait).
+ * Raw boarding cost = (routeRoundTripDistance / fleetCount) / 2.
+ * The profile's boardingCostFactor is applied later during costing.
  */
-export function computeRouteBoardingCosts(routes: TransitRoute[]): Map<string, number> {
+export function computeRawBoardingCosts(routes: TransitRoute[]): Map<string, number> {
   const costs = new Map<string, number>();
 
   for (const route of routes) {
@@ -138,8 +162,7 @@ export function computeRouteBoardingCosts(routes: TransitRoute[]): Map<string, n
     const roundTripDist = goingToDist + goingBackDist;
     const fleetCount = Math.max(route.fleetCount, 1);
 
-    const boardingCost = ((roundTripDist / fleetCount) / 2) * BOARDING_COST_FACTOR;
-    costs.set(route.id, boardingCost);
+    costs.set(route.id, (roundTripDist / fleetCount) / 2);
   }
 
   return costs;
@@ -154,18 +177,18 @@ function polylineDistance(coords: LatLng[]): number {
 }
 
 // ---------------------------------------------------------------------------
-// 4. Build transit (ride) edges along polylines
+// 4. Build transit (ride) base edges along polylines (distance only, no cost)
 // ---------------------------------------------------------------------------
 
-export function buildTransitEdges(
+export function buildBaseTransitEdges(
   routes: TransitRoute[],
   nodes: Map<string, GraphNode>,
-): Map<string, GraphEdge[]> {
-  const adjacency = new Map<string, GraphEdge[]>();
+): Map<string, BaseEdge[]> {
+  const adjacency = new Map<string, BaseEdge[]>();
 
   for (const route of routes) {
-    addDirectionEdges(adjacency, route, "goingTo", route.decodedGoingTo);
-    addDirectionEdges(adjacency, route, "goingBack", route.decodedGoingBack);
+    addBaseDirectionEdges(adjacency, route, "goingTo", route.decodedGoingTo);
+    addBaseDirectionEdges(adjacency, route, "goingBack", route.decodedGoingBack);
   }
 
   // Initialise empty adjacency lists for nodes with no outgoing edges
@@ -178,8 +201,8 @@ export function buildTransitEdges(
   return adjacency;
 }
 
-function addDirectionEdges(
-  adjacency: Map<string, GraphEdge[]>,
+function addBaseDirectionEdges(
+  adjacency: Map<string, BaseEdge[]>,
   route: TransitRoute,
   direction: "goingTo" | "goingBack",
   coords: LatLng[],
@@ -201,7 +224,6 @@ function addDirectionEdges(
       from: fromId,
       to: toId,
       distance: dist,
-      cost: dist * TRANSIT_COST_FACTOR,
       type: "transit",
       routeId: route.id,
       routeName: route.routeName,
@@ -213,10 +235,9 @@ function addDirectionEdges(
 // 5. Build transfer edges between nearby nodes of different routes
 // ---------------------------------------------------------------------------
 
-export function buildTransferEdges(
+export function buildBaseTransferEdges(
   nodes: Map<string, GraphNode>,
-  adjacency: Map<string, GraphEdge[]>,
-  boardingCosts: Map<string, number>,
+  baseEdges: Map<string, BaseEdge[]>,
 ): void {
   const index = new GridIndex(TRANSFER_PROXIMITY_METERS);
 
@@ -224,20 +245,15 @@ export function buildTransferEdges(
     index.insert(nodeId, node.lat, node.lng);
   }
 
-  // For each node, find nearby nodes on different routes/directions.
-  // To avoid an explosion of edges when routes run parallel, we keep
-  // only the CLOSEST transfer target per (otherRouteId, otherDirection).
   for (const [nodeId, node] of nodes) {
     const nearby = index.queryNearby(node.lat, node.lng, TRANSFER_PROXIMITY_METERS);
 
-    // Collect best candidate per route+direction
     const bestPerRoute = new Map<string, { otherId: string; dist: number }>();
 
     for (const otherId of nearby) {
       if (otherId === nodeId) continue;
 
       const other = nodes.get(otherId)!;
-      // Never create transfer edges within the same route (regardless of direction)
       if (node.routeId === other.routeId) continue;
 
       const dist = haversineMeters([node.lat, node.lng], [other.lat, other.lng]);
@@ -250,18 +266,14 @@ export function buildTransferEdges(
       }
     }
 
-    // Create transfer edges only to the closest node per other route+direction
     for (const [, { otherId, dist }] of bestPerRoute) {
       const other = nodes.get(otherId)!;
-      const walkCost = dist * WALK_PENALTY_MULTIPLIER;
-      const destinationBoardingCost = boardingCosts.get(other.routeId) ?? 0;
-      const totalCost = walkCost + TRANSFER_PENALTY_METERS + destinationBoardingCost;
 
-      addEdgeIfAbsent(adjacency, {
+      addBaseEdgeIfAbsent(baseEdges, {
         from: nodeId,
         to: otherId,
         distance: dist,
-        cost: totalCost,
+        transferWalkDist: dist,
         type: "transfer",
         routeId: other.routeId,
         routeName: other.routeName,
@@ -270,35 +282,32 @@ export function buildTransferEdges(
   }
 }
 
-function addEdgeIfAbsent(adjacency: Map<string, GraphEdge[]>, edge: GraphEdge): void {
+function addBaseEdgeIfAbsent(adjacency: Map<string, BaseEdge[]>, edge: BaseEdge): void {
   let edges = adjacency.get(edge.from);
   if (!edges) {
     edges = [];
     adjacency.set(edge.from, edges);
   }
-  // Check if an edge to the same target already exists
   if (!edges.some((e) => e.to === edge.to)) {
     edges.push(edge);
   }
 }
 
 // ---------------------------------------------------------------------------
-// 5. Apply closure penalties to transit edges
+// 5. Mark closure-affected edges
 // ---------------------------------------------------------------------------
 
-export function applyClosurePenalties(
-  adjacency: Map<string, GraphEdge[]>,
+export function markClosureEdges(
+  baseEdges: Map<string, BaseEdge[]>,
   nodes: Map<string, GraphNode>,
   closures: TransitClosure[],
 ): void {
   if (closures.length === 0) return;
 
-  // Build GeoJSON polygons for each closure
   const closurePolygons = closures
     .filter((c) => c.points.length >= 3)
     .map((c) => {
       const sorted = [...c.points].sort((a, b) => a.sequence - b.sequence);
-      // Ring must be closed: [lng, lat] for GeoJSON
       const ring = sorted.map((p) => [p.point[1], p.point[0]] as [number, number]);
       ring.push(ring[0]);
       return turfPolygon([ring]);
@@ -306,7 +315,7 @@ export function applyClosurePenalties(
 
   if (closurePolygons.length === 0) return;
 
-  for (const [, edges] of adjacency) {
+  for (const [, edges] of baseEdges) {
     for (const edge of edges) {
       if (edge.type !== "transit") continue;
 
@@ -314,7 +323,6 @@ export function applyClosurePenalties(
       const toNode = nodes.get(edge.to);
       if (!fromNode || !toNode) continue;
 
-      // Check if the edge segment intersects any closure polygon
       const segment = turfLineString([
         [fromNode.lng, fromNode.lat],
         [toNode.lng, toNode.lat],
@@ -323,15 +331,14 @@ export function applyClosurePenalties(
       for (const closurePoly of closurePolygons) {
         const intersections = turfLineIntersect(segment, closurePoly);
         if (intersections.features.length > 0) {
-          edge.cost *= CLOSURE_PENALTY_MULTIPLIER;
-          break; // One penalty per edge is enough
+          edge.closureAffected = true;
+          break;
         }
 
-        // Also check if the edge midpoint is inside the closure
         const midLat = (fromNode.lat + toNode.lat) / 2;
         const midLng = (fromNode.lng + toNode.lng) / 2;
         if (booleanPointInPolygon(turfPoint([midLng, midLat]), closurePoly)) {
-          edge.cost *= CLOSURE_PENALTY_MULTIPLIER;
+          edge.closureAffected = true;
           break;
         }
       }
@@ -340,27 +347,29 @@ export function applyClosurePenalties(
 }
 
 // ---------------------------------------------------------------------------
-// 6. Inject virtual start/end nodes with walk edges to nearby polyline nodes
+// 6. Query raw walk distances for virtual start/end nodes (GraphHopper I/O)
 // ---------------------------------------------------------------------------
 
-/** Max candidates per route+direction to query GraphHopper for real walk distance */
 const ACCESS_CANDIDATES_PER_DIRECTION = 16;
-/** Global cap on total GraphHopper queries for access edges */
 const MAX_ACCESS_QUERIES = 30;
-/** Max candidates per route+direction for egress GraphHopper queries */
 const EGRESS_CANDIDATES_PER_DIRECTION = 16;
-/** Global cap on total GraphHopper queries for egress edges */
 const MAX_EGRESS_QUERIES = 30;
 
-export async function injectUserNodes(
+/**
+ * Creates virtual start/end nodes, queries GraphHopper for raw walk distances
+ * to nearby transit nodes. Returns the raw distances (no cost applied) so
+ * each weight profile can reuse them.
+ */
+export async function queryUserNodeDistances(
   start: LatLng,
   end: LatLng,
   routes: TransitRoute[],
   nodes: Map<string, GraphNode>,
-  adjacency: Map<string, GraphEdge[]>,
-  boardingCosts: Map<string, number>,
-): Promise<{ hasAccessEdges: boolean; hasEgressEdges: boolean }> {
-  // Create virtual nodes
+): Promise<{
+  accessDistances: Map<string, number>;
+  egressDistances: Map<string, number>;
+}> {
+  // Ensure virtual nodes exist
   nodes.set(VIRTUAL_START_ID, {
     id: VIRTUAL_START_ID,
     lat: start[0],
@@ -383,43 +392,27 @@ export async function injectUserNodes(
     polylineIndex: -1,
   });
 
-  adjacency.set(VIRTUAL_START_ID, []);
-  adjacency.set(VIRTUAL_END_ID, []);
-
-  // Direction vector from A → B for directional filtering
   const abLat = end[0] - start[0];
   const abLng = end[1] - start[1];
 
-  let hasAccessEdges = false;
-  let hasEgressEdges = false;
-
-  // --- ACCESS: Collect candidates, query GraphHopper for real walk distances ---
-  // The algorithm can't know actual walking distance from geometric distance
-  // alone (roads may not follow straight lines). We select the top-N nearest
-  // candidates per route+direction by geometric distance, then query
-  // GraphHopper in parallel to get real road-network walking distances.
+  // --- ACCESS candidates ---
   const accessDegThreshold = MAX_TRANSIT_PROXIMITY_METERS / 111_320;
-
   const candidatesByGroup = new Map<string, { nodeId: string; geoDist: number }[]>();
 
   for (const [nodeId, node] of nodes) {
     if (node.routeId === "__virtual__") continue;
-
-    // Fast degree-based pre-filter
     if (Math.abs(node.lat - start[0]) > accessDegThreshold) continue;
     if (Math.abs(node.lng - start[1]) > accessDegThreshold * 1.5) continue;
 
     const dist = haversineMeters([node.lat, node.lng], start);
     if (dist > MAX_TRANSIT_PROXIMITY_METERS) continue;
 
-    // Find the decoded polyline for this node's route+direction
     const route = routes.find((r) => r.id === node.routeId);
     if (!route) continue;
 
     const coords = node.direction === "goingTo" ? route.decodedGoingTo : route.decodedGoingBack;
     if (coords.length < 2) continue;
 
-    // Directional filter: route from boarding point should generally head toward B
     const routeDir = getRouteDirection(coords, node.polylineIndex);
     const dotProduct = routeDir[0] * abLat + routeDir[1] * abLng;
     if (dotProduct <= 0) continue;
@@ -433,59 +426,39 @@ export async function injectUserNodes(
     group.push({ nodeId, geoDist: dist });
   }
 
-  // Keep top-N per group, then cap globally
   const accessCandidates: { nodeId: string; geoDist: number }[] = [];
   for (const [, group] of candidatesByGroup) {
     group.sort((a, b) => a.geoDist - b.geoDist);
     accessCandidates.push(...group.slice(0, ACCESS_CANDIDATES_PER_DIRECTION));
   }
   accessCandidates.sort((a, b) => a.geoDist - b.geoDist);
-  const cappedCandidates = accessCandidates.slice(0, MAX_ACCESS_QUERIES);
+  const cappedAccess = accessCandidates.slice(0, MAX_ACCESS_QUERIES);
 
-  // Query GraphHopper in parallel for real walking distances
   const { getWalkDistance } = await import("@/lib/routing/graphhopper-walk");
-  const walkResults = await Promise.all(
-    cappedCandidates.map(async (candidate) => {
-      const node = nodes.get(candidate.nodeId)!;
+
+  const accessResults = await Promise.all(
+    cappedAccess.map(async (c) => {
+      const node = nodes.get(c.nodeId)!;
       try {
-        const realDist = await getWalkDistance(start, [node.lat, node.lng]);
-        return { nodeId: candidate.nodeId, realDist };
+        const d = await getWalkDistance(start, [node.lat, node.lng]);
+        return { nodeId: c.nodeId, dist: d };
       } catch {
-        // Fall back to geometric estimate with typical detour factor
-        return { nodeId: candidate.nodeId, realDist: candidate.geoDist * 1.4 };
+        return { nodeId: c.nodeId, dist: c.geoDist * 1.4 };
       }
     }),
   );
 
-  // Create access edges with real walking distances + boarding cost
-  for (const { nodeId, realDist } of walkResults) {
-    if (!isFinite(realDist)) continue;
-    const node = nodes.get(nodeId)!;
-    const walkCost = progressiveWalkCost(realDist);
-    const boardingCost = boardingCosts.get(node.routeId) ?? 0;
-    adjacency.get(VIRTUAL_START_ID)!.push({
-      from: VIRTUAL_START_ID,
-      to: nodeId,
-      distance: realDist,
-      cost: walkCost + boardingCost,
-      type: "walk",
-      routeId: node.routeId,
-      routeName: node.routeName,
-    });
-    hasAccessEdges = true;
+  const accessDistances = new Map<string, number>();
+  for (const { nodeId, dist } of accessResults) {
+    if (isFinite(dist)) accessDistances.set(nodeId, dist);
   }
 
-  // --- EGRESS: Collect candidates, query GraphHopper for real walk distances ---
-  // Same approach as access: select top-N nearest candidates per route+direction
-  // by geometric distance, then query GraphHopper in parallel for real distances.
+  // --- EGRESS candidates ---
   const egressDegThreshold = MAX_TRANSIT_PROXIMITY_METERS / 111_320;
-
   const egressByGroup = new Map<string, { nodeId: string; geoDist: number }[]>();
 
   for (const [nodeId, node] of nodes) {
     if (node.routeId === "__virtual__") continue;
-
-    // Fast degree-based pre-filter to skip distant nodes cheaply
     if (Math.abs(node.lat - end[0]) > egressDegThreshold) continue;
     if (Math.abs(node.lng - end[1]) > egressDegThreshold * 1.5) continue;
 
@@ -501,7 +474,6 @@ export async function injectUserNodes(
     group.push({ nodeId, geoDist: dist });
   }
 
-  // Keep top-N per group, then cap globally
   const egressCandidates: { nodeId: string; geoDist: number }[] = [];
   for (const [, group] of egressByGroup) {
     group.sort((a, b) => a.geoDist - b.geoDist);
@@ -510,24 +482,109 @@ export async function injectUserNodes(
   egressCandidates.sort((a, b) => a.geoDist - b.geoDist);
   const cappedEgress = egressCandidates.slice(0, MAX_EGRESS_QUERIES);
 
-  // Query GraphHopper in parallel for real walking distances
   const egressResults = await Promise.all(
-    cappedEgress.map(async (candidate) => {
-      const node = nodes.get(candidate.nodeId)!;
+    cappedEgress.map(async (c) => {
+      const node = nodes.get(c.nodeId)!;
       try {
-        const realDist = await getWalkDistance([node.lat, node.lng], end);
-        return { nodeId: candidate.nodeId, realDist };
+        const d = await getWalkDistance([node.lat, node.lng], end);
+        return { nodeId: c.nodeId, dist: d };
       } catch {
-        return { nodeId: candidate.nodeId, realDist: candidate.geoDist * 1.4 };
+        return { nodeId: c.nodeId, dist: c.geoDist * 1.4 };
       }
     }),
   );
 
-  // Create egress edges with real walking distances
-  for (const { nodeId, realDist } of egressResults) {
-    if (!isFinite(realDist)) continue;
-    const walkCost = progressiveWalkCost(realDist);
+  const egressDistances = new Map<string, number>();
+  for (const { nodeId, dist } of egressResults) {
+    if (isFinite(dist)) egressDistances.set(nodeId, dist);
+  }
 
+  return { accessDistances, egressDistances };
+}
+
+// ---------------------------------------------------------------------------
+// 7. Build costed adjacency from base graph + weight profile
+// ---------------------------------------------------------------------------
+
+/**
+ * Applies a WeightProfile to the base graph, producing a `GraphEdge[]` adjacency
+ * map suitable for A*. This is cheap (pure math, no I/O) so it can be called
+ * per-profile without penalty.
+ */
+export function buildCostedAdjacency(
+  baseEdges: Map<string, BaseEdge[]>,
+  rawBoardingCosts: Map<string, number>,
+  accessDistances: Map<string, number>,
+  egressDistances: Map<string, number>,
+  nodes: Map<string, GraphNode>,
+  profile: WeightProfile,
+): Map<string, GraphEdge[]> {
+  const adjacency = new Map<string, GraphEdge[]>();
+
+  // Apply costs to all base edges (transit + transfer)
+  for (const [nodeId, edges] of baseEdges) {
+    const costed: GraphEdge[] = [];
+
+    for (const base of edges) {
+      let cost: number;
+
+      if (base.type === "transit") {
+        cost = base.distance * profile.transitCostFactor;
+
+        // Diversity penalty for Explorer route
+        if (profile.penalizedRouteIds?.has(base.routeId!)) {
+          cost *= profile.diversityPenalty ?? 1;
+        }
+
+        // Closure penalty
+        if (base.closureAffected) {
+          cost *= profile.closurePenaltyMultiplier;
+        }
+      } else if (base.type === "transfer") {
+        const walkCost = (base.transferWalkDist ?? base.distance) * profile.walkPenaltyMultiplier;
+        const boardingCost = (rawBoardingCosts.get(base.routeId!) ?? 0) * profile.boardingCostFactor;
+        cost = walkCost + profile.transferPenaltyMeters + boardingCost;
+      } else {
+        // walk edges from base (shouldn't exist in base, but handle gracefully)
+        cost = profileWalkCost(base.distance, profile);
+      }
+
+      costed.push({
+        from: base.from,
+        to: base.to,
+        distance: base.distance,
+        cost,
+        type: base.type,
+        routeId: base.routeId,
+        routeName: base.routeName,
+      });
+    }
+
+    adjacency.set(nodeId, costed);
+  }
+
+  // Add access edges (VIRTUAL_START → transit nodes)
+  const accessEdges: GraphEdge[] = [];
+  for (const [nodeId, rawDist] of accessDistances) {
+    const node = nodes.get(nodeId);
+    if (!node) continue;
+    const walkCost = profileWalkCost(rawDist, profile);
+    const boardingCost = (rawBoardingCosts.get(node.routeId) ?? 0) * profile.boardingCostFactor;
+    accessEdges.push({
+      from: VIRTUAL_START_ID,
+      to: nodeId,
+      distance: rawDist,
+      cost: walkCost + boardingCost,
+      type: "walk",
+      routeId: node.routeId,
+      routeName: node.routeName,
+    });
+  }
+  adjacency.set(VIRTUAL_START_ID, accessEdges);
+
+  // Add egress edges (transit nodes → VIRTUAL_END)
+  for (const [nodeId, rawDist] of egressDistances) {
+    const walkCost = profileWalkCost(rawDist, profile);
     let nodeEdges = adjacency.get(nodeId);
     if (!nodeEdges) {
       nodeEdges = [];
@@ -536,14 +593,69 @@ export async function injectUserNodes(
     nodeEdges.push({
       from: nodeId,
       to: VIRTUAL_END_ID,
-      distance: realDist,
+      distance: rawDist,
       cost: walkCost,
       type: "walk",
     });
-    hasEgressEdges = true;
   }
 
-  return { hasAccessEdges, hasEgressEdges };
+  // Ensure VIRTUAL_END has an entry
+  if (!adjacency.has(VIRTUAL_END_ID)) {
+    adjacency.set(VIRTUAL_END_ID, []);
+  }
+
+  return adjacency;
+}
+
+// ---------------------------------------------------------------------------
+// 8. Full base-graph builder (single entry point for orchestrator)
+// ---------------------------------------------------------------------------
+
+/**
+ * Builds the complete base graph: loads DB data, creates nodes, computes raw
+ * edges/distances, queries GraphHopper for access/egress. Returned BaseGraph
+ * is reused across all weight profiles.
+ */
+export async function buildBaseGraph(
+  start: LatLng,
+  end: LatLng,
+): Promise<{ baseGraph: BaseGraph; transitData: TransitData } | null> {
+  const transitData = await loadTransitData();
+
+  if (transitData.routes.length === 0) return null;
+
+  const nodes = buildGraphNodes(transitData.routes);
+  const baseEdges = buildBaseTransitEdges(transitData.routes, nodes);
+
+  // Transfer edges (raw — cost computed per profile)
+  buildBaseTransferEdges(nodes, baseEdges);
+
+  // Mark closure-affected transit edges
+  markClosureEdges(baseEdges, nodes, transitData.closures);
+
+  // Raw boarding costs (before profile factor)
+  const rawBoardingCosts = computeRawBoardingCosts(transitData.routes);
+
+  // Query GraphHopper for real walk distances (expensive I/O — done once)
+  const { accessDistances, egressDistances } = await queryUserNodeDistances(
+    start, end, transitData.routes, nodes,
+  );
+
+  const hasAccessEdges = accessDistances.size > 0;
+  const hasEgressEdges = egressDistances.size > 0;
+
+  return {
+    baseGraph: {
+      nodes,
+      baseEdges,
+      rawBoardingCosts,
+      accessWalkDistances: accessDistances,
+      egressWalkDistances: egressDistances,
+      hasAccessEdges,
+      hasEgressEdges,
+    },
+    transitData,
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -555,17 +667,15 @@ export function haversineMeters(a: LatLng, b: LatLng): number {
 }
 
 /**
- * Computes a progressive walk cost: linear up to WALK_COMFORT_METERS,
- * then quadratically escalating beyond that. This strongly discourages
- * the algorithm from choosing long walks over transit + transfer.
+ * Profile-aware progressive walk cost.
  */
-export function progressiveWalkCost(distMeters: number): number {
-  if (distMeters <= WALK_COMFORT_METERS) {
-    return distMeters * WALK_PENALTY_MULTIPLIER;
+export function profileWalkCost(distMeters: number, profile: WeightProfile): number {
+  if (distMeters <= profile.walkComfortMeters) {
+    return distMeters * profile.walkPenaltyMultiplier;
   }
-  const baseCost = WALK_COMFORT_METERS * WALK_PENALTY_MULTIPLIER;
-  const excess = distMeters - WALK_COMFORT_METERS;
-  return baseCost + excess * WALK_PENALTY_MULTIPLIER * (1 + excess * WALK_ESCALATION_RATE);
+  const baseCost = profile.walkComfortMeters * profile.walkPenaltyMultiplier;
+  const excess = distMeters - profile.walkComfortMeters;
+  return baseCost + excess * profile.walkPenaltyMultiplier * (1 + excess * profile.walkEscalationRate);
 }
 
 function getRouteDirection(coords: LatLng[], fromIdx: number): [number, number] {

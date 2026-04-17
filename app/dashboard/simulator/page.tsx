@@ -6,7 +6,7 @@ import { useCallback, useState } from "react";
 import { AppSidebar } from "@/components/app-sidebar";
 import Simulator from "@/components/simulator";
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
-import type { NavigateRouteResponse } from "@/contracts/responses";
+import type { MultiNavigateRouteResponse, NavigateRouteSuggestion } from "@/contracts/responses";
 import type { IApiResponse } from "@/lib/http/ApiResponseBuilder";
 import { $fetch } from "@/lib/http/client";
 import * as nominatim from "@/lib/osm/nominatim";
@@ -20,7 +20,8 @@ export default function SimulatorPage() {
   const [startAddress, setStartAddress] = useState("");
   const [endAddress, setEndAddress] = useState("");
   const [pickingMode, setPickingMode] = useState<"start" | "end" | null>(null);
-  const [result, setResult] = useState<NavigateRouteResponse | null>(null);
+  const [result, setResult] = useState<MultiNavigateRouteResponse | null>(null);
+  const [activeSuggestion, setActiveSuggestion] = useState<NavigateRouteSuggestion | null>(null);
   const [isSimulating, setIsSimulating] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -57,8 +58,9 @@ export default function SimulatorPage() {
     setIsSimulating(true);
     setError(null);
     setResult(null);
+    setActiveSuggestion(null);
 
-    const { data, error: fetchError } = await $fetch<IApiResponse<NavigateRouteResponse>>(
+    const { data, error: fetchError } = await $fetch<IApiResponse<MultiNavigateRouteResponse>>(
       "/api/public/navigate",
       {
         method: "POST",
@@ -75,6 +77,7 @@ export default function SimulatorPage() {
     }
 
     setResult(data.data);
+    setActiveSuggestion(data.data.suggestions[0] ?? null);
   }, [startPoint, endPoint]);
 
   return (
@@ -85,8 +88,8 @@ export default function SimulatorPage() {
           <SimulatorMapDynamic
             startPoint={startPoint}
             endPoint={endPoint}
-            legs={result?.legs ?? []}
-            globalBbox={result?.global_bbox ?? null}
+            legs={activeSuggestion?.route.legs ?? []}
+            globalBbox={activeSuggestion?.route.global_bbox ?? null}
             pickingMode={pickingMode}
             onMapClick={handleMapClick}
           />
@@ -101,6 +104,7 @@ export default function SimulatorPage() {
             error={error}
             onPickingModeChange={setPickingMode}
             onSimulate={handleSimulate}
+            onSuggestionChange={setActiveSuggestion}
           />
         </div>
       </SidebarInset>

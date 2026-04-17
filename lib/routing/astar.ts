@@ -4,11 +4,12 @@
 
 import { MinHeap } from "@/lib/routing/min-heap";
 import { haversineMeters } from "@/lib/routing/graph-builder";
-import { MAX_ASTAR_ITERATIONS, TRANSIT_COST_FACTOR } from "@/lib/routing/constants";
-import type { Graph, GraphNode, PathSegment, LatLng } from "@/lib/routing/types";
+import { MAX_ASTAR_ITERATIONS } from "@/lib/routing/constants";
+import type { Graph, GraphNode, PathSegment, LatLng, WeightProfile } from "@/lib/routing/types";
 
 /**
  * Finds the optimal path from `startId` to `endId` in the given graph using A*.
+ * Optionally enforces a maximum number of vehicle transfers.
  *
  * @returns Ordered array of node IDs from start to end, or `null` if no path.
  */
@@ -16,19 +17,31 @@ export function findOptimalPath(
   graph: Graph,
   startId: string,
   endId: string,
+  profile?: WeightProfile,
 ): string[] | null {
   const endNode = graph.nodes.get(endId);
   if (!endNode) return null;
 
+  const maxTransfers = profile?.maxTransfers;
+  const heuristicFactor = profile?.transitCostFactor ?? 0.5;
   const endLatLng: LatLng = [endNode.lat, endNode.lng];
+
+  // When maxTransfers is set, state key includes transfer count for pruning
+  const trackTransfers = maxTransfers !== undefined;
 
   const gScore = new Map<string, number>();
   const fScore = new Map<string, number>();
   const cameFrom = new Map<string, string>();
   const closedSet = new Set<string>();
+  // Transfer count at each node along the best path found so far
+  const transferCount = new Map<string, number>();
+  // Track which routeId the path was on when arriving at each node
+  const arrivalRouteId = new Map<string, string>();
 
   gScore.set(startId, 0);
-  fScore.set(startId, heuristic(graph.nodes.get(startId)!, endLatLng));
+  fScore.set(startId, heuristic(graph.nodes.get(startId)!, endLatLng, heuristicFactor));
+  transferCount.set(startId, 0);
+  arrivalRouteId.set(startId, "__virtual__");
 
   const openSet = new MinHeap();
   openSet.insert(startId, fScore.get(startId)!);
@@ -37,7 +50,7 @@ export function findOptimalPath(
 
   while (openSet.size > 0) {
     if (++iterations > MAX_ASTAR_ITERATIONS) {
-      return null; // Safety cap
+      return null;
     }
 
     const current = openSet.extractMin()!;
@@ -53,9 +66,20 @@ export function findOptimalPath(
     if (!edges) continue;
 
     const currentG = gScore.get(currentId) ?? Infinity;
+    const currentTransfers = transferCount.get(currentId) ?? 0;
+    const currentRouteId = arrivalRouteId.get(currentId) ?? "__virtual__";
 
     for (const edge of edges) {
       if (closedSet.has(edge.to)) continue;
+
+      // Count transfers: a transfer edge (type=transfer) is always a transfer
+      let newTransfers = currentTransfers;
+      if (edge.type === "transfer") {
+        newTransfers++;
+      }
+
+      // Prune if exceeds max transfers
+      if (trackTransfers && newTransfers > maxTransfers!) continue;
 
       const tentativeG = currentG + edge.cost;
       const existingG = gScore.get(edge.to) ?? Infinity;
@@ -63,9 +87,11 @@ export function findOptimalPath(
       if (tentativeG < existingG) {
         cameFrom.set(edge.to, currentId);
         gScore.set(edge.to, tentativeG);
+        transferCount.set(edge.to, newTransfers);
+        arrivalRouteId.set(edge.to, edge.routeId ?? currentRouteId);
 
         const neighbor = graph.nodes.get(edge.to);
-        const h = neighbor ? heuristic(neighbor, endLatLng) : 0;
+        const h = neighbor ? heuristic(neighbor, endLatLng, heuristicFactor) : 0;
         const f = tentativeG + h;
         fScore.set(edge.to, f);
 
@@ -74,7 +100,7 @@ export function findOptimalPath(
     }
   }
 
-  return null; // No path found
+  return null;
 }
 
 /**
@@ -123,10 +149,8 @@ export function reconstructPath(
 // Helpers
 // ---------------------------------------------------------------------------
 
-function heuristic(node: GraphNode, target: LatLng): number {
-  // Scale by TRANSIT_COST_FACTOR to stay admissible: transit edges cost
-  // dist * factor, so straight-line distance must also be scaled down.
-  return haversineMeters([node.lat, node.lng], target) * TRANSIT_COST_FACTOR;
+function heuristic(node: GraphNode, target: LatLng, transitCostFactor: number): number {
+  return haversineMeters([node.lat, node.lng], target) * transitCostFactor;
 }
 
 function reconstructNodePath(cameFrom: Map<string, string>, endId: string): string[] {

@@ -181,3 +181,14 @@ export interface NavigateRouteResponse {
   total_transfers: number;
   global_bbox: [number, number, number, number];
 }
+
+export type NavigateSuggestionLabel = "fastest" | "least_walking" | "simplest" | "explorer";
+
+export interface NavigateRouteSuggestion {
+  label: NavigateSuggestionLabel;
+  route: NavigateRouteResponse;
+}
+
+export interface MultiNavigateRouteResponse {
+  suggestions: NavigateRouteSuggestion[];
+}

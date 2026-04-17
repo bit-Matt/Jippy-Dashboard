@@ -1,17 +1,13 @@
 // ---------------------------------------------------------------------------
-// Main routing orchestrator
+// Main routing orchestrator — multi-suggestion with weight profiles
 // ---------------------------------------------------------------------------
 
 import {
-  loadTransitData,
-  buildGraphNodes,
-  buildTransitEdges,
-  buildTransferEdges,
-  applyClosurePenalties,
-  injectUserNodes,
-  computeRouteBoardingCosts,
+  buildBaseGraph,
+  buildCostedAdjacency,
   haversineMeters,
 } from "@/lib/routing/graph-builder";
+import type { BaseGraph } from "@/lib/routing/graph-builder";
 import { findOptimalPath, reconstructPath } from "@/lib/routing/astar";
 import {
   buildWalkOnlyRoute,
@@ -24,114 +20,202 @@ import {
   MIN_TRANSIT_RIDE_METERS,
   VIRTUAL_START_ID,
   VIRTUAL_END_ID,
+  PROFILE_FASTEST,
+  PROFILE_LEAST_WALKING,
+  PROFILE_SIMPLEST,
+  EXPLORER_DIVERSITY_PENALTY,
+  EXPLORER_MAX_TRANSFERS,
+  EXPLORER_DURATION_CAP,
 } from "@/lib/routing/constants";
-import type { Graph, LatLng, NavigateResponse, PathSegment, RouteLeg } from "@/lib/routing/types";
+import type {
+  Graph,
+  LatLng,
+  NavigateResponse,
+  MultiNavigateResponse,
+  RouteSuggestion,
+  SuggestionLabel,
+  PathSegment,
+  RouteLeg,
+  TransitData,
+  WeightProfile,
+} from "@/lib/routing/types";
 
-/**
- * Computes the optimal multimodal route from `start` to `end`.
- * Returns a NavigateResponse with legs, totals, and global bbox.
- */
+// ---------------------------------------------------------------------------
+// Public entry point
+// ---------------------------------------------------------------------------
+
 export async function computeRoute(
   start: LatLng,
   end: LatLng,
-): Promise<NavigateResponse> {
-  // -----------------------------------------------------------------------
-  // Fallback 1: If A→B < 200m, return pure walk
-  // -----------------------------------------------------------------------
+): Promise<MultiNavigateResponse> {
   const straightLineDistance = haversineMeters(start, end);
   if (straightLineDistance < WALK_ONLY_THRESHOLD_METERS) {
-    return assembleResponse(await buildWalkOnlyRoute(start, end));
+    const walkOnly = assembleResponse(await buildWalkOnlyRoute(start, end));
+    return { suggestions: [{ label: "fastest", route: walkOnly }] };
   }
 
-  // -----------------------------------------------------------------------
-  // Load all published transit data from database
-  // -----------------------------------------------------------------------
-  const transitData = await loadTransitData();
-
-  // If no routes at all, walk-only
-  if (transitData.routes.length === 0) {
-    return assembleResponse(await buildWalkOnlyRoute(start, end));
+  const result = await buildBaseGraph(start, end);
+  if (!result) {
+    const walkOnly = assembleResponse(await buildWalkOnlyRoute(start, end));
+    return { suggestions: [{ label: "fastest", route: walkOnly }] };
   }
 
-  // -----------------------------------------------------------------------
-  // Build graph
-  // -----------------------------------------------------------------------
-  const nodes = buildGraphNodes(transitData.routes);
-  const adjacency = buildTransitEdges(transitData.routes, nodes);
+  const { baseGraph, transitData } = result;
 
-  // Compute per-route boarding cost from fleet size
-  const boardingCosts = computeRouteBoardingCosts(transitData.routes);
+  if (!baseGraph.hasAccessEdges || !baseGraph.hasEgressEdges) {
+    const walkOnly = assembleResponse(await buildWalkOnlyRoute(start, end));
+    return { suggestions: [{ label: "fastest", route: walkOnly }] };
+  }
 
-  // Build transfer edges between nearby nodes of different routes
-  buildTransferEdges(nodes, adjacency, boardingCosts);
+  // Run profiles — each is pure computation on the shared base graph
+  const [fastest, leastWalking, simplest] = await Promise.all([
+    runProfile("fastest", PROFILE_FASTEST, baseGraph, transitData, start, end),
+    runProfile("least_walking", PROFILE_LEAST_WALKING, baseGraph, transitData, start, end),
+    runProfile("simplest", PROFILE_SIMPLEST, baseGraph, transitData, start, end),
+  ]);
 
-  // Apply closure penalties
-  applyClosurePenalties(adjacency, nodes, transitData.closures);
+  const suggestions: RouteSuggestion[] = [];
+  if (fastest) suggestions.push(fastest);
+  if (leastWalking) suggestions.push(leastWalking);
+  if (simplest) suggestions.push(simplest);
 
-  // Inject virtual start/end nodes
-  const { hasAccessEdges, hasEgressEdges } = await injectUserNodes(
-    start,
-    end,
-    transitData.routes,
-    nodes,
-    adjacency,
-    boardingCosts,
+  // Explorer: penalise fastest route's transit lines, re-run with transfer cap
+  if (fastest) {
+    const explorer = await runExplorerProfile(
+      fastest.route,
+      baseGraph,
+      transitData,
+      start,
+      end,
+    );
+    if (explorer) suggestions.push(explorer);
+  }
+
+  const deduped = deduplicateSuggestions(suggestions);
+
+  if (deduped.length === 0) {
+    const walkOnly = assembleResponse(await buildWalkOnlyRoute(start, end));
+    return { suggestions: [{ label: "fastest", route: walkOnly }] };
+  }
+
+  return { suggestions: deduped };
+}
+
+// ---------------------------------------------------------------------------
+// Run a single weight profile
+// ---------------------------------------------------------------------------
+
+async function runProfile(
+  label: SuggestionLabel,
+  profile: WeightProfile,
+  base: BaseGraph,
+  transitData: TransitData,
+  start: LatLng,
+  end: LatLng,
+): Promise<RouteSuggestion | null> {
+  const adjacency = buildCostedAdjacency(
+    base.baseEdges,
+    base.rawBoardingCosts,
+    base.accessWalkDistances,
+    base.egressWalkDistances,
+    base.nodes,
+    profile,
   );
 
-  // -----------------------------------------------------------------------
-  // Fallback 2: If no nearby transit from A or B (>5km), return walk-only
-  // -----------------------------------------------------------------------
-  if (!hasAccessEdges || !hasEgressEdges) {
-    return assembleResponse(await buildWalkOnlyRoute(start, end));
+  const graph: Graph = { nodes: base.nodes, edges: adjacency };
+  const nodePath = findOptimalPath(graph, VIRTUAL_START_ID, VIRTUAL_END_ID, profile);
+  if (!nodePath || nodePath.length < 2) return null;
+
+  const legs = await assembleLegs(nodePath, graph, transitData, start, end);
+  if (!legs) return null;
+
+  return { label, route: assembleResponse(legs) };
+}
+
+// ---------------------------------------------------------------------------
+// Explorer route — topologically diverse alternative
+// ---------------------------------------------------------------------------
+
+async function runExplorerProfile(
+  fastestResponse: NavigateResponse,
+  base: BaseGraph,
+  transitData: TransitData,
+  start: LatLng,
+  end: LatLng,
+): Promise<RouteSuggestion | null> {
+  const fastestRouteIds = new Set<string>();
+  for (const leg of fastestResponse.legs) {
+    if (leg.type === "JEEPNEY" && leg.route_name) {
+      for (const route of transitData.routes) {
+        if (route.routeName === leg.route_name) {
+          fastestRouteIds.add(route.id);
+        }
+      }
+    }
+  }
+  if (fastestRouteIds.size === 0) return null;
+
+  const explorerProfile: WeightProfile = {
+    ...PROFILE_FASTEST,
+    penalizedRouteIds: fastestRouteIds,
+    diversityPenalty: EXPLORER_DIVERSITY_PENALTY,
+    maxTransfers: EXPLORER_MAX_TRANSFERS,
+  };
+
+  const adjacency = buildCostedAdjacency(
+    base.baseEdges,
+    base.rawBoardingCosts,
+    base.accessWalkDistances,
+    base.egressWalkDistances,
+    base.nodes,
+    explorerProfile,
+  );
+
+  const graph: Graph = { nodes: base.nodes, edges: adjacency };
+  const nodePath = findOptimalPath(graph, VIRTUAL_START_ID, VIRTUAL_END_ID, explorerProfile);
+  if (!nodePath || nodePath.length < 2) return null;
+
+  const legs = await assembleLegs(nodePath, graph, transitData, start, end);
+  if (!legs) return null;
+
+  const explorerResponse = assembleResponse(legs);
+
+  // Time cap: discard if significantly slower than fastest
+  if (explorerResponse.total_duration > fastestResponse.total_duration * EXPLORER_DURATION_CAP) {
+    return null;
   }
 
-  // -----------------------------------------------------------------------
-  // Run A* pathfinding
-  // -----------------------------------------------------------------------
-  const graph: Graph = { nodes, edges: adjacency };
-  const nodePath = findOptimalPath(graph, VIRTUAL_START_ID, VIRTUAL_END_ID);
+  return { label: "explorer", route: explorerResponse };
+}
 
-  if (!nodePath || nodePath.length < 2) {
-    // No transit path found — fall back to walk-only
-    return assembleResponse(await buildWalkOnlyRoute(start, end));
-  }
+// ---------------------------------------------------------------------------
+// Shared leg assembly from A* path
+// ---------------------------------------------------------------------------
 
-  // -----------------------------------------------------------------------
-  // Reconstruct path into segments
-  // -----------------------------------------------------------------------
+async function assembleLegs(
+  nodePath: string[],
+  graph: Graph,
+  transitData: TransitData,
+  start: LatLng,
+  end: LatLng,
+): Promise<RouteLeg[] | null> {
   let segments = reconstructPath(nodePath, graph);
+  if (segments.length === 0) return null;
 
-  if (segments.length === 0) {
-    return assembleResponse(await buildWalkOnlyRoute(start, end));
-  }
-
-  // Merge consecutive segments on the same route (prevents false transfers)
   segments = mergeSameRouteSegments(segments);
-
-  // Drop transit segments too short to justify boarding a vehicle.
-  // Adjacent walk legs will naturally extend to cover the gap.
   segments = filterShortSegments(segments);
+  if (segments.length === 0) return null;
 
-  if (segments.length === 0) {
-    return assembleResponse(await buildWalkOnlyRoute(start, end));
-  }
-
-  // -----------------------------------------------------------------------
-  // Assemble legs
-  // -----------------------------------------------------------------------
   const allLegs: RouteLeg[] = [];
 
-  // Access leg: start → first boarding node
   const firstSegment = segments[0];
   const firstBoardingNode: LatLng = [firstSegment.nodes[0].lat, firstSegment.nodes[0].lng];
   const accessLegs = await buildAccessLeg(start, firstBoardingNode, transitData.regions);
   allLegs.push(...accessLegs);
 
-  // Transit legs (jeepney)
   const transitLegs = await buildTransitLegs(segments, graph);
   allLegs.push(...transitLegs);
 
-  // Egress leg: last alighting node → destination
   const lastSegment = segments[segments.length - 1];
   const lastAlightNode: LatLng = [
     lastSegment.nodes[lastSegment.nodes.length - 1].lat,
@@ -140,7 +224,30 @@ export async function computeRoute(
   const egressLegs = await buildEgressLeg(lastAlightNode, end, transitData.regions);
   allLegs.push(...egressLegs);
 
-  return assembleResponse(allLegs);
+  return allLegs;
+}
+
+// ---------------------------------------------------------------------------
+// Deduplication — by route-name sequence + transfer count
+// ---------------------------------------------------------------------------
+
+function deduplicateSuggestions(suggestions: RouteSuggestion[]): RouteSuggestion[] {
+  const seen = new Set<string>();
+  const result: RouteSuggestion[] = [];
+
+  for (const s of suggestions) {
+    const routeNames = s.route.legs
+      .filter((l) => l.type === "JEEPNEY" && l.route_name)
+      .map((l) => l.route_name!)
+      .sort()
+      .join("|");
+    const key = `${routeNames}::${s.route.total_transfers}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    result.push(s);
+  }
+
+  return result;
 }
 
 // ---------------------------------------------------------------------------
@@ -157,7 +264,6 @@ function mergeSameRouteSegments(segments: PathSegment[]): PathSegment[] {
     const curr = segments[i];
 
     if (prev.routeId === curr.routeId) {
-      // Same route — merge nodes into the previous segment
       prev.nodes.push(...curr.nodes);
     } else {
       merged.push(curr);
@@ -202,7 +308,6 @@ function assembleResponse(legs: RouteLeg[]): NavigateResponse {
     totalDistance += leg.distance;
     totalDuration += leg.duration;
 
-    // Count transfers: a JEEPNEY leg following another JEEPNEY leg
     if (
       i > 0 &&
       leg.type === "JEEPNEY" &&
@@ -211,7 +316,6 @@ function assembleResponse(legs: RouteLeg[]): NavigateResponse {
       totalTransfers++;
     }
 
-    // Expand global bbox
     const [bMinLng, bMinLat, bMaxLng, bMaxLat] = leg.bbox;
     if (bMinLng < minLng) minLng = bMinLng;
     if (bMinLat < minLat) minLat = bMinLat;

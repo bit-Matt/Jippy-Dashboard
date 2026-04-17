@@ -59,3 +59,42 @@ export const VIRTUAL_START_ID = "__start__";
 
 /** Virtual node ID for the user's destination point */
 export const VIRTUAL_END_ID = "__end__";
+
+// ---------------------------------------------------------------------------
+// Weight profile presets
+// ---------------------------------------------------------------------------
+
+import type { WeightProfile } from "@/lib/routing/types";
+
+const BASE_PROFILE: WeightProfile = {
+  walkPenaltyMultiplier: WALK_PENALTY_MULTIPLIER,
+  walkComfortMeters: WALK_COMFORT_METERS,
+  walkEscalationRate: WALK_ESCALATION_RATE,
+  transitCostFactor: TRANSIT_COST_FACTOR,
+  transferPenaltyMeters: TRANSFER_PENALTY_METERS,
+  boardingCostFactor: BOARDING_COST_FACTOR,
+  closurePenaltyMultiplier: CLOSURE_PENALTY_MULTIPLIER,
+};
+
+/** Fastest: default balanced weights */
+export const PROFILE_FASTEST: WeightProfile = { ...BASE_PROFILE };
+
+/** Least Walking: high walk penalty forces transit/tricycle for short distances */
+export const PROFILE_LEAST_WALKING: WeightProfile = {
+  ...BASE_PROFILE,
+  walkPenaltyMultiplier: 5.0,
+  walkEscalationRate: 0.02,
+};
+
+/** Simplest: extremely high transfer penalty to prefer direct routes */
+export const PROFILE_SIMPLEST: WeightProfile = {
+  ...BASE_PROFILE,
+  transferPenaltyMeters: 1800,
+};
+
+/** Explorer diversity penalty applied to fastest route's transit lines */
+export const EXPLORER_DIVERSITY_PENALTY = 5.0;
+/** Explorer: max vehicle transfers allowed */
+export const EXPLORER_MAX_TRANSFERS = 2;
+/** Explorer: max duration relative to fastest route */
+export const EXPLORER_DURATION_CAP = 1.5;

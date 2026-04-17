@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { z } from "zod";
 import { AlertCircle, Bus, Footprints, MapPin } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -14,7 +15,13 @@ import {
 } from "@/components/ui/input-group";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
-import type { NavigateRouteLeg, NavigateRouteResponse } from "@/contracts/responses";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import type {
+  MultiNavigateRouteResponse,
+  NavigateRouteLeg,
+  NavigateRouteSuggestion,
+  NavigateSuggestionLabel,
+} from "@/contracts/responses";
 
 const SimulateSchema = z.object({
   start: z.tuple([z.number(), z.number()]),
@@ -27,6 +34,13 @@ const LEG_ICONS: Record<string, React.ReactNode> = {
   WALK: <Footprints className="h-3 w-3" />,
   JEEPNEY: <Bus className="h-3 w-3" />,
   TRICYCLE: <Bus className="h-3 w-3" />,
+};
+
+const LABEL_DISPLAY: Record<NavigateSuggestionLabel, string> = {
+  fastest: "Fastest",
+  least_walking: "Less Walk",
+  simplest: "Simplest",
+  explorer: "Explorer",
 };
 
 function formatDistance(meters: number): string {
@@ -80,6 +94,26 @@ function LegCard({ leg }: { leg: NavigateRouteLeg }) {
   );
 }
 
+function SuggestionPanel({ suggestion }: { suggestion: NavigateRouteSuggestion }) {
+  const { route } = suggestion;
+  return (
+    <div className="space-y-3">
+      <div className="flex gap-4 text-sm text-muted-foreground">
+        <span>{formatDistance(route.total_distance)}</span>
+        <span>{formatDuration(route.total_duration)}</span>
+        <span>
+          {route.total_transfers} transfer{route.total_transfers !== 1 ? "s" : ""}
+        </span>
+      </div>
+      <div className="space-y-2">
+        {route.legs.map((leg, i) => (
+          <LegCard key={i} leg={leg} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export interface SimulatorProps {
   startAddress: string;
   endAddress: string;
@@ -87,10 +121,11 @@ export interface SimulatorProps {
   endPoint: [number, number] | null;
   pickingMode: "start" | "end" | null;
   isSimulating: boolean;
-  result: NavigateRouteResponse | null;
+  result: MultiNavigateRouteResponse | null;
   error: string | null;
   onPickingModeChange: (mode: "start" | "end" | null) => void;
   onSimulate: () => void;
+  onSuggestionChange: (suggestion: NavigateRouteSuggestion | null) => void;
 }
 
 export default function Simulator({
@@ -104,7 +139,10 @@ export default function Simulator({
   error,
   onPickingModeChange,
   onSimulate,
+  onSuggestionChange,
 }: SimulatorProps) {
+  const [activeTab, setActiveTab] = useState<string>("");
+
   const validation = SimulateSchema.safeParse({ start: startPoint, end: endPoint });
   const canSimulate = validation.success && !isSimulating;
 
@@ -115,6 +153,19 @@ export default function Simulator({
   const handleEndPin = () => {
     onPickingModeChange(pickingMode === "end" ? null : "end");
   };
+
+  const handleTabChange = (label: string) => {
+    setActiveTab(label);
+    const suggestion = result?.suggestions.find((s) => s.label === label) ?? null;
+    onSuggestionChange(suggestion);
+  };
+
+  // When a new result arrives, auto-select the first suggestion
+  const firstLabel = result?.suggestions[0]?.label ?? "";
+  if (result && firstLabel && activeTab !== firstLabel && !result.suggestions.find((s) => s.label === activeTab)) {
+    setActiveTab(firstLabel);
+    onSuggestionChange(result.suggestions[0]);
+  }
 
   return (
     <div className="absolute top-2 left-6 z-99999 w-80 max-h-[calc(100vh-2rem)] overflow-y-auto">
@@ -166,7 +217,8 @@ export default function Simulator({
 
           {pickingMode && (
             <p className="text-xs text-muted-foreground text-center">
-              Click on the map to set the {pickingMode === "start" ? "starting point" : "destination"}
+              Click on the map to set the{" "}
+              {pickingMode === "start" ? "starting point" : "destination"}
             </p>
           )}
 
@@ -185,21 +237,23 @@ export default function Simulator({
             </Alert>
           )}
 
-          {result && (
+          {result && result.suggestions.length > 0 && (
             <>
               <Separator />
-              <div className="space-y-3">
-                <div className="flex gap-4 text-sm text-muted-foreground">
-                  <span>{formatDistance(result.total_distance)}</span>
-                  <span>{formatDuration(result.total_duration)}</span>
-                  <span>{result.total_transfers} transfer{result.total_transfers !== 1 ? "s" : ""}</span>
-                </div>
-                <div className="space-y-2">
-                  {result.legs.map((leg, i) => (
-                    <LegCard key={i} leg={leg} />
+              <Tabs value={activeTab} onValueChange={handleTabChange}>
+                <TabsList className="w-full">
+                  {result.suggestions.map((s) => (
+                    <TabsTrigger key={s.label} value={s.label} className="flex-1 text-xs">
+                      {LABEL_DISPLAY[s.label] ?? s.label}
+                    </TabsTrigger>
                   ))}
-                </div>
-              </div>
+                </TabsList>
+                {result.suggestions.map((s) => (
+                  <TabsContent key={s.label} value={s.label} className="mt-3">
+                    <SuggestionPanel suggestion={s} />
+                  </TabsContent>
+                ))}
+              </Tabs>
             </>
           )}
         </CardContent>
