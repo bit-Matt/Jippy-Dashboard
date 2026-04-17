@@ -19,6 +19,19 @@ services:
       retries: 5
       start_period: 30s
     shm_size: 1gb
+  redis:
+    restart: unless-stopped
+    image: redis:8-trixie
+    ports:
+      - "${REDIS_PORT}:6379"
+    networks:
+      - defaultNetwork
+    healthcheck:
+      test: [ "CMD", "redis-cli", "ping" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
 
   # Open Street Maps
   tileserver:

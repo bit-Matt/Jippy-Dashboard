@@ -4,6 +4,7 @@ import { DateTime } from "luxon";
 import * as Sentry from "@sentry/nextjs";
 
 import { auth } from "@/lib/auth";
+import { cacheManager } from "@/lib/cache";
 import { db } from "@/lib/db";
 import { ErrorCodes, Failure, Result, Success } from "@/lib/one-of/types";
 import { InvitationEmailHtml } from "@/lib/mailer/templates/InvitationMail";
@@ -25,6 +26,13 @@ export async function getUserById(id: string): Promise<Result<User>> {
   }
 
   try {
+    // Return the cached user if it exists.
+    const key = `user:${id}`;
+    const cached = await cacheManager.getJson<User>(key);
+    if (cached) {
+      return new Success<User>(cached);
+    }
+
     const [account] = await db
       .select({
         id: user.id,
@@ -54,9 +62,24 @@ export async function getUserById(id: string): Promise<Result<User>> {
       role: account.role,
     };
 
+    await cacheManager.writeJson(key, payload, { lifetime: 1440 });
     return new Success(payload);
   } catch (e) {
     return new Failure(ErrorCodes.Fatal, "Internal exception.", { id }, e);
+  }
+}
+
+export async function validateCall(id: string, methodName: string, role?: string): Promise<Result<User>> {
+  try {
+    const user = await unwrap(getUserById(id));
+
+    if (user.role !== role) {
+      return new Failure(ErrorCodes.InsufficientPermissions, "Insufficient permissions.", { user, methodName });
+    }
+
+    return new Success(user);
+  } catch (e) {
+    return new Failure(ErrorCodes.Fatal, "Unable to get the user information.", { id }, e);
   }
 }
 

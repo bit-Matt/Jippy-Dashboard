@@ -211,6 +211,11 @@ export const db = {
     return url.toString();
   },
 
+  createRedisConnectionString(port) {
+    const url = new URL(`redis://localhost:${port}`);
+    return url.toString();
+  },
+
   /**
    * Ensures that a PostgreSQL database exists, creating it if necessary.
    *

@@ -280,6 +280,9 @@ export class ApiResponseBuilder<TResponse> implements IResponseComposer<TRespons
     case ErrorCodes.ResourceNotFound:
       return ApiResponseBuilder
         .createError(StatusCodes.Status404NotFound, { message: failure.message });
+    case ErrorCodes.InsufficientPermissions:
+      return ApiResponseBuilder
+        .createError(StatusCodes.Status403Forbidden, { message: failure.message });
     default:
       return ApiResponseBuilder
         .createError(StatusCodes.Status500InternalServerError, { message: failure.message });
