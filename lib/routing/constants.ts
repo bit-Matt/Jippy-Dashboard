@@ -70,6 +70,17 @@ export const MAX_REGION_BOUNDARY_METERS = 300;
 /** Detour factor applied to haversine for estimating tricycle road distance */
 export const TRICYCLE_DETOUR_FACTOR = 1.2;
 
+/** Detour factor applied to haversine for estimating walking road distance.
+ *  Urban road networks rarely allow straight-line walking — typical ratio is
+ *  1.3–1.5× haversine.  Used for graph edges where querying the actual walk
+ *  distance (GraphHopper) would be too expensive at build time. */
+export const WALK_DETOUR_FACTOR = 1.5;
+
+/** If any mid-route walk leg exceeds this distance (meters) after assembly,
+ *  the algorithm reruns A* with a boosted walk penalty to try to find a
+ *  transit alternative.  If no improvement is found, keeps the original. */
+export const LONG_WALK_THRESHOLD_METERS = 1_000;
+
 /** Max haversine (meters) for a station → jeepney-node tricycle edge.
  *  Longer rides would exit the station's operating area / region. */
 export const MAX_TRICYCLE_RIDE_TO_TRANSIT_METERS = 600;

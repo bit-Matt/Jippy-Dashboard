@@ -25,6 +25,7 @@ import {
   EXPLORER_DIVERSITY_PENALTY,
   EXPLORER_MAX_TRANSFERS,
   EXPLORER_DURATION_CAP,
+  LONG_WALK_THRESHOLD_METERS,
 } from "@/lib/routing/constants";
 import type {
   Graph,
@@ -90,12 +91,17 @@ export async function computeRoute(
 
   const deduped = deduplicateSuggestions(suggestions);
 
-  if (deduped.length === 0) {
+  // Drop suggestions with a long mid-route walk (>= 1 km) unless that would
+  // leave us with no suggestions at all.
+  const filtered = deduped.filter((s) => !hasLongMidRouteWalk(s.route.legs));
+  const final = filtered.length > 0 ? filtered : deduped;
+
+  if (final.length === 0) {
     const walkOnly = assembleResponse(await buildWalkOnlyRoute(start, end));
     return { suggestions: [{ label: "fastest", route: walkOnly }] };
   }
 
-  return { suggestions: deduped };
+  return { suggestions: final };
 }
 
 // ---------------------------------------------------------------------------
@@ -269,6 +275,20 @@ function filterShortTransitSections(sections: PathSection[]): PathSection[] {
     }
     return dist >= MIN_TRANSIT_RIDE_METERS;
   });
+}
+
+// ---------------------------------------------------------------------------
+// Long mid-route walk detection and rerun
+// ---------------------------------------------------------------------------
+
+/** True if any non-access/egress walk leg exceeds the rerun threshold. */
+function hasLongMidRouteWalk(legs: RouteLeg[]): boolean {
+  for (let i = 1; i < legs.length - 1; i++) {
+    if (legs[i].type === "WALK" && legs[i].distance >= LONG_WALK_THRESHOLD_METERS) {
+      return true;
+    }
+  }
+  return false;
 }
 
 // ---------------------------------------------------------------------------

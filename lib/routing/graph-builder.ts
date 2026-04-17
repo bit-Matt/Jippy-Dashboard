@@ -29,6 +29,7 @@ import {
   BACKTRACK_PENALTY_MULTIPLIER,
   MAX_TRICYCLE_RIDE_TO_TRANSIT_METERS,
   MAX_BOUNDARY_EXIT_WALK_METERS,
+  WALK_DETOUR_FACTOR,
 } from "@/lib/routing/constants";
 import type {
   GraphEdge,
@@ -614,7 +615,7 @@ export function buildTricycleNodesAndEdges(
           exitEdges.push({
             from: exitId,
             to: jeepNodeId,
-            distance: exitToJeep,
+            distance: exitToJeep * WALK_DETOUR_FACTOR,
             type: "walk",
           });
         }
@@ -655,7 +656,7 @@ export function buildTricycleNodesAndEdges(
       // --- Nearby jeepney nodes → station (walk to station for boarding) ---
       for (const jeepNodeId of nearbyJeepNodes) {
         const jeepNode = nodes.get(jeepNodeId)!;
-        const walkDist = haversineMeters([jeepNode.lat, jeepNode.lng], station.point);
+        const walkDist = haversineMeters([jeepNode.lat, jeepNode.lng], station.point) * WALK_DETOUR_FACTOR;
 
         // Compute backtracking penalty: how much further from destination
         // does walking to this station take you?
@@ -790,7 +791,7 @@ export function buildTricycleNodesAndEdges(
 
     // --- Boundary drop-off → VIRTUAL_END (walk from boundary to destination) ---
     if (boundaryDropoff && boundaryDropoffId) {
-      const walkDist = haversineMeters(boundaryDropoff, end);
+      const walkDist = haversineMeters(boundaryDropoff, end) * WALK_DETOUR_FACTOR;
       let dropoffEdges = baseEdges.get(boundaryDropoffId);
       if (!dropoffEdges) {
         dropoffEdges = [];
