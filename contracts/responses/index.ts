@@ -182,7 +182,7 @@ export interface NavigateRouteResponse {
   global_bbox: [number, number, number, number];
 }
 
-export type NavigateSuggestionLabel = "fastest" | "least_walking" | "simplest" | "explorer";
+export type NavigateSuggestionLabel = "fastest" | "least_walking" | "simplest" | "explorer" | "tricycle";
 
 export interface NavigateRouteSuggestion {
   label: NavigateSuggestionLabel;

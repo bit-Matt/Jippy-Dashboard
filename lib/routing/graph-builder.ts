@@ -6,6 +6,7 @@ import turfDistance from "@turf/distance";
 import { point as turfPoint, lineString as turfLineString, polygon as turfPolygon } from "@turf/helpers";
 import turfLineIntersect from "@turf/line-intersect";
 import booleanPointInPolygon from "@turf/boolean-point-in-polygon";
+import nearestPointOnLine from "@turf/nearest-point-on-line";
 
 import { unwrap } from "@/lib/one-of";
 import * as routeManager from "@/lib/management/route-manager";
@@ -18,6 +19,16 @@ import {
   TRANSFER_PROXIMITY_METERS,
   VIRTUAL_END_ID,
   VIRTUAL_START_ID,
+  MAX_TRICYCLE_STATION_WALK_METERS,
+  STATION_UNAVAILABILITY_THRESHOLD,
+  MAX_REGION_BOUNDARY_METERS,
+  TRICYCLE_DETOUR_FACTOR,
+  TRICYCLE_RIDE_COST_FACTOR,
+  STATION_WAIT_PENALTY_METERS,
+  HAILING_WAIT_PENALTY_METERS,
+  BACKTRACK_PENALTY_MULTIPLIER,
+  MAX_TRICYCLE_RIDE_TO_TRANSIT_METERS,
+  MAX_BOUNDARY_EXIT_WALK_METERS,
 } from "@/lib/routing/constants";
 import type {
   GraphEdge,
@@ -27,6 +38,7 @@ import type {
   TransitData,
   TransitRegion,
   TransitRoute,
+  TransitStation,
   WeightProfile,
 } from "@/lib/routing/types";
 
@@ -41,13 +53,27 @@ export interface BaseEdge {
   from: string;
   to: string;
   distance: number;
-  type: "transit" | "transfer" | "walk";
+  type: "transit" | "transfer" | "walk" | "tricycle";
   routeId?: string;
   routeName?: string;
   /** For transfer edges: the walking distance between the two nodes */
   transferWalkDist?: number;
   /** True if the edge intersects a road-closure polygon */
   closureAffected?: boolean;
+  /** Tricycle station ID (for tricycle edges) */
+  stationId?: string;
+  /** Tricycle station display name */
+  stationName?: string;
+  /** Tricycle station coordinates [lat, lng] */
+  stationPoint?: LatLng;
+  /** Region ID for tricycle edges */
+  regionId?: string;
+  /** True if this tricycle edge uses hailing (higher wait penalty) */
+  isHail?: boolean;
+  /** For hail edges: walk distance from alight point to station (costed at walk rate, not tricycle rate) */
+  walkToStationDist?: number;
+  /** Walk detour ratio for walk-to-station backtracking penalty */
+  detourRatio?: number;
 }
 
 export interface BaseGraph {
@@ -347,6 +373,468 @@ export function markClosureEdges(
 }
 
 // ---------------------------------------------------------------------------
+// 5b. Tricycle graph construction — station nodes, ride/walk/hail edges
+// ---------------------------------------------------------------------------
+
+/**
+ * Check if a station is currently available based on its time window.
+ */
+function isStationAvailable(station: TransitStation, now: Date): boolean {
+  const currentMinutes = now.getHours() * 60 + now.getMinutes();
+  const [fromH, fromM] = station.availableFrom.split(":").map(Number);
+  const [toH, toM] = station.availableTo.split(":").map(Number);
+  const fromMin = fromH * 60 + fromM;
+  const toMin = toH * 60 + toM;
+
+  if (fromMin <= toMin) {
+    return currentMinutes >= fromMin && currentMinutes <= toMin;
+  }
+  // Crosses midnight
+  return currentMinutes >= fromMin || currentMinutes <= toMin;
+}
+
+/**
+ * Returns available stations for a region, or empty array if the region
+ * doesn't meet the availability threshold.
+ */
+function getAvailableStations(region: TransitRegion, now: Date): TransitStation[] {
+  if (region.stations.length === 0) return [];
+  const available = region.stations.filter((s) => isStationAvailable(s, now));
+  const unavailableRatio = 1 - available.length / region.stations.length;
+  if (unavailableRatio >= STATION_UNAVAILABILITY_THRESHOLD) return [];
+  return available;
+}
+
+/**
+ * Build a turf polygon from region boundary points.
+ */
+function buildRegionPolygon(region: TransitRegion) {
+  const sorted = [...region.points].sort((a, b) => a.sequence - b.sequence);
+  const ring = sorted.map((p) => [p.point[1], p.point[0]] as [number, number]);
+  ring.push(ring[0]); // close ring
+  return turfPolygon([ring]);
+}
+
+/**
+ * Find the nearest point on the polygon boundary to a given point.
+ * Returns [lat, lng] of the boundary point.
+ */
+function nearestBoundaryPoint(
+  target: LatLng,
+  region: TransitRegion,
+): LatLng {
+  const sorted = [...region.points].sort((a, b) => a.sequence - b.sequence);
+  const ring = sorted.map((p) => [p.point[1], p.point[0]] as [number, number]);
+  ring.push(ring[0]);
+  const boundaryLine = turfLineString(ring);
+  const pt = turfPoint([target[1], target[0]]);
+  const nearest = nearestPointOnLine(boundaryLine, pt);
+  const [lng, lat] = nearest.geometry.coordinates;
+  return [lat, lng];
+}
+
+/**
+ * Build tricycle station nodes and all tricycle-related edges.
+ *
+ * This creates:
+ *  - Station graph nodes
+ *  - Boundary drop-off nodes (for near-boundary destinations)
+ *  - Tricycle ride edges (station → jeepney nodes in region)
+ *  - Walk-to-station edges (jeepney nodes → station, with backtrack penalty)
+ *  - Hail edges (jeepney nodes/start → via tricycle with hailing wait)
+ *  - Access edges (VIRTUAL_START → station, if start in region)
+ *  - Egress edges (station → VIRTUAL_END, if end in region or near boundary)
+ */
+export function buildTricycleNodesAndEdges(
+  regions: TransitRegion[],
+  nodes: Map<string, GraphNode>,
+  baseEdges: Map<string, BaseEdge[]>,
+  start: LatLng,
+  end: LatLng,
+  now: Date,
+): void {
+  for (const region of regions) {
+    if (region.points.length < 3) continue;
+
+    const availableStations = getAvailableStations(region, now);
+    if (availableStations.length === 0) continue;
+
+    const regionPoly = buildRegionPolygon(region);
+    const startInRegion = booleanPointInPolygon(turfPoint([start[1], start[0]]), regionPoly);
+    const endInRegion = booleanPointInPolygon(turfPoint([end[1], end[0]]), regionPoly);
+
+    // Check if destination is near the region boundary (but outside it)
+    let boundaryDropoff: LatLng | null = null;
+    let boundaryDropoffId: string | null = null;
+    if (!endInRegion) {
+      const nearestBp = nearestBoundaryPoint(end, region);
+      const distToBoundary = haversineMeters(end, nearestBp);
+      if (distToBoundary <= MAX_REGION_BOUNDARY_METERS) {
+        boundaryDropoff = nearestBp;
+        boundaryDropoffId = `tricycle_dropoff:${region.id}`;
+        nodes.set(boundaryDropoffId, {
+          id: boundaryDropoffId,
+          lat: nearestBp[0],
+          lng: nearestBp[1],
+          routeId: `__tricycle_region__:${region.id}`,
+          routeName: region.regionName,
+          routeColor: region.regionColor,
+          direction: "goingTo",
+          polylineIndex: -1,
+        });
+        baseEdges.set(boundaryDropoffId, []);
+      }
+    }
+
+    // Collect jeepney nodes inside the region polygon (for hail edges)
+    const jeepneyNodesInRegion = new Set<string>();
+    for (const [nodeId, node] of nodes) {
+      if (node.routeId === "__virtual__") continue;
+      if (node.routeId.startsWith("__tricycle_region__:")) continue;
+      if (booleanPointInPolygon(turfPoint([node.lng, node.lat]), regionPoly)) {
+        jeepneyNodesInRegion.add(nodeId);
+      }
+    }
+
+    // Track boundary exit nodes for this region (dedup within 100 m)
+    const boundaryExitNodes = new Map<string, LatLng>();
+
+    // --- Create station nodes & edges ---
+    for (const station of availableStations) {
+      const stationNodeId = `tricycle:${station.id}`;
+
+      nodes.set(stationNodeId, {
+        id: stationNodeId,
+        lat: station.point[0],
+        lng: station.point[1],
+        routeId: `__tricycle_region__:${region.id}`,
+        routeName: station.address,
+        routeColor: region.regionColor,
+        direction: "goingTo",
+        polylineIndex: -1,
+      });
+
+      const stationEdges: BaseEdge[] = [];
+
+      // Find jeepney nodes near THIS station (proximity-based, not polygon-gated)
+      // This ensures connectivity even when routes run along the polygon edge.
+      const nearbyJeepNodes: string[] = [];
+      for (const [nodeId, node] of nodes) {
+        if (node.routeId === "__virtual__") continue;
+        if (node.routeId.startsWith("__tricycle_region__:")) continue;
+        const dist = haversineMeters(station.point, [node.lat, node.lng]);
+        if (dist <= MAX_TRICYCLE_STATION_WALK_METERS) {
+          nearbyJeepNodes.push(nodeId);
+          // Also mark as "in region" for hail eligibility
+          jeepneyNodesInRegion.add(nodeId);
+        }
+      }
+
+      // --- Station → nearby jeepney nodes ---
+      // Jeepney routes run OUTSIDE the region.  Direct station→jeepney
+      // tricycle edges would exit the region, so for outside-region
+      // nodes we route through boundary exit nodes:
+      //   station → boundary (tricycle, inside) → jeepney (walk, short)
+      const addedStationToExit = new Set<string>();
+
+      for (const jeepNodeId of nearbyJeepNodes) {
+        const jeepNode = nodes.get(jeepNodeId)!;
+        const jeepPoint: LatLng = [jeepNode.lat, jeepNode.lng];
+        const jeepInsideRegion = booleanPointInPolygon(
+          turfPoint([jeepNode.lng, jeepNode.lat]),
+          regionPoly,
+        );
+
+        if (jeepInsideRegion) {
+          // Rare: jeepney node inside region — direct tricycle OK
+          const straightDist = haversineMeters(station.point, jeepPoint);
+          if (straightDist > MAX_TRICYCLE_RIDE_TO_TRANSIT_METERS) continue;
+          stationEdges.push({
+            from: stationNodeId,
+            to: jeepNodeId,
+            distance: straightDist * TRICYCLE_DETOUR_FACTOR,
+            type: "tricycle",
+            stationId: station.id,
+            stationName: station.address,
+            regionId: region.id,
+            isHail: false,
+            routeId: jeepNode.routeId,
+            routeName: jeepNode.routeName,
+          });
+          continue;
+        }
+
+        // Jeepney outside region — route through a boundary exit node
+        const exitPt = nearestBoundaryPoint(jeepPoint, region);
+        const exitToJeep = haversineMeters(exitPt, jeepPoint);
+        if (exitToJeep > MAX_BOUNDARY_EXIT_WALK_METERS) continue;
+
+        // Dedup: reuse an existing boundary exit within 100 m
+        let exitId: string | null = null;
+        for (const [id, pt] of boundaryExitNodes) {
+          if (haversineMeters(pt, exitPt) < 100) { exitId = id; break; }
+        }
+
+        if (!exitId) {
+          exitId = `boundary_exit:${region.id}:${boundaryExitNodes.size}`;
+          boundaryExitNodes.set(exitId, exitPt);
+          nodes.set(exitId, {
+            id: exitId,
+            lat: exitPt[0],
+            lng: exitPt[1],
+            routeId: `__tricycle_region__:${region.id}`,
+            routeName: region.regionName,
+            routeColor: region.regionColor,
+            direction: "goingTo",
+            polylineIndex: -1,
+          });
+          baseEdges.set(exitId, []);
+        }
+
+        // Station → boundary exit (tricycle, stays inside region)
+        if (!addedStationToExit.has(exitId)) {
+          addedStationToExit.add(exitId);
+          const actualExit = boundaryExitNodes.get(exitId)!;
+          const stToExit = haversineMeters(station.point, actualExit) * TRICYCLE_DETOUR_FACTOR;
+          stationEdges.push({
+            from: stationNodeId,
+            to: exitId,
+            distance: stToExit,
+            type: "tricycle",
+            stationId: station.id,
+            stationName: station.address,
+            regionId: region.id,
+            isHail: false,
+          });
+        }
+
+        // Boundary exit → jeepney (walk)
+        const exitEdges = baseEdges.get(exitId)!;
+        if (!exitEdges.some(e => e.to === jeepNodeId)) {
+          exitEdges.push({
+            from: exitId,
+            to: jeepNodeId,
+            distance: exitToJeep,
+            type: "walk",
+          });
+        }
+      }
+
+      // --- Station → VIRTUAL_END (ride, if destination inside region) ---
+      if (endInRegion) {
+        const rideDist = haversineMeters(station.point, end) * TRICYCLE_DETOUR_FACTOR;
+        stationEdges.push({
+          from: stationNodeId,
+          to: VIRTUAL_END_ID,
+          distance: rideDist,
+          type: "tricycle",
+          stationId: station.id,
+          stationName: station.address,
+          regionId: region.id,
+          isHail: false,
+        });
+      }
+
+      // --- Station → boundary drop-off (ride, if near boundary) ---
+      if (boundaryDropoff && boundaryDropoffId) {
+        const rideDist = haversineMeters(station.point, boundaryDropoff) * TRICYCLE_DETOUR_FACTOR;
+        stationEdges.push({
+          from: stationNodeId,
+          to: boundaryDropoffId,
+          distance: rideDist,
+          type: "tricycle",
+          stationId: station.id,
+          stationName: station.address,
+          regionId: region.id,
+          isHail: false,
+        });
+      }
+
+      baseEdges.set(stationNodeId, stationEdges);
+
+      // --- Nearby jeepney nodes → station (walk to station for boarding) ---
+      for (const jeepNodeId of nearbyJeepNodes) {
+        const jeepNode = nodes.get(jeepNodeId)!;
+        const walkDist = haversineMeters([jeepNode.lat, jeepNode.lng], station.point);
+
+        // Compute backtracking penalty: how much further from destination
+        // does walking to this station take you?
+        const distFromNodeToEnd = haversineMeters([jeepNode.lat, jeepNode.lng], end);
+        const distFromStationToEnd = haversineMeters(station.point, end);
+        const detourRatio = distFromNodeToEnd > 0 ? distFromStationToEnd / distFromNodeToEnd : 1;
+
+        let jeepEdges = baseEdges.get(jeepNodeId);
+        if (!jeepEdges) {
+          jeepEdges = [];
+          baseEdges.set(jeepNodeId, jeepEdges);
+        }
+
+        // Walk edge to station
+        jeepEdges.push({
+          from: jeepNodeId,
+          to: stationNodeId,
+          distance: walkDist,
+          type: "walk",
+          stationId: station.id,
+          stationName: station.address,
+          regionId: region.id,
+          detourRatio: detourRatio > 1 ? detourRatio : undefined,
+        });
+      }
+
+      // --- Hail edges: nearby jeepney node → station (for mid-route transfer via tricycle) ---
+      for (const jeepNodeId of nearbyJeepNodes) {
+        const jeepNode = nodes.get(jeepNodeId)!;
+        const rideDist = haversineMeters([jeepNode.lat, jeepNode.lng], station.point) * TRICYCLE_DETOUR_FACTOR;
+
+        let jeepEdges = baseEdges.get(jeepNodeId);
+        if (!jeepEdges) {
+          jeepEdges = [];
+          baseEdges.set(jeepNodeId, jeepEdges);
+        }
+
+        jeepEdges.push({
+          from: jeepNodeId,
+          to: stationNodeId,
+          distance: rideDist,
+          type: "tricycle",
+          stationId: station.id,
+          stationName: station.address,
+          stationPoint: station.point,
+          regionId: region.id,
+          isHail: true,
+        });
+      }
+
+      // --- VIRTUAL_START → station (walk, if start inside region) ---
+      if (startInRegion) {
+        const walkDist = haversineMeters(start, station.point);
+        if (walkDist <= MAX_TRICYCLE_STATION_WALK_METERS) {
+          let startEdges = baseEdges.get(VIRTUAL_START_ID);
+          if (!startEdges) {
+            startEdges = [];
+            baseEdges.set(VIRTUAL_START_ID, startEdges);
+          }
+
+          // Walk to station
+          startEdges.push({
+            from: VIRTUAL_START_ID,
+            to: stationNodeId,
+            distance: walkDist,
+            type: "walk",
+            stationId: station.id,
+            stationName: station.address,
+            regionId: region.id,
+          });
+
+          // Hail from start (alternative: slightly higher cost, but no walk needed)
+          const hailDist = walkDist * TRICYCLE_DETOUR_FACTOR;
+          startEdges.push({
+            from: VIRTUAL_START_ID,
+            to: stationNodeId,
+            distance: hailDist,
+            type: "tricycle",
+            stationId: station.id,
+            stationName: station.address,
+            stationPoint: station.point,
+            regionId: region.id,
+            isHail: true,
+          });
+        }
+      }
+    }
+
+    // --- Direct hail edges: jeepney node → VIRTUAL_END (if end in region) ---
+    // Uses all jeepney nodes in/near the region (polygon + station-proximity).
+    // Each hail edge uses the station nearest to the *jeepney node* (not the
+    // destination) so the walk-to-station leg is short.
+    // Cost = walk(jeep→station) + tricycle(station→end) so that A* prefers
+    // alight points close to a station.
+    if (endInRegion) {
+      for (const jeepNodeId of jeepneyNodesInRegion) {
+        const jeepNode = nodes.get(jeepNodeId)!;
+        const jeepPoint: LatLng = [jeepNode.lat, jeepNode.lng];
+
+        // Pick the station closest to where the passenger alights the jeepney
+        const nearestStation = availableStations.reduce((best, s) => {
+          const d = haversineMeters(jeepPoint, s.point);
+          return d < best.dist ? { station: s, dist: d } : best;
+        }, { station: availableStations[0], dist: Infinity });
+
+        // True cost: walk from jeepney alight to station + tricycle from station to destination
+        // Store them separately so costing applies walk rate to the walk portion
+        // and tricycle rate to the ride portion.
+        const walkToStation = nearestStation.dist;
+        const tricycleFromStation = haversineMeters(nearestStation.station.point, end) * TRICYCLE_DETOUR_FACTOR;
+
+        let jeepEdges = baseEdges.get(jeepNodeId);
+        if (!jeepEdges) {
+          jeepEdges = [];
+          baseEdges.set(jeepNodeId, jeepEdges);
+        }
+
+        jeepEdges.push({
+          from: jeepNodeId,
+          to: VIRTUAL_END_ID,
+          distance: tricycleFromStation,
+          type: "tricycle",
+          stationId: nearestStation.station.id,
+          stationName: nearestStation.station.address,
+          stationPoint: nearestStation.station.point,
+          regionId: region.id,
+          isHail: true,
+          walkToStationDist: walkToStation,
+        });
+      }
+    }
+
+    // --- Boundary drop-off → VIRTUAL_END (walk from boundary to destination) ---
+    if (boundaryDropoff && boundaryDropoffId) {
+      const walkDist = haversineMeters(boundaryDropoff, end);
+      let dropoffEdges = baseEdges.get(boundaryDropoffId);
+      if (!dropoffEdges) {
+        dropoffEdges = [];
+        baseEdges.set(boundaryDropoffId, dropoffEdges);
+      }
+      dropoffEdges.push({
+        from: boundaryDropoffId,
+        to: VIRTUAL_END_ID,
+        distance: walkDist,
+        type: "walk",
+      });
+    }
+
+    // --- Intra-region: START hail → VIRTUAL_END (for Walk→Tricycle→Walk trips) ---
+    if (startInRegion && endInRegion) {
+      const nearestStation = availableStations.reduce((best, s) => {
+        const d = haversineMeters(start, s.point);
+        return d < best.dist ? { station: s, dist: d } : best;
+      }, { station: availableStations[0], dist: Infinity });
+
+      let startEdges = baseEdges.get(VIRTUAL_START_ID);
+      if (!startEdges) {
+        startEdges = [];
+        baseEdges.set(VIRTUAL_START_ID, startEdges);
+      }
+
+      // Direct hail from start to destination within same region
+      const rideDist = haversineMeters(start, end) * TRICYCLE_DETOUR_FACTOR;
+      startEdges.push({
+        from: VIRTUAL_START_ID,
+        to: VIRTUAL_END_ID,
+        distance: rideDist,
+        type: "tricycle",
+        stationId: nearestStation.station.id,
+        stationName: nearestStation.station.address,
+        stationPoint: nearestStation.station.point,
+        regionId: region.id,
+        isHail: true,
+      });
+    }
+  }
+}
+
+// ---------------------------------------------------------------------------
 // 6. Query raw walk distances for virtual start/end nodes (GraphHopper I/O)
 // ---------------------------------------------------------------------------
 
@@ -521,7 +1009,7 @@ export function buildCostedAdjacency(
 ): Map<string, GraphEdge[]> {
   const adjacency = new Map<string, GraphEdge[]>();
 
-  // Apply costs to all base edges (transit + transfer)
+  // Apply costs to all base edges (transit + transfer + tricycle)
   for (const [nodeId, edges] of baseEdges) {
     const costed: GraphEdge[] = [];
 
@@ -544,9 +1032,29 @@ export function buildCostedAdjacency(
         const walkCost = (base.transferWalkDist ?? base.distance) * profile.walkPenaltyMultiplier;
         const boardingCost = (rawBoardingCosts.get(base.routeId!) ?? 0) * profile.boardingCostFactor;
         cost = walkCost + profile.transferPenaltyMeters + boardingCost;
+      } else if (base.type === "tricycle") {
+        // Tricycle ride cost = ride_distance * factor + wait penalty
+        const waitPenalty = base.isHail ? HAILING_WAIT_PENALTY_METERS : STATION_WAIT_PENALTY_METERS;
+        cost = base.distance * TRICYCLE_RIDE_COST_FACTOR + waitPenalty;
+
+        // For hail edges: add the walk-to-station portion at the walk rate,
+        // not the tricycle rate — otherwise long walks look artificially cheap.
+        if (base.walkToStationDist) {
+          cost += profileWalkCost(base.walkToStationDist, profile);
+        }
+
+        // Boarding cost for the target jeepney route (if riding to a jeepney node)
+        if (base.routeId && !base.isHail) {
+          cost += (rawBoardingCosts.get(base.routeId) ?? 0) * profile.boardingCostFactor;
+        }
       } else {
-        // walk edges from base (shouldn't exist in base, but handle gracefully)
-        cost = profileWalkCost(base.distance, profile);
+        // Walk edges (access, egress, walk-to-station)
+        let effectiveDist = base.distance;
+        // Apply backtracking penalty for walk-to-station edges
+        if (base.detourRatio && base.detourRatio > 1) {
+          effectiveDist *= Math.min(base.detourRatio, BACKTRACK_PENALTY_MULTIPLIER);
+        }
+        cost = profileWalkCost(effectiveDist, profile);
       }
 
       costed.push({
@@ -557,6 +1065,9 @@ export function buildCostedAdjacency(
         type: base.type,
         routeId: base.routeId,
         routeName: base.routeName,
+        stationId: base.stationId,
+        stationName: base.stationName,
+        stationPoint: base.stationPoint,
       });
     }
 
@@ -564,13 +1075,14 @@ export function buildCostedAdjacency(
   }
 
   // Add access edges (VIRTUAL_START → transit nodes)
-  const accessEdges: GraphEdge[] = [];
+  // Merge with any existing VIRTUAL_START edges (e.g. tricycle walk-to-station)
+  const existingStartEdges = adjacency.get(VIRTUAL_START_ID) ?? [];
   for (const [nodeId, rawDist] of accessDistances) {
     const node = nodes.get(nodeId);
     if (!node) continue;
     const walkCost = profileWalkCost(rawDist, profile);
     const boardingCost = (rawBoardingCosts.get(node.routeId) ?? 0) * profile.boardingCostFactor;
-    accessEdges.push({
+    existingStartEdges.push({
       from: VIRTUAL_START_ID,
       to: nodeId,
       distance: rawDist,
@@ -580,7 +1092,7 @@ export function buildCostedAdjacency(
       routeName: node.routeName,
     });
   }
-  adjacency.set(VIRTUAL_START_ID, accessEdges);
+  adjacency.set(VIRTUAL_START_ID, existingStartEdges);
 
   // Add egress edges (transit nodes → VIRTUAL_END)
   for (const [nodeId, rawDist] of egressDistances) {
@@ -619,6 +1131,7 @@ export function buildCostedAdjacency(
 export async function buildBaseGraph(
   start: LatLng,
   end: LatLng,
+  now?: Date,
 ): Promise<{ baseGraph: BaseGraph; transitData: TransitData } | null> {
   const transitData = await loadTransitData();
 
@@ -632,6 +1145,11 @@ export async function buildBaseGraph(
 
   // Mark closure-affected transit edges
   markClosureEdges(baseEdges, nodes, transitData.closures);
+
+  // Tricycle station nodes & edges (time-window filtered)
+  buildTricycleNodesAndEdges(
+    transitData.regions, nodes, baseEdges, start, end, now ?? new Date(),
+  );
 
   // Raw boarding costs (before profile factor)
   const rawBoardingCosts = computeRawBoardingCosts(transitData.routes);

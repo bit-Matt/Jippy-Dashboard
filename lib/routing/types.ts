@@ -18,7 +18,7 @@ export interface GraphNode {
   polylineIndex: number;
 }
 
-export type EdgeType = "transit" | "transfer" | "walk";
+export type EdgeType = "transit" | "transfer" | "walk" | "tricycle";
 
 export interface GraphEdge {
   from: string;
@@ -28,6 +28,12 @@ export interface GraphEdge {
   type: EdgeType;
   routeId?: string;
   routeName?: string;
+  /** Tricycle station ID (for tricycle edges) */
+  stationId?: string;
+  /** Tricycle station display name */
+  stationName?: string;
+  /** Tricycle station coordinates [lat, lng] — used to snap hail origins */
+  stationPoint?: LatLng;
 }
 
 export interface Graph {
@@ -169,4 +175,10 @@ export interface WalkRouteResult {
   distance: number;
   duration: number;
   maneuvers: ValhallaManeuver[];
+}
+
+export interface TricycleRouteResult {
+  polyline: string;
+  distance: number;
+  duration: number;
 }

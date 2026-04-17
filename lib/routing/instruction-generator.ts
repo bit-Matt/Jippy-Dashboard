@@ -40,7 +40,19 @@ export function generateWalkInstructions(maneuvers: ValhallaManeuver[]): Instruc
 // Tricycle instructions — templated
 // ---------------------------------------------------------------------------
 
-export function generateTricycleInstructions(stationName: string): Instruction[] {
+export function generateTricycleInstructions(stationName: string, isHail: boolean = false): Instruction[] {
+  if (isHail) {
+    return [
+      {
+        text: `Hail a tricycle near ${stationName}.`,
+        maneuver_type: "board",
+      },
+      {
+        text: "Alight tricycle at destination point.",
+        maneuver_type: "alight",
+      },
+    ];
+  }
   return [
     {
       text: `Board tricycle at ${stationName}.`,

@@ -8,12 +8,11 @@ import {
   haversineMeters,
 } from "@/lib/routing/graph-builder";
 import type { BaseGraph } from "@/lib/routing/graph-builder";
-import { findOptimalPath, reconstructPath } from "@/lib/routing/astar";
+import { findOptimalPath } from "@/lib/routing/astar";
 import {
   buildWalkOnlyRoute,
-  buildAccessLeg,
-  buildTransitLegs,
-  buildEgressLeg,
+  analyzeNodePath,
+  buildLegsFromSections,
 } from "@/lib/routing/leg-assembler";
 import {
   WALK_ONLY_THRESHOLD_METERS,
@@ -34,7 +33,6 @@ import type {
   MultiNavigateResponse,
   RouteSuggestion,
   SuggestionLabel,
-  PathSegment,
   RouteLeg,
   TransitData,
   WeightProfile,
@@ -54,7 +52,8 @@ export async function computeRoute(
     return { suggestions: [{ label: "fastest", route: walkOnly }] };
   }
 
-  const result = await buildBaseGraph(start, end);
+  const now = new Date();
+  const result = await buildBaseGraph(start, end, now);
   if (!result) {
     const walkOnly = assembleResponse(await buildWalkOnlyRoute(start, end));
     return { suggestions: [{ label: "fastest", route: walkOnly }] };
@@ -69,9 +68,9 @@ export async function computeRoute(
 
   // Run profiles — each is pure computation on the shared base graph
   const [fastest, leastWalking, simplest] = await Promise.all([
-    runProfile("fastest", PROFILE_FASTEST, baseGraph, transitData, start, end),
-    runProfile("least_walking", PROFILE_LEAST_WALKING, baseGraph, transitData, start, end),
-    runProfile("simplest", PROFILE_SIMPLEST, baseGraph, transitData, start, end),
+    runProfile("fastest", PROFILE_FASTEST, baseGraph),
+    runProfile("least_walking", PROFILE_LEAST_WALKING, baseGraph),
+    runProfile("simplest", PROFILE_SIMPLEST, baseGraph),
   ]);
 
   const suggestions: RouteSuggestion[] = [];
@@ -85,8 +84,6 @@ export async function computeRoute(
       fastest.route,
       baseGraph,
       transitData,
-      start,
-      end,
     );
     if (explorer) suggestions.push(explorer);
   }
@@ -109,9 +106,6 @@ async function runProfile(
   label: SuggestionLabel,
   profile: WeightProfile,
   base: BaseGraph,
-  transitData: TransitData,
-  start: LatLng,
-  end: LatLng,
 ): Promise<RouteSuggestion | null> {
   const adjacency = buildCostedAdjacency(
     base.baseEdges,
@@ -126,7 +120,7 @@ async function runProfile(
   const nodePath = findOptimalPath(graph, VIRTUAL_START_ID, VIRTUAL_END_ID, profile);
   if (!nodePath || nodePath.length < 2) return null;
 
-  const legs = await assembleLegs(nodePath, graph, transitData, start, end);
+  const legs = await assembleLegs(nodePath, graph);
   if (!legs) return null;
 
   return { label, route: assembleResponse(legs) };
@@ -140,8 +134,6 @@ async function runExplorerProfile(
   fastestResponse: NavigateResponse,
   base: BaseGraph,
   transitData: TransitData,
-  start: LatLng,
-  end: LatLng,
 ): Promise<RouteSuggestion | null> {
   const fastestRouteIds = new Set<string>();
   for (const leg of fastestResponse.legs) {
@@ -175,7 +167,7 @@ async function runExplorerProfile(
   const nodePath = findOptimalPath(graph, VIRTUAL_START_ID, VIRTUAL_END_ID, explorerProfile);
   if (!nodePath || nodePath.length < 2) return null;
 
-  const legs = await assembleLegs(nodePath, graph, transitData, start, end);
+  const legs = await assembleLegs(nodePath, graph);
   if (!legs) return null;
 
   const explorerResponse = assembleResponse(legs);
@@ -189,42 +181,29 @@ async function runExplorerProfile(
 }
 
 // ---------------------------------------------------------------------------
-// Shared leg assembly from A* path
+// Shared leg assembly from A* path — uses section-based analysis
 // ---------------------------------------------------------------------------
 
 async function assembleLegs(
   nodePath: string[],
   graph: Graph,
-  transitData: TransitData,
-  start: LatLng,
-  end: LatLng,
 ): Promise<RouteLeg[] | null> {
-  let segments = reconstructPath(nodePath, graph);
-  if (segments.length === 0) return null;
+  // Analyze path into typed sections (walk, transit, tricycle)
+  let sections = analyzeNodePath(nodePath, graph);
+  if (sections.length === 0) return null;
 
-  segments = mergeSameRouteSegments(segments);
-  segments = filterShortSegments(segments);
-  if (segments.length === 0) return null;
+  // Merge consecutive transit sections on the same route
+  sections = mergeSameRouteSections(sections);
 
-  const allLegs: RouteLeg[] = [];
+  // Filter out transit sections too short to justify boarding
+  sections = filterShortTransitSections(sections);
+  if (sections.length === 0) return null;
 
-  const firstSegment = segments[0];
-  const firstBoardingNode: LatLng = [firstSegment.nodes[0].lat, firstSegment.nodes[0].lng];
-  const accessLegs = await buildAccessLeg(start, firstBoardingNode, transitData.regions);
-  allLegs.push(...accessLegs);
+  // Build legs from sections (calls GraphHopper for walks, Valhalla for tricycle)
+  const legs = await buildLegsFromSections(sections);
+  if (legs.length === 0) return null;
 
-  const transitLegs = await buildTransitLegs(segments, graph);
-  allLegs.push(...transitLegs);
-
-  const lastSegment = segments[segments.length - 1];
-  const lastAlightNode: LatLng = [
-    lastSegment.nodes[lastSegment.nodes.length - 1].lat,
-    lastSegment.nodes[lastSegment.nodes.length - 1].lng,
-  ];
-  const egressLegs = await buildEgressLeg(lastAlightNode, end, transitData.regions);
-  allLegs.push(...egressLegs);
-
-  return allLegs;
+  return legs;
 }
 
 // ---------------------------------------------------------------------------
@@ -251,19 +230,21 @@ function deduplicateSuggestions(suggestions: RouteSuggestion[]): RouteSuggestion
 }
 
 // ---------------------------------------------------------------------------
-// Merge consecutive segments on the same route (prevents false transfers)
+// Merge consecutive transit sections on the same route (prevents false transfers)
 // ---------------------------------------------------------------------------
 
-function mergeSameRouteSegments(segments: PathSegment[]): PathSegment[] {
-  if (segments.length <= 1) return segments;
+import type { PathSection } from "@/lib/routing/leg-assembler";
 
-  const merged: PathSegment[] = [segments[0]];
+function mergeSameRouteSections(sections: PathSection[]): PathSection[] {
+  if (sections.length <= 1) return sections;
 
-  for (let i = 1; i < segments.length; i++) {
+  const merged: PathSection[] = [sections[0]];
+
+  for (let i = 1; i < sections.length; i++) {
     const prev = merged[merged.length - 1];
-    const curr = segments[i];
+    const curr = sections[i];
 
-    if (prev.routeId === curr.routeId) {
+    if (prev.type === "transit" && curr.type === "transit" && prev.routeId === curr.routeId) {
       prev.nodes.push(...curr.nodes);
     } else {
       merged.push(curr);
@@ -274,15 +255,16 @@ function mergeSameRouteSegments(segments: PathSegment[]): PathSegment[] {
 }
 
 // ---------------------------------------------------------------------------
-// Filter out transit segments too short to justify boarding
+// Filter out transit sections too short to justify boarding
 // ---------------------------------------------------------------------------
 
-function filterShortSegments(segments: PathSegment[]): PathSegment[] {
-  return segments.filter((seg) => {
+function filterShortTransitSections(sections: PathSection[]): PathSection[] {
+  return sections.filter((sec) => {
+    if (sec.type !== "transit") return true;
     let dist = 0;
-    for (let i = 0; i < seg.nodes.length - 1; i++) {
-      const a = seg.nodes[i];
-      const b = seg.nodes[i + 1];
+    for (let i = 0; i < sec.nodes.length - 1; i++) {
+      const a = sec.nodes[i];
+      const b = sec.nodes[i + 1];
       dist += haversineMeters([a.lat, a.lng], [b.lat, b.lng]);
     }
     return dist >= MIN_TRANSIT_RIDE_METERS;
@@ -310,8 +292,8 @@ function assembleResponse(legs: RouteLeg[]): NavigateResponse {
 
     if (
       i > 0 &&
-      leg.type === "JEEPNEY" &&
-      legs[i - 1].type === "JEEPNEY"
+      (leg.type === "JEEPNEY" || leg.type === "TRICYCLE") &&
+      (legs[i - 1].type === "JEEPNEY" || legs[i - 1].type === "TRICYCLE")
     ) {
       totalTransfers++;
     }

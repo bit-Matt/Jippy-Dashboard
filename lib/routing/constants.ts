@@ -43,6 +43,42 @@ export const WALK_SPEED_KMH = 4.25;
 /** Average tricycle speed in km/h */
 export const TRICYCLE_SPEED_KMH = 10;
 
+/** Cost factor for tricycle ride edges (cheaper than walking, close to transit) */
+export const TRICYCLE_RIDE_COST_FACTOR = 0.3;
+
+/** Flat penalty (meters-equiv) for station wait time (~5 min at walk speed) */
+export const STATION_WAIT_PENALTY_METERS = 350;
+
+/** Flat penalty (meters-equiv) for hailing wait (station_wait × 1.5 ≈ 7.5 min) */
+export const HAILING_WAIT_PENALTY_METERS = 525;
+
+/** Max walk distance (meters) to consider a tricycle station reachable */
+export const MAX_TRICYCLE_STATION_WALK_METERS = 1_000;
+
+/** Minimum tricycle ride distance (meters) to justify boarding */
+export const MIN_TRICYCLE_RIDE_METERS = 150;
+
+/** Multiplier on walk cost when walking AWAY from destination to reach station */
+export const BACKTRACK_PENALTY_MULTIPLIER = 2.0;
+
+/** If ≥ this fraction of a region's stations are unavailable, skip the region */
+export const STATION_UNAVAILABILITY_THRESHOLD = 0.9;
+
+/** Max distance (meters) from destination to region boundary for drop-off node */
+export const MAX_REGION_BOUNDARY_METERS = 300;
+
+/** Detour factor applied to haversine for estimating tricycle road distance */
+export const TRICYCLE_DETOUR_FACTOR = 1.2;
+
+/** Max haversine (meters) for a station → jeepney-node tricycle edge.
+ *  Longer rides would exit the station's operating area / region. */
+export const MAX_TRICYCLE_RIDE_TO_TRANSIT_METERS = 600;
+
+/** Max walk distance (meters) from a region boundary exit node to the
+ *  nearest jeepney node.  Jeepney routes run outside regions, so passengers
+ *  ride a tricycle to the boundary then walk the last stretch to a jeepney. */
+export const MAX_BOUNDARY_EXIT_WALK_METERS = 500;
+
 /** Average jeepney speed in km/h */
 export const JEEPNEY_SPEED_KMH = 10;
 

@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { z } from "zod";
-import { AlertCircle, Bus, Footprints, MapPin } from "lucide-react";
+import { AlertCircle, Bike, Bus, Footprints, MapPin } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -33,7 +33,7 @@ const LEG_FALLBACK_COLOR = "#6B7280";
 const LEG_ICONS: Record<string, React.ReactNode> = {
   WALK: <Footprints className="h-3 w-3" />,
   JEEPNEY: <Bus className="h-3 w-3" />,
-  TRICYCLE: <Bus className="h-3 w-3" />,
+  TRICYCLE: <Bike className="h-3 w-3" />,
 };
 
 const LABEL_DISPLAY: Record<NavigateSuggestionLabel, string> = {
@@ -41,6 +41,7 @@ const LABEL_DISPLAY: Record<NavigateSuggestionLabel, string> = {
   least_walking: "Less Walk",
   simplest: "Simplest",
   explorer: "Explorer",
+  tricycle: "Tricycle",
 };
 
 function formatDistance(meters: number): string {
