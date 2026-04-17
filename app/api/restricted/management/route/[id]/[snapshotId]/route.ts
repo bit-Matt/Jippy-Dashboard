@@ -4,7 +4,7 @@ import { getRoutePolyline } from "@/lib/osm/valhalla";
 import { ApiResponseBuilder, StatusCodes } from "@/lib/http";
 import * as route from "@/lib/management/route-manager";
 import { tryParseJson } from "@/lib/http/RequestUtilities";
-import { oneOf } from "@/lib/one-of";
+import { oneOf, unwrap } from "@/lib/one-of";
 import { utils, validator } from "@/lib/validator";
 import { session, SessionCode } from "@/lib/auth";
 import { logActivity } from "@/lib/management/activity-logger";
@@ -194,6 +194,16 @@ export async function PATCH(
       .build();
   }
 
+  let bypassReadyCheck = false;
+  if (currentSession.user?.role === "administrator_user") {
+    const isPublished = await unwrap(route.isRoutePublished(id));
+    if (isPublished) {
+      return ApiResponseBuilder.createError(StatusCodes.Status403Forbidden, [{ message: "Cannot modify a ready snapshot of a published route." }])
+        .build();
+    }
+    bypassReadyCheck = true;
+  }
+
   const patchPayload: route.UpdateRouteParameters = { ...data };
 
   if (data.points) {
@@ -206,7 +216,7 @@ export async function PATCH(
     patchPayload.polylineGoingBack = polylineGoingBack;
   }
 
-  const result = await route.updateRouteSnapshot(id, snapshotId, patchPayload);
+  const result = await route.updateRouteSnapshot(id, snapshotId, patchPayload, bypassReadyCheck);
   return oneOf(result).match(
     success => {
       void logActivity({

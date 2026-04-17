@@ -4,7 +4,7 @@ import * as region from "@/lib/management/region-manager";
 import { ApiResponseBuilder, StatusCodes } from "@/lib/http";
 import { session, SessionCode } from "@/lib/auth";
 import { tryParseJson } from "@/lib/http/RequestUtilities";
-import { oneOf } from "@/lib/one-of";
+import { oneOf, unwrap } from "@/lib/one-of";
 import { utils, validator } from "@/lib/validator";
 import { logActivity } from "@/lib/management/activity-logger";
 
@@ -199,7 +199,17 @@ export async function PATCH(
       .build();
   }
 
-  const result = await region.updateRegionSnapshot(id, snapshotId, data);
+  let bypassReadyCheck = false;
+  if (currentSession.user?.role === "administrator_user") {
+    const isPublished = await unwrap(region.isRegionPublished(id));
+    if (isPublished) {
+      return ApiResponseBuilder.createError(StatusCodes.Status403Forbidden, [{ message: "Cannot modify a ready snapshot of a published region." }])
+        .build();
+    }
+    bypassReadyCheck = true;
+  }
+
+  const result = await region.updateRegionSnapshot(id, snapshotId, data, bypassReadyCheck);
   return oneOf(result).match(
     success => {
       void logActivity({

@@ -257,7 +257,8 @@ function RegionDashboardContent() {
     if (!selectedRegion) return;
 
     const selectedSnapshot = snapshots.find((snapshot) => snapshot.id === snapshotId);
-    if (!selectedSnapshot || selectedSnapshot.state === "ready") return;
+    const isAdminEditingReady = selectedSnapshot?.state === "ready" && userRole === "administrator_user" && !selectedRegionIsPublic;
+    if (!selectedSnapshot || (selectedSnapshot.state === "ready" && !isAdminEditingReady)) return;
 
     setIsSnapshotActing(true);
     const snapshotRegion = await fetchRegionSnapshot(selectedRegion.id, snapshotId);

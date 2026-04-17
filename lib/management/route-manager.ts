@@ -1,9 +1,9 @@
 import {and, count, eq, sql} from "drizzle-orm";
 
-import { db } from "@/lib/db";
-import { routes, routeSnapshots, routeSequences, vehicleTypes } from "@/lib/db/schema";
-import { ErrorCodes, Failure, Result, Success } from "@/lib/one-of/types";
-import { unwrap } from "@/lib/one-of";
+import {db} from "@/lib/db";
+import {routes, routeSequences, routeSnapshots, vehicleTypes} from "@/lib/db/schema";
+import {ErrorCodes, Failure, Result, Success} from "@/lib/one-of/types";
+import {unwrap} from "@/lib/one-of";
 
 /**
  * Fetches all routes from the denormalized `routes` table.
@@ -836,6 +836,7 @@ export async function updateRouteSnapshot(
   routeId: string,
   snapshotId: string,
   params: UpdateRouteParameters,
+  bypassReadyCheck: boolean = false,
 ): Promise<Result<RouteSnapshotObject>> {
   try {
     // Check if the snapshot is editable
@@ -857,7 +858,7 @@ export async function updateRouteSnapshot(
       );
     }
 
-    if (snapshotToEdit.state === "ready") {
+    if (snapshotToEdit.state === "ready" && !bypassReadyCheck) {
       return new Failure(
         ErrorCodes.ValidationFailure,
         "Snapshot is not editable. Create a new copy and edit.",
@@ -1012,6 +1013,24 @@ export async function togglePublic(routeId: string, state: boolean): Promise<Res
     });
   } catch (e) {
     return new Failure(ErrorCodes.Fatal, "Unable to toggle public viewing", { routeId, state }, e);
+  }
+}
+
+export async function isRoutePublished(routeId: string): Promise<Result<boolean>> {
+  try {
+    const [selectedRoute] = await db
+      .select({ isPublic: routes.isPublic })
+      .from(routes)
+      .where(eq(routes.id, routeId))
+      .limit(1);
+
+    if (!selectedRoute) {
+      return new Failure(ErrorCodes.ResourceNotFound, "No route found.", { routeId });
+    }
+
+    return new Success(selectedRoute.isPublic);
+  } catch (e) {
+    return new Failure(ErrorCodes.Fatal, "Unable to determine publishing status due to an error", { routeId }, e);
   }
 }
 

@@ -498,7 +498,8 @@ function RouteDashboardContent() {
     if (!selectedRoute) return;
 
     const selectedSnapshot = routeSnapshots.find((snapshot) => snapshot.id === snapshotId);
-    if (!selectedSnapshot || selectedSnapshot.state === "ready") return;
+    const isAdminEditingReady = selectedSnapshot?.state === "ready" && userRole === "administrator_user" && !selectedRoute.isPublic;
+    if (!selectedSnapshot || (selectedSnapshot.state === "ready" && !isAdminEditingReady)) return;
 
     setIsSnapshotActing(true);
     const routeSnapshot = await fetchRouteSnapshot(selectedRoute.id, snapshotId);

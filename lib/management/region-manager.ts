@@ -676,6 +676,7 @@ export async function updateRegionSnapshot(
   regionId: string,
   snapshotId: string,
   params: UpdateRegionParameters,
+  bypassReadyCheck: boolean = false,
 ) {
   try {
     const [snapshotToEdit] = await db
@@ -692,7 +693,7 @@ export async function updateRegionSnapshot(
       return new Failure(ErrorCodes.ResourceNotFound, "Region snapshot not found.", { regionId, snapshotId });
     }
 
-    if (snapshotToEdit.state === "ready") {
+    if (snapshotToEdit.state === "ready" && !bypassReadyCheck) {
       return new Failure(ErrorCodes.ResourceNotFound, "Snapshot is not editable. Create a new copy and edit.", { regionId, snapshotId });
     }
 
@@ -818,6 +819,24 @@ export async function togglePublic(regionId: string, state: boolean): Promise<Re
     });
   } catch (e) {
     return new Failure(ErrorCodes.Fatal, "Unable to toggle public viewing", { regionId, state }, e);
+  }
+}
+
+export async function isRegionPublished(regionId: string): Promise<Result<boolean>> {
+  try {
+    const [selectedRegion] = await db
+      .select({ isPublic: region.isPublic })
+      .from(region)
+      .where(eq(region.id, regionId))
+      .limit(1);
+
+    if (!selectedRegion) {
+      return new Failure(ErrorCodes.ResourceNotFound, "No region found.", { regionId });
+    }
+
+    return new Success(selectedRegion.isPublic);
+  } catch (e) {
+    return new Failure(ErrorCodes.Fatal, "Unable to check publish mode due to an error.", { regionId }, e);
   }
 }
 
