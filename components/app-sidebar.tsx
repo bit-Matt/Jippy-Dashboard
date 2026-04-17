@@ -59,6 +59,21 @@ export function AppSidebar({
   const navData = {
     navMain,
 
+    feedbackAndReporting: [
+      {
+        title: "Feedback & Reporting",
+        url: "#",
+        icon: Command,
+        isActive: true,
+        items: [
+          {
+            title: "Reports",
+            url: "/dashboard/feedback",
+          },
+        ],
+      },
+    ],
+
     administration: [
       {
         title: "Administration",
@@ -108,12 +123,11 @@ export function AppSidebar({
       </SidebarHeader>
       <SidebarContent>
         <NavMain label="Editors" items={navData.navMain} />
-        {currentUser?.role === "administrator_user" ? (
-          <>
-            <div className="grow" />
-            <NavMain label="Administrator" items={navData.administration} />
-          </>
-        ) : null}
+        <div className="grow" />
+        <NavMain label="Tools" items={[
+          ...navData.feedbackAndReporting,
+          ...(currentUser?.role === "administrator_user" ? navData.administration : []),
+        ]} />
       </SidebarContent>
       <SidebarFooter>
         <NavUser

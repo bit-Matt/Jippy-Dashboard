@@ -8,6 +8,7 @@ export const snapshotState = pgEnum("snapshot_state", ["ready", "wip", "for_appr
 export const sequenceType = pgEnum("route_sequence_type", ["going_to", "going_back"]);
 export const restrictionType = pgEnum("restriction_type", ["universal", "specific"]);
 export const closureTypeEnum = pgEnum("closure_type", ["indefinite", "scheduled"]);
+export const feedbackStateEnum = pgEnum("feedback_state", ["Active", "Resolved", "Closed"]);
 
 // ============================================================================
 // BETTER AUTH RELEATED STUFF
@@ -509,6 +510,28 @@ export const stopVehicleTypes = pgTable("stop_vehicle_types", {
 }, (t) => [
   index("stop_vehicle_types_ref_idx").on(t.stopId),
 ]);
+
+export const feedback = pgTable(
+  "feedback",
+  {
+    id: uuid("id")
+      .primaryKey()
+      .$default(() => uuidv7()),
+    email: text("email").notNull(),
+    type: text("type").notNull(),
+    details: text("details").notNull(),
+    state: feedbackStateEnum().default("Active").notNull(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at")
+      .defaultNow()
+      .$onUpdate(() => new Date())
+      .notNull(),
+  },
+  (table) => [
+    index("feedback_created_at_idx").on(table.createdAt),
+    index("feedback_state_created_at_idx").on(table.state, table.createdAt),
+  ],
+);
 
 export const activityLogs = pgTable(
   "activity_logs",
