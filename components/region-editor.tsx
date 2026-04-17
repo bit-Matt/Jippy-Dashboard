@@ -24,7 +24,7 @@ import * as nominatim from "@/lib/osm/nominatim";
 
 const regionSaveSchema = z.object({
   hasDefinedPolygon: z.literal(true, {
-    errorMap: () => ({ message: "A polygon or rectangle must be defined before saving." }),
+    message: "A polygon or rectangle must be defined before saving.",
   }),
   stations: z.array(
     z.object({
