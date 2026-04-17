@@ -14,6 +14,7 @@ import * as closureManager from "@/lib/management/closure-manager";
 
 import { GridIndex } from "@/lib/routing/spatial-index";
 import {
+  BOARDING_COST_FACTOR,
   CLOSURE_PENALTY_MULTIPLIER,
   MAX_TRANSIT_PROXIMITY_METERS,
   TRANSFER_PENALTY_METERS,
@@ -56,6 +57,7 @@ export async function loadTransitData(): Promise<TransitData> {
     routeNumber: r.routeNumber,
     routeName: r.routeName,
     routeColor: r.routeColor,
+    fleetCount: (r as { fleetCount?: number }).fleetCount ?? 100,
     polylines: r.polylines,
     decodedGoingTo: r.polylines.to ? decodePolyline(r.polylines.to) : [],
     decodedGoingBack: r.polylines.back ? decodePolyline(r.polylines.back) : [],
@@ -118,7 +120,41 @@ function addDirectionNodes(
 }
 
 // ---------------------------------------------------------------------------
-// 3. Build transit (ride) edges along polylines
+// 3. Compute per-route boarding cost based on fleet size
+// ---------------------------------------------------------------------------
+
+/**
+ * Boarding cost estimates expected wait time in meters-equivalent.
+ * Formula: (routeRoundTripDistance / fleetCount) / 2 * BOARDING_COST_FACTOR
+ *
+ * Routes with more fleets have lower boarding cost (shorter wait).
+ */
+export function computeRouteBoardingCosts(routes: TransitRoute[]): Map<string, number> {
+  const costs = new Map<string, number>();
+
+  for (const route of routes) {
+    const goingToDist = polylineDistance(route.decodedGoingTo);
+    const goingBackDist = polylineDistance(route.decodedGoingBack);
+    const roundTripDist = goingToDist + goingBackDist;
+    const fleetCount = Math.max(route.fleetCount, 1);
+
+    const boardingCost = ((roundTripDist / fleetCount) / 2) * BOARDING_COST_FACTOR;
+    costs.set(route.id, boardingCost);
+  }
+
+  return costs;
+}
+
+function polylineDistance(coords: LatLng[]): number {
+  let dist = 0;
+  for (let i = 0; i < coords.length - 1; i++) {
+    dist += haversineMeters(coords[i], coords[i + 1]);
+  }
+  return dist;
+}
+
+// ---------------------------------------------------------------------------
+// 4. Build transit (ride) edges along polylines
 // ---------------------------------------------------------------------------
 
 export function buildTransitEdges(
@@ -174,12 +210,13 @@ function addDirectionEdges(
 }
 
 // ---------------------------------------------------------------------------
-// 4. Build transfer edges between nearby nodes of different routes
+// 5. Build transfer edges between nearby nodes of different routes
 // ---------------------------------------------------------------------------
 
 export function buildTransferEdges(
   nodes: Map<string, GraphNode>,
   adjacency: Map<string, GraphEdge[]>,
+  boardingCosts: Map<string, number>,
 ): void {
   const index = new GridIndex(TRANSFER_PROXIMITY_METERS);
 
@@ -200,7 +237,8 @@ export function buildTransferEdges(
       if (otherId === nodeId) continue;
 
       const other = nodes.get(otherId)!;
-      if (node.routeId === other.routeId && node.direction === other.direction) continue;
+      // Never create transfer edges within the same route (regardless of direction)
+      if (node.routeId === other.routeId) continue;
 
       const dist = haversineMeters([node.lat, node.lng], [other.lat, other.lng]);
       if (dist > TRANSFER_PROXIMITY_METERS) continue;
@@ -216,7 +254,8 @@ export function buildTransferEdges(
     for (const [, { otherId, dist }] of bestPerRoute) {
       const other = nodes.get(otherId)!;
       const walkCost = dist * WALK_PENALTY_MULTIPLIER;
-      const totalCost = walkCost + TRANSFER_PENALTY_METERS;
+      const destinationBoardingCost = boardingCosts.get(other.routeId) ?? 0;
+      const totalCost = walkCost + TRANSFER_PENALTY_METERS + destinationBoardingCost;
 
       addEdgeIfAbsent(adjacency, {
         from: nodeId,
@@ -319,6 +358,7 @@ export async function injectUserNodes(
   routes: TransitRoute[],
   nodes: Map<string, GraphNode>,
   adjacency: Map<string, GraphEdge[]>,
+  boardingCosts: Map<string, number>,
 ): Promise<{ hasAccessEdges: boolean; hasEgressEdges: boolean }> {
   // Create virtual nodes
   nodes.set(VIRTUAL_START_ID, {
@@ -417,16 +457,17 @@ export async function injectUserNodes(
     }),
   );
 
-  // Create access edges with real walking distances
+  // Create access edges with real walking distances + boarding cost
   for (const { nodeId, realDist } of walkResults) {
     if (!isFinite(realDist)) continue;
     const node = nodes.get(nodeId)!;
     const walkCost = progressiveWalkCost(realDist);
+    const boardingCost = boardingCosts.get(node.routeId) ?? 0;
     adjacency.get(VIRTUAL_START_ID)!.push({
       from: VIRTUAL_START_ID,
       to: nodeId,
       distance: realDist,
-      cost: walkCost,
+      cost: walkCost + boardingCost,
       type: "walk",
       routeId: node.routeId,
       routeName: node.routeName,

@@ -9,6 +9,7 @@ import {
   buildTransferEdges,
   applyClosurePenalties,
   injectUserNodes,
+  computeRouteBoardingCosts,
   haversineMeters,
 } from "@/lib/routing/graph-builder";
 import { findOptimalPath, reconstructPath } from "@/lib/routing/astar";
@@ -58,8 +59,11 @@ export async function computeRoute(
   const nodes = buildGraphNodes(transitData.routes);
   const adjacency = buildTransitEdges(transitData.routes, nodes);
 
+  // Compute per-route boarding cost from fleet size
+  const boardingCosts = computeRouteBoardingCosts(transitData.routes);
+
   // Build transfer edges between nearby nodes of different routes
-  buildTransferEdges(nodes, adjacency);
+  buildTransferEdges(nodes, adjacency, boardingCosts);
 
   // Apply closure penalties
   applyClosurePenalties(adjacency, nodes, transitData.closures);
@@ -71,6 +75,7 @@ export async function computeRoute(
     transitData.routes,
     nodes,
     adjacency,
+    boardingCosts,
   );
 
   // -----------------------------------------------------------------------
@@ -99,6 +104,9 @@ export async function computeRoute(
   if (segments.length === 0) {
     return assembleResponse(await buildWalkOnlyRoute(start, end));
   }
+
+  // Merge consecutive segments on the same route (prevents false transfers)
+  segments = mergeSameRouteSegments(segments);
 
   // Drop transit segments too short to justify boarding a vehicle.
   // Adjacent walk legs will naturally extend to cover the gap.
@@ -133,6 +141,30 @@ export async function computeRoute(
   allLegs.push(...egressLegs);
 
   return assembleResponse(allLegs);
+}
+
+// ---------------------------------------------------------------------------
+// Merge consecutive segments on the same route (prevents false transfers)
+// ---------------------------------------------------------------------------
+
+function mergeSameRouteSegments(segments: PathSegment[]): PathSegment[] {
+  if (segments.length <= 1) return segments;
+
+  const merged: PathSegment[] = [segments[0]];
+
+  for (let i = 1; i < segments.length; i++) {
+    const prev = merged[merged.length - 1];
+    const curr = segments[i];
+
+    if (prev.routeId === curr.routeId) {
+      // Same route — merge nodes into the previous segment
+      prev.nodes.push(...curr.nodes);
+    } else {
+      merged.push(curr);
+    }
+  }
+
+  return merged;
 }
 
 // ---------------------------------------------------------------------------

@@ -69,20 +69,6 @@ export async function getUserById(id: string): Promise<Result<User>> {
   }
 }
 
-export async function validateCall(id: string, methodName: string, role?: string): Promise<Result<User>> {
-  try {
-    const user = await unwrap(getUserById(id));
-
-    if (user.role !== role) {
-      return new Failure(ErrorCodes.InsufficientPermissions, "Insufficient permissions.", { user, methodName });
-    }
-
-    return new Success(user);
-  } catch (e) {
-    return new Failure(ErrorCodes.Fatal, "Unable to get the user information.", { id }, e);
-  }
-}
-
 /**
  * Enrolls a user using an invitation/eligibility token and the provided enrollment requirements.
  *

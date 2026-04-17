@@ -670,6 +670,7 @@ export async function removeRegion(regionId: string): Promise<Result<null>> {
  * @param regionId - The unique identifier of the region.
  * @param snapshotId - The unique identifier of the snapshot to update.
  * @param params - The snapshot fields and/or related collections to modify.
+ * @param bypassReadyCheck
  * @returns A `Result<RegionSnapshotObject>` containing the updated snapshot, or a failure if the update fails.
  */
 export async function updateRegionSnapshot(

@@ -24,6 +24,7 @@ export async function getAllRoutes(forPublic: boolean = false): Promise<Result<R
           routeName: routes.routeName,
           routeColor: routes.routeColor,
           routeDetails: routes.routeDetails,
+          fleetCount: routes.fleetCount,
           availableFrom: routes.availableFrom,
           availableTo: routes.availableTo,
           vehicleTypeId: routes.vehicleTypeId,
@@ -41,6 +42,7 @@ export async function getAllRoutes(forPublic: boolean = false): Promise<Result<R
         routeName: x.routeName,
         routeColor: x.routeColor,
         routeDetails: x.routeDetails,
+        fleetCount: x.fleetCount ?? 100,
         polylines: {
           to: x.polylineGoingTo,
           back: x.polylineGoingBack,
@@ -830,6 +832,7 @@ export async function removeRoute(routeId: string): Promise<Result<null>> {
  * @param routeId - The unique identifier of the route to update.
  * @param snapshotId - The unique identifier of the snapshot to update.
  * @param params - The route fields and/or point collections to modify.
+ * @param bypassReadyCheck
  * @returns A `Result<RouteSnapshotObject>` containing the updated route, or a failure if the update fails.
  */
 export async function updateRouteSnapshot(
@@ -1085,6 +1088,7 @@ export interface RouteBaseObject {
   routeName: string;
   routeColor: string;
   routeDetails: string;
+  fleetCount: number;
   availability: {
     from: string;
     to: string;
@@ -1101,7 +1105,6 @@ export interface RouteBaseObject {
 
 export type RouteObject = RouteBaseObject & {
   activeSnapshotId: string;
-  fleetCount: number;
   isPublic: boolean;
 }
 
@@ -1109,6 +1112,7 @@ export type RouteListItem = Omit<RouteBaseObject,
   | "availability"
   | "vehicle"
   | "routeDetails"
+  | "fleetCount"
 >;
 
 export interface RouteSnapshotObject extends RouteObject {

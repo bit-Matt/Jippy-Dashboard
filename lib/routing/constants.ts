@@ -46,6 +46,11 @@ export const TRICYCLE_SPEED_KMH = 10;
 /** Average jeepney speed in km/h */
 export const JEEPNEY_SPEED_KMH = 10;
 
+/** Multiplier for fleet-based boarding cost: (roundTripDist / fleetCount) / 2 * this factor.
+ *  Converts estimated wait time (in meters-of-route-covered) to a cost penalty.
+ *  A low value keeps it as the lowest-priority factor after distance, walking, and transfers. */
+export const BOARDING_COST_FACTOR = 0.25;
+
 /** Maximum A* iterations before giving up (prevents runaway on malformed graphs) */
 export const MAX_ASTAR_ITERATIONS = 50_000;
 

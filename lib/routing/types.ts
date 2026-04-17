@@ -53,6 +53,7 @@ export interface TransitRoute {
   routeNumber: string;
   routeName: string;
   routeColor: string;
+  fleetCount: number;
   polylines: { to: string; back: string };
   decodedGoingTo: LatLng[];
   decodedGoingBack: LatLng[];
