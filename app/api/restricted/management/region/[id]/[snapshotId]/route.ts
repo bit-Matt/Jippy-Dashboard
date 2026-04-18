@@ -7,6 +7,7 @@ import { tryParseJson } from "@/lib/http/RequestUtilities";
 import { oneOf, unwrap } from "@/lib/one-of";
 import { utils, validator } from "@/lib/validator";
 import { logActivity } from "@/lib/management/activity-logger";
+import { invalidate } from "@/lib/routing-fast";
 
 export async function GET(
   request: NextRequest,
@@ -209,9 +210,15 @@ export async function PATCH(
     bypassReadyCheck = true;
   }
 
+  const regionInfo = await unwrap(region.getRegionById(id));
+
   const result = await region.updateRegionSnapshot(id, snapshotId, data, bypassReadyCheck);
   return oneOf(result).match(
     success => {
+      if (regionInfo.isPublic && regionInfo.activeSnapshotId === snapshotId) {
+        void invalidate();
+      }
+
       void logActivity({
         actorUserId: currentSession.user!.id,
         actorRole: currentSession.user!.role,

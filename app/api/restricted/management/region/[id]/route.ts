@@ -4,9 +4,10 @@ import * as region from "@/lib/management/region-manager";
 import { ApiResponseBuilder, StatusCodes } from "@/lib/http";
 import { session, SessionCode } from "@/lib/auth";
 import { tryParseJson } from "@/lib/http/RequestUtilities";
-import {oneOf, unwrap, UnwrappedException} from "@/lib/one-of";
+import { oneOf, unwrap, UnwrappedException } from "@/lib/one-of";
 import { utils, validator } from "@/lib/validator";
 import { logActivity } from "@/lib/management/activity-logger";
+import { invalidate } from "@/lib/routing-fast";
 
 export async function GET(
   request: NextRequest,
@@ -191,9 +192,13 @@ export async function PATCH(
       .build();
   }
 
+  const wasPublic = await unwrap(region.isRegionPublished(id));
+
   const result = await region.togglePublic(id, data.isPublic);
   return oneOf(result).match(
     s => {
+      if (wasPublic !== s.isPublic) void invalidate();
+
       void logActivity({
         actorUserId: currentSession.user!.id,
         actorRole: currentSession.user!.role,
@@ -243,9 +248,13 @@ export async function DELETE(
     }
 
     // Proceed with deletion
+    const wasPublic = await unwrap(region.isRegionPublished(id));
+
     const result = await region.removeRegion(id);
     return oneOf(result).match(
       () => {
+        if (wasPublic) void invalidate();
+
         void logActivity({
           actorUserId: currentSession.user!.id,
           actorRole: currentSession.user!.role,

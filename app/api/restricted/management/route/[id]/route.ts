@@ -3,11 +3,12 @@ import type { NextRequest } from "next/server";
 import { ApiResponseBuilder, StatusCodes } from "@/lib/http";
 import * as route from "@/lib/management/route-manager";
 import { tryParseJson } from "@/lib/http/RequestUtilities";
-import {oneOf, unwrap, UnwrappedException} from "@/lib/one-of";
+import { oneOf, unwrap, UnwrappedException } from "@/lib/one-of";
 import { getRoutePolyline } from "@/lib/osm/valhalla";
 import { utils, validator } from "@/lib/validator";
 import { session, SessionCode } from "@/lib/auth";
 import { logActivity } from "@/lib/management/activity-logger";
+import { invalidate } from "@/lib/routing-fast";
 
 export async function GET(
   request: NextRequest,
@@ -188,9 +189,15 @@ export async function PATCH(
       .build();
   }
 
+  const wasPublic = await unwrap(route.isRoutePublished(id));
+
   const result = await route.togglePublic(id, data.isPublic);
   return oneOf(result).match(
     s => {
+      if (wasPublic !== s.isPublic) {
+        void invalidate();
+      }
+
       void logActivity({
         actorUserId: currentSession.user!.id,
         actorRole: currentSession.user!.role,
@@ -239,9 +246,15 @@ export async function DELETE(
         .build();
     }
 
+    const wasPublic = await unwrap(route.isRoutePublished(id));
+
     const result = await route.removeRoute(id);
     return oneOf(result).match(
       () => {
+        if (wasPublic) {
+          void invalidate();
+        }
+
         void logActivity({
           actorUserId: currentSession.user!.id,
           actorRole: currentSession.user!.role,

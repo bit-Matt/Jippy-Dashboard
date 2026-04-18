@@ -381,6 +381,24 @@ export async function togglePublic(closureId: string, state: boolean): Promise<R
   }
 }
 
+export async function isClosurePublished(closureId: string): Promise<Result<boolean>> {
+  try {
+    const [selectedClosure] = await db
+      .select({ isPublic: roadClosures.isPublic })
+      .from(roadClosures)
+      .where(eq(roadClosures.id, closureId))
+      .limit(1);
+
+    if (!selectedClosure) {
+      return new Failure(ErrorCodes.ResourceNotFound, "Road closure not found.", { closureId });
+    }
+
+    return new Success(selectedClosure.isPublic);
+  } catch (error) {
+    return new Failure(ErrorCodes.Fatal, "Unable to determine closure publishing status.", { closureId }, error);
+  }
+}
+
 export interface PointObject {
   id: string;
   sequence: number;

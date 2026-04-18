@@ -1,12 +1,13 @@
 import type { NextRequest } from "next/server";
 
-import { oneOf } from "@/lib/one-of";
+import { oneOf, unwrap } from "@/lib/one-of";
 import * as region from "@/lib/management/region-manager";
 import { ApiResponseBuilder, StatusCodes } from "@/lib/http";
 import { tryParseJson } from "@/lib/http/RequestUtilities";
 import { session, SessionCode } from "@/lib/auth";
 import { utils, validator } from "@/lib/validator";
 import { logActivity } from "@/lib/management/activity-logger";
+import { invalidate } from "@/lib/routing-fast";
 
 export async function GET(
   request: NextRequest,
@@ -70,9 +71,15 @@ export async function PATCH(
       .build();
   }
 
+  const regionInfo = await unwrap(region.getRegionById(id));
+
   const result = await region.switchSnapshot(id, data.snapshotId);
   return oneOf(result).match(
     s => {
+      if (regionInfo.isPublic && regionInfo.activeSnapshotId !== s.snapshotId) {
+        void invalidate();
+      }
+
       void logActivity({
         actorUserId: currentSession.user!.id,
         actorRole: currentSession.user!.role,

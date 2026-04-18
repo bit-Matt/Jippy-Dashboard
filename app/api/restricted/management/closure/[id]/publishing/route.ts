@@ -3,10 +3,11 @@ import type { NextRequest } from "next/server";
 import * as closure from "@/lib/management/closure-manager";
 import { ApiResponseBuilder, StatusCodes } from "@/lib/http";
 import { tryParseJson } from "@/lib/http/RequestUtilities";
-import { oneOf } from "@/lib/one-of";
+import { oneOf, unwrap } from "@/lib/one-of";
 import { utils, validator } from "@/lib/validator";
 import { session, SessionCode } from "@/lib/auth";
 import { logActivity } from "@/lib/management/activity-logger";
+import { invalidate } from "@/lib/routing-fast";
 
 export async function PATCH(
   request: NextRequest,
@@ -46,9 +47,14 @@ export async function PATCH(
       .build();
   }
 
+  const wasPublic = await unwrap(closure.isClosurePublished(id));
+
   const result = await closure.togglePublic(id, data.isPublic);
   return oneOf(result).match(
     s => {
+      // Invalidate.
+      if (wasPublic !== s.isPublic) void invalidate();
+
       void logActivity({
         actorUserId: currentSession.user!.id,
         actorRole: currentSession.user!.role,

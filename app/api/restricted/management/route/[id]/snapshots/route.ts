@@ -3,10 +3,11 @@ import type { NextRequest } from "next/server";
 import { ApiResponseBuilder, StatusCodes } from "@/lib/http";
 import * as route from "@/lib/management/route-manager";
 import { tryParseJson } from "@/lib/http/RequestUtilities";
-import { oneOf } from "@/lib/one-of";
+import { oneOf, unwrap } from "@/lib/one-of";
 import { utils, validator } from "@/lib/validator";
 import { logActivity } from "@/lib/management/activity-logger";
 import { session, SessionCode } from "@/lib/auth";
+import { invalidate } from "@/lib/routing-fast";
 
 export async function GET(
   request: NextRequest,
@@ -64,9 +65,15 @@ export async function PATCH(
       .build();
   }
 
+  const routeInfo = await unwrap(route.getRouteById(id));
+
   const result = await route.switchSnapshot(id, data.snapshotId);
   return oneOf(result).match(
     s => {
+      if (routeInfo.isPublic && routeInfo.activeSnapshotId !== s.activeSnapshotId) {
+        void invalidate();
+      }
+
       void logActivity({
         actorUserId: currentSession.user!.id,
         actorRole: currentSession.user!.role,

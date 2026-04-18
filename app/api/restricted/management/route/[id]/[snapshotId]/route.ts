@@ -8,6 +8,7 @@ import { oneOf, unwrap } from "@/lib/one-of";
 import { utils, validator } from "@/lib/validator";
 import { session, SessionCode } from "@/lib/auth";
 import { logActivity } from "@/lib/management/activity-logger";
+import { invalidate } from "@/lib/routing-fast";
 
 export async function GET(
   request: NextRequest,
@@ -204,6 +205,8 @@ export async function PATCH(
     bypassReadyCheck = true;
   }
 
+  const routeInfo = await unwrap(route.getRouteById(id));
+
   const patchPayload: route.UpdateRouteParameters = { ...data };
 
   if (data.points) {
@@ -219,6 +222,10 @@ export async function PATCH(
   const result = await route.updateRouteSnapshot(id, snapshotId, patchPayload, bypassReadyCheck);
   return oneOf(result).match(
     success => {
+      if (routeInfo.isPublic && routeInfo.activeSnapshotId === snapshotId) {
+        void invalidate();
+      }
+
       void logActivity({
         actorUserId: currentSession.user!.id,
         actorRole: currentSession.user!.role,
