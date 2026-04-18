@@ -76,9 +76,13 @@ export const TRICYCLE_DETOUR_FACTOR = 1.2;
  *  distance (GraphHopper) would be too expensive at build time. */
 export const WALK_DETOUR_FACTOR = 1.5;
 
+/** If a jeepney node is within this many meters of the destination, skip the
+ *  tricycle hail edge — walking directly is clearly preferable. The walk
+ *  egress edge from queryUserNodeDistances handles these nodes instead. */
+export const MAX_DIRECT_WALK_INSTEAD_OF_HAIL_METERS = 500;
+
 /** If any mid-route walk leg exceeds this distance (meters) after assembly,
- *  the algorithm reruns A* with a boosted walk penalty to try to find a
- *  transit alternative.  If no improvement is found, keeps the original. */
+ *  the suggestion is filtered out (unless it's the only suggestion). */
 export const LONG_WALK_THRESHOLD_METERS = 1_000;
 
 /** Max haversine (meters) for a station → jeepney-node tricycle edge.

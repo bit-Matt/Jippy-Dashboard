@@ -30,6 +30,7 @@ import {
   MAX_TRICYCLE_RIDE_TO_TRANSIT_METERS,
   MAX_BOUNDARY_EXIT_WALK_METERS,
   WALK_DETOUR_FACTOR,
+  MAX_DIRECT_WALK_INSTEAD_OF_HAIL_METERS,
 } from "@/lib/routing/constants";
 import type {
   GraphEdge,
@@ -756,16 +757,25 @@ export function buildTricycleNodesAndEdges(
         const jeepNode = nodes.get(jeepNodeId)!;
         const jeepPoint: LatLng = [jeepNode.lat, jeepNode.lng];
 
+        // If the jeepney node is close enough to the destination to walk
+        // directly, skip the hail edge — the walk egress edge will handle it.
+        const directToEnd = haversineMeters(jeepPoint, end);
+        if (directToEnd < MAX_DIRECT_WALK_INSTEAD_OF_HAIL_METERS) continue;
+
         // Pick the station closest to where the passenger alights the jeepney
         const nearestStation = availableStations.reduce((best, s) => {
           const d = haversineMeters(jeepPoint, s.point);
           return d < best.dist ? { station: s, dist: d } : best;
         }, { station: availableStations[0], dist: Infinity });
 
+        // Skip hail if walking to the station is farther than walking directly
+        // to the destination — the detour through the station isn't worthwhile.
+        const walkToStation = nearestStation.dist;
+        if (walkToStation > directToEnd) continue;
+
         // True cost: walk from jeepney alight to station + tricycle from station to destination
         // Store them separately so costing applies walk rate to the walk portion
         // and tricycle rate to the ride portion.
-        const walkToStation = nearestStation.dist;
         const tricycleFromStation = haversineMeters(nearestStation.station.point, end) * TRICYCLE_DETOUR_FACTOR;
 
         let jeepEdges = baseEdges.get(jeepNodeId);
