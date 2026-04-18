@@ -2698,7 +2698,7 @@
       ],
       "layout": {
         "text-field": "{name:latin}",
-        "text-font": ["Metropolis Regular"],
+        "text-font": ["Noto Sans Regular"],
         "text-size": 10,
         "symbol-placement": "line"
       }
@@ -2716,7 +2716,7 @@
       ],
       "layout": {
         "text-field": "{name:latin}",
-        "text-font": ["Metropolis Regular", "Noto Sans Regular"],
+        "text-font": ["Noto Sans Regular"],
         "text-size": 10,
         "icon-image": "circle-11",
         "icon-padding": 0,

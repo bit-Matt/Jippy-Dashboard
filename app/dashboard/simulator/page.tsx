@@ -15,6 +15,7 @@ import { getErrorMessage } from "@/contracts/parsers";
 const SimulatorMapDynamic = dynamic(() => import("./SimulatorMap"), { ssr: false });
 
 export default function SimulatorPage() {
+  const [apiVersion, setApiVersion] = useState<"v1" | "v2">("v1");
   const [startPoint, setStartPoint] = useState<[number, number] | null>(null);
   const [endPoint, setEndPoint] = useState<[number, number] | null>(null);
   const [startAddress, setStartAddress] = useState("");
@@ -24,6 +25,13 @@ export default function SimulatorPage() {
   const [activeSuggestion, setActiveSuggestion] = useState<NavigateRouteSuggestion | null>(null);
   const [isSimulating, setIsSimulating] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const handleApiVersionChange = useCallback((version: "v1" | "v2") => {
+    setApiVersion(version);
+    setError(null);
+    setResult(null);
+    setActiveSuggestion(null);
+  }, []);
 
   const handleMapClick = useCallback(async (lat: number, lng: number) => {
     if (!pickingMode) return;
@@ -61,7 +69,7 @@ export default function SimulatorPage() {
     setActiveSuggestion(null);
 
     const { data, error: fetchError } = await $fetch<IApiResponse<MultiNavigateRouteResponse>>(
-      "/api/public/navigate",
+      `/api/public/navigate/${apiVersion}`,
       {
         method: "POST",
         body: JSON.stringify({ start: startPoint, end: endPoint }),
@@ -78,7 +86,7 @@ export default function SimulatorPage() {
 
     setResult(data.data);
     setActiveSuggestion(data.data.suggestions[0] ?? null);
-  }, [startPoint, endPoint]);
+  }, [apiVersion, startPoint, endPoint]);
 
   return (
     <SidebarProvider>
@@ -94,6 +102,7 @@ export default function SimulatorPage() {
             onMapClick={handleMapClick}
           />
           <Simulator
+            apiVersion={apiVersion}
             startAddress={startAddress}
             endAddress={endAddress}
             startPoint={startPoint}
@@ -102,6 +111,7 @@ export default function SimulatorPage() {
             isSimulating={isSimulating}
             result={result}
             error={error}
+            onApiVersionChange={handleApiVersionChange}
             onPickingModeChange={setPickingMode}
             onSimulate={handleSimulate}
             onSuggestionChange={setActiveSuggestion}

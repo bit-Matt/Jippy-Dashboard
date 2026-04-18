@@ -202,6 +202,11 @@ const utils = {
       && TIME_PATTERN.test(to!)
       && from! < to!;
   },
+
+  isWithinPhilippines: (lat: number, lng: number): boolean => {
+    // Generous bounds for the Philippines archipelago
+    return lat >= 4.5 && lat <= 21.5 && lng >= 116.0 && lng <= 127.0;
+  },
 };
 
 export { utils, validator };

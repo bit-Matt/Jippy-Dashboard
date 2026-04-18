@@ -5,7 +5,7 @@
 import turfBbox from "@turf/bbox";
 import { lineString as turfLineString } from "@turf/helpers";
 
-import { encodePolyline } from "@/lib/routing/polyline";
+import { encodePolyline, decodePolyline } from "@/lib/routing/polyline";
 import { getWalkRoute } from "@/lib/routing/graphhopper-walk";
 import { getTricycleRoute } from "@/lib/routing/valhalla-motorcycle";
 import { haversineMeters } from "@/lib/routing/graph-builder";
@@ -466,7 +466,133 @@ export async function buildLegsFromSections(
     }
   }
 
-  return legs;
+  return fillLegGaps(legs);
+}
+
+// ---------------------------------------------------------------------------
+// Gap filler — bridges disconnects between consecutive legs
+// ---------------------------------------------------------------------------
+
+/**
+ * After leg assembly, detect cases where the end of one leg does not connect
+ * to the start of the next (GraphHopper road-snapping causes this). When a
+ * gap is found, a bridging WALK is inserted via GraphHopper. If the following
+ * leg is already a WALK, the two walks are merged to avoid WALK→WALK.
+ */
+async function fillLegGaps(legs: RouteLeg[]): Promise<RouteLeg[]> {
+  const GAP_THRESHOLD_METERS = 10;
+  const result: RouteLeg[] = [];
+
+  for (let i = 0; i < legs.length; i++) {
+    const leg = legs[i];
+
+    if (i === 0) {
+      result.push(leg);
+      continue;
+    }
+
+    const prevLeg = result[result.length - 1];
+    const prevCoords = decodePolyline(prevLeg.polyline);
+    const currCoords = decodePolyline(leg.polyline);
+
+    if (prevCoords.length === 0 || currCoords.length === 0) {
+      result.push(leg);
+      continue;
+    }
+
+    const prevEnd = prevCoords[prevCoords.length - 1];
+    const currStart = currCoords[0];
+    const gap = haversineMeters(prevEnd, currStart);
+
+    if (gap <= GAP_THRESHOLD_METERS) {
+      result.push(leg);
+      continue;
+    }
+
+    // Build the bridging walk from the end of the previous leg to the
+    // start of the current leg.
+    let glueCoords: Array<[number, number]>;
+    let glueDistance: number;
+    let glueDuration: number;
+    let glueInstructions: RouteLeg["instructions"];
+
+    try {
+      const walk = await getWalkRoute(prevEnd, currStart);
+      glueCoords = decodePolyline(walk.polyline);
+      glueDistance = walk.distance;
+      glueDuration = walk.duration;
+      glueInstructions = generateWalkInstructions(walk.maneuvers);
+    } catch {
+      // Straight-line fallback
+      glueCoords = [prevEnd, currStart];
+      glueDistance = gap * 1.2;
+      glueDuration = Math.round((gap * 1.2) / (WALK_SPEED_KMH * 1000 / 3600));
+      glueInstructions = [
+        { text: "Walk to continue", maneuver_type: "depart" as const },
+        { text: "Arrive at destination", maneuver_type: "arrive" as const },
+      ];
+    }
+
+    if (leg.type === "WALK") {
+      // Merge the glue walk with the existing walk leg to avoid WALK→WALK.
+      // If the glue ends very close to where the walk starts, skip the
+      // duplicate point when concatenating.
+      const lastGlue = glueCoords[glueCoords.length - 1];
+      const startSlice = haversineMeters(lastGlue, currCoords[0]) < 5 ? 1 : 0;
+      const mergedCoords = [...glueCoords, ...currCoords.slice(startSlice)];
+
+      // Drop the "arrive" instruction from the glue before prepending,
+      // since the merged leg still continues to the real destination.
+      const filteredGlue = glueInstructions.filter(
+        (ins) => ins.maneuver_type !== "arrive",
+      );
+
+      const glueBbox = computeBbox(
+        glueCoords.map(([lat, lng]) => [lng, lat] as [number, number]),
+      );
+
+      result.push({
+        type: "WALK",
+        route_name: null,
+        polyline: encodePolyline(mergedCoords),
+        color: null,
+        distance: glueDistance + leg.distance,
+        duration: glueDuration + leg.duration,
+        instructions: [...filteredGlue, ...leg.instructions],
+        bbox: mergeBbox(glueBbox, leg.bbox),
+      });
+    } else {
+      // Insert a separate WALK leg before the current leg.
+      const glueBbox = computeBbox(
+        glueCoords.map(([lat, lng]) => [lng, lat] as [number, number]),
+      );
+      result.push({
+        type: "WALK",
+        route_name: null,
+        polyline: encodePolyline(glueCoords),
+        color: null,
+        distance: glueDistance,
+        duration: glueDuration,
+        instructions: glueInstructions,
+        bbox: glueBbox,
+      });
+      result.push(leg);
+    }
+  }
+
+  return result;
+}
+
+function mergeBbox(
+  a: [number, number, number, number],
+  b: [number, number, number, number],
+): [number, number, number, number] {
+  return [
+    Math.min(a[0], b[0]),
+    Math.min(a[1], b[1]),
+    Math.max(a[2], b[2]),
+    Math.max(a[3], b[3]),
+  ];
 }
 
 function findEdgeBetween(graph: Graph, fromId: string, toId: string): GraphEdge | null {

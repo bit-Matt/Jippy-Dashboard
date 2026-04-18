@@ -1,0 +1,16 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "JippyServices.Algorithm", "JippyServices.Algorithm\JippyServices.Algorithm.csproj", "{FD587C9B-08C3-4EF7-A37E-09EB56535E0A}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{FD587C9B-08C3-4EF7-A37E-09EB56535E0A}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{FD587C9B-08C3-4EF7-A37E-09EB56535E0A}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{FD587C9B-08C3-4EF7-A37E-09EB56535E0A}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{FD587C9B-08C3-4EF7-A37E-09EB56535E0A}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+EndGlobal

@@ -34,9 +34,9 @@ const GH_FINISH = 4;
  * Returns the encoded polyline, distance (meters), duration (seconds), and maneuvers.
  */
 export async function getWalkRoute(from: LatLng, to: LatLng): Promise<WalkRouteResult> {
-  const graphhopperUrl = process.env.NEXT_PUBLIC_GRAPHHOPPER_URL;
+  const graphhopperUrl = process.env.GRAPHHOPPER_URL;
   if (!graphhopperUrl) {
-    throw new Error("NEXT_PUBLIC_GRAPHHOPPER_URL is not configured.");
+    throw new Error("GRAPHHOPPER_URL is not configured.");
   }
 
   const url = new URL("/route", graphhopperUrl);
@@ -102,7 +102,7 @@ export async function getWalkRoute(from: LatLng, to: LatLng): Promise<WalkRouteR
  * Returns Infinity if the route cannot be computed (so callers can skip it).
  */
 export async function getWalkDistance(from: LatLng, to: LatLng): Promise<number> {
-  const graphhopperUrl = process.env.NEXT_PUBLIC_GRAPHHOPPER_URL;
+  const graphhopperUrl = process.env.GRAPHHOPPER_URL;
   if (!graphhopperUrl) return Infinity;
 
   const url = new URL("/route", graphhopperUrl);

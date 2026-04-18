@@ -74,7 +74,7 @@ const VectorTileLayer = () => {
     if (!map) return;
 
     const glLayer = L.maplibreGL({
-      style: "/tileserver/style.json",
+      style: "/tileserver/liberty.json",
     });
 
     glLayer.addTo(map);

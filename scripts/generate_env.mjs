@@ -88,11 +88,12 @@ async function main() {
     utils.env.write("redis.port", redisPort);
   }
 
-  // Configure nominatim
+  // Service URLs
   utils.env.write("next.public.nominatim.url", "http://localhost:6701");
   utils.env.write("next.public.valhalla.url", "http://localhost:6702");
-  utils.env.write("next.public.tileserver.url", "http://localhost:6703");
-  utils.env.write("next.public.graphhopper.url", "http://localhost:6704");
+  utils.env.write("tileserver.url", "http://localhost:6703");
+  utils.env.write("graphhopper.url", "http://localhost:6704");
+  utils.env.write("algorithm.url", "http://localhost:6705");
 
   // Generate a connection string
   const dbConnectionOptions = {
@@ -106,6 +107,13 @@ async function main() {
 
   utils.env.write("postgres.url", utils.db.createConnectionString(dbConnectionOptions));
   utils.env.write("redis.url", `redis://localhost:${redisPort}`);
+
+  // Algorithm service-specific environment variables
+  utils.env.write("dotnet.nominatim.url", "http://geocoder:8080");
+  utils.env.write("dotnet.valhalla.url", "http://valhalla:8002");
+  utils.env.write("dotnet.graphhopper.url", "http://graphhopper:8989");
+  utils.env.write("dotnet.postgres.url", `Host=db;Port=5432;Database=${databaseName};Username=${databaseUsername};Password=${databasePassword}`);
+  utils.env.write("dotnet.redis.url", "redis:6379");
 
   // Nominatim DSN
   const nominatimDSN = `pgsql:dbname=nominatim;host=db;user=${databaseUsername};password=${databasePassword}`;

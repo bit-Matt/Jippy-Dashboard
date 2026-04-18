@@ -14,6 +14,10 @@ import {
   InputGroupInput,
 } from "@/components/ui/input-group";
 import { Label } from "@/components/ui/label";
+import {
+  NativeSelect,
+  NativeSelectOption,
+} from "@/components/ui/native-select";
 import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import type {
@@ -116,6 +120,7 @@ function SuggestionPanel({ suggestion }: { suggestion: NavigateRouteSuggestion }
 }
 
 export interface SimulatorProps {
+  apiVersion: "v1" | "v2";
   startAddress: string;
   endAddress: string;
   startPoint: [number, number] | null;
@@ -124,12 +129,14 @@ export interface SimulatorProps {
   isSimulating: boolean;
   result: MultiNavigateRouteResponse | null;
   error: string | null;
+  onApiVersionChange: (version: "v1" | "v2") => void;
   onPickingModeChange: (mode: "start" | "end" | null) => void;
   onSimulate: () => void;
   onSuggestionChange: (suggestion: NavigateRouteSuggestion | null) => void;
 }
 
 export default function Simulator({
+  apiVersion,
   startAddress,
   endAddress,
   startPoint,
@@ -138,6 +145,7 @@ export default function Simulator({
   isSimulating,
   result,
   error,
+  onApiVersionChange,
   onPickingModeChange,
   onSimulate,
   onSuggestionChange,
@@ -175,6 +183,21 @@ export default function Simulator({
           <CardTitle>Simulator</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
+          <div className="space-y-2">
+            <Label htmlFor="simulator-api-version">API Version</Label>
+            <NativeSelect
+              id="simulator-api-version"
+              value={apiVersion}
+              onChange={(event) => onApiVersionChange(event.target.value as "v1" | "v2")}
+              className="w-full"
+            >
+              <NativeSelectOption value="v1">/api/public/navigate/v1 - Stable</NativeSelectOption>
+              <NativeSelectOption value="v2">/api/public/navigate/v2 - Beta (.NET 10 router-fast)</NativeSelectOption>
+            </NativeSelect>
+          </div>
+
+          <Separator />
+
           <div className="space-y-3">
             <div className="space-y-2">
               <Label>Start</Label>

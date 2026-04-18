@@ -118,6 +118,32 @@ services:
     networks:
       - defaultNetwork
 
+  # Other services
+  algorithm:
+    build:
+      context: services/JippyServices
+      dockerfile: JippyServices.Algorithm/Dockerfile
+    restart: unless-stopped
+    ports:
+      - "6705:8080"
+    environment:
+      Services__Nominatim: ${DOTNET_NOMINATIM_URL}
+      Services__Valhalla: ${DOTNET_VALHALLA_URL}
+      Services__GraphHopper: ${DOTNET_GRAPHHOPPER_URL}
+      ConnectionStrings__DefaultConnection: ${DOTNET_POSTGRES_URL}
+      ConnectionStrings__Redis: ${DOTNET_REDIS_URL}
+    depends_on:
+      db:
+        condition: service_healthy
+      geocoder:
+        condition: service_healthy
+      valhalla:
+        condition: service_healthy
+      graphhopper:
+        condition: service_healthy
+    networks:
+      - defaultNetwork
+
 networks:
   defaultNetwork:
     driver: bridge

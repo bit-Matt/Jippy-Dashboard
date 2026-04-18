@@ -1,0 +1,10 @@
+### Send POST request with json body
+POST http://localhost:5181/navigate/
+Accept: application/json
+
+{
+    "start": { lat: 0, lng: 0 },
+    "end": { lat: 1, lng: 1 }
+}
+
+###
