@@ -23,6 +23,9 @@ builder.Services.AddStackExchangeRedisCache(options =>
     options.InstanceName = "Jippy_Algorithm_";
 });
 
+// In-process memory cache for the static transit graph.
+builder.Services.AddMemoryCache();
+
 // HTTP clients for external routing services
 builder.Services.AddHttpClient<GraphHopperClient>();
 builder.Services.AddHttpClient<ValhallaClient>();

@@ -35,13 +35,24 @@ public sealed class GridIndex
     /// <summary>Return all node IDs within the given radius (meters).</summary>
     public List<string> QueryNearby(double lat, double lng, double radiusMeters)
     {
+        var result = new List<string>();
+        QueryNearby(lat, lng, radiusMeters, result);
+        return result;
+    }
+
+    /// <summary>
+    /// Fill <paramref name="result"/> with all node IDs within the given radius.
+    /// The caller is responsible for clearing <paramref name="result"/> before each call
+    /// so the same list instance can be reused across multiple queries.
+    /// </summary>
+    public void QueryNearby(double lat, double lng, double radiusMeters, List<string> result)
+    {
         var radiusDeg = radiusMeters / MetersPerDegreeLat;
         var cellsToCheck = (int)Math.Ceiling(radiusDeg / _cellSizeDeg);
 
         var centerRow = (int)Math.Floor(lat / _cellSizeDeg);
         var centerCol = (int)Math.Floor(lng / _cellSizeDeg);
 
-        var result = new List<string>();
         var radiusSq = radiusMeters * radiusMeters;
 
         for (var dr = -cellsToCheck; dr <= cellsToCheck; dr++)
@@ -62,8 +73,6 @@ public sealed class GridIndex
                 }
             }
         }
-
-        return result;
     }
 
     private string CellKey(double lat, double lng)

@@ -249,12 +249,20 @@ public sealed class GraphBuilder(DataContext db, GraphHopperClient graphHopper, 
         foreach (var (nodeId, node) in nodes)
             index.Insert(nodeId, node.Lat, node.Lng);
 
+        // Reuse a single buffer list across all QueryNearby calls to avoid
+        // allocating a new List<string> per node (significant GC pressure).
+        var nearbyBuffer = new List<string>(64);
+
         foreach (var (nodeId, node) in nodes)
         {
-            var nearby = index.QueryNearby(node.Lat, node.Lng, RoutingConstants.TransferProximityMeters);
-            var bestPerRoute = new Dictionary<string, (string OtherId, double Dist)>();
+            nearbyBuffer.Clear();
+            index.QueryNearby(node.Lat, node.Lng, RoutingConstants.TransferProximityMeters, nearbyBuffer);
 
-            foreach (var otherId in nearby)
+            // Use a (RouteId, Direction) value-tuple key to avoid string
+            // interpolation allocations inside the hot inner loop.
+            var bestPerRoute = new Dictionary<(string, RouteDirection), (string OtherId, double Dist)>();
+
+            foreach (var otherId in nearbyBuffer)
             {
                 if (otherId == nodeId) continue;
                 var other = nodes[otherId];
@@ -265,8 +273,7 @@ public sealed class GraphBuilder(DataContext db, GraphHopperClient graphHopper, 
                     new LatLng(other.Lat, other.Lng));
                 if (dist > RoutingConstants.TransferProximityMeters) continue;
 
-                var dirStr = other.Direction == RouteDirection.GoingTo ? "goingTo" : "goingBack";
-                var key = $"{other.RouteId}:{dirStr}";
+                var key = (other.RouteId, other.Direction);
                 if (!bestPerRoute.TryGetValue(key, out var existing) || dist < existing.Dist)
                     bestPerRoute[key] = (otherId, dist);
             }
