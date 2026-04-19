@@ -380,9 +380,10 @@ export function markClosureEdges(
 
 /**
  * Check if a station is currently available based on its time window.
+ * Stored times are in UTC; `now` is a JS Date which is inherently UTC.
  */
 function isStationAvailable(station: TransitStation, now: Date): boolean {
-  const currentMinutes = now.getHours() * 60 + now.getMinutes();
+  const currentMinutes = now.getUTCHours() * 60 + now.getUTCMinutes();
   const [fromH, fromM] = station.availableFrom.split(":").map(Number);
   const [toH, toM] = station.availableTo.split(":").map(Number);
   const fromMin = fromH * 60 + fromM;
