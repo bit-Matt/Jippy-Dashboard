@@ -131,7 +131,7 @@ services:
       Services__Valhalla: ${DOTNET_VALHALLA_URL}
       Services__GraphHopper: ${DOTNET_GRAPHHOPPER_URL}
       ConnectionStrings__DefaultConnection: ${DOTNET_POSTGRES_URL}
-      ConnectionStrings__Redis: ${DOTNET_REDIS_URL}
+      ConnectionStrings__RedisCache: ${DOTNET_REDIS_URL}
     depends_on:
       db:
         condition: service_healthy
