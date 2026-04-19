@@ -626,10 +626,29 @@ public sealed class GraphBuilder(DataContext db, GraphHopperClient graphHopper, 
                         RegionId = region.Id,
                         DetourRatio = detourRatio > 1 ? detourRatio : null,
                     });
+                }
 
-                    // Hail edge: jeepney → station (tricycle)
-                    var hailRideDist = GeoUtils.HaversineMeters(
-                        new LatLng(jeepNode.Lat, jeepNode.Lng), station.Point) * RoutingConstants.TricycleDetourFactor;
+                // --- Hail edges: nearby jeepney node → station (mid-route tricycle transfer) ---
+                // Only for nodes where the walk to the station is within the hail cap.
+                // Also store the walk distance so the costing model accounts for the
+                // WALK leg the leg assembler will emit from the alight point to the station.
+                foreach (var jeepNodeId in nearbyJeepNodes)
+                {
+                    var jeepNode = nodes[jeepNodeId];
+                    var walkToStation = GeoUtils.HaversineMeters(
+                        new LatLng(jeepNode.Lat, jeepNode.Lng), station.Point);
+
+                    // Skip if walk to station is too far — same cap as direct hail edges
+                    if (walkToStation > RoutingConstants.MaxDirectWalkInsteadOfHailMeters) continue;
+
+                    var hailRideDist = walkToStation * RoutingConstants.TricycleDetourFactor;
+
+                    if (!baseEdges.TryGetValue(jeepNodeId, out var jeepEdges))
+                    {
+                        jeepEdges = [];
+                        baseEdges[jeepNodeId] = jeepEdges;
+                    }
+
                     jeepEdges.Add(new BaseEdge
                     {
                         From = jeepNodeId,
@@ -641,6 +660,9 @@ public sealed class GraphBuilder(DataContext db, GraphHopperClient graphHopper, 
                         StationPoint = station.Point,
                         RegionId = region.Id,
                         IsHail = true,
+                        // The leg assembler emits a WALK from the alight point to the station.
+                        // Include this cost so A* does not underestimate the true path cost.
+                        WalkToStationDist = walkToStation * RoutingConstants.WalkDetourFactor,
                     });
                 }
 

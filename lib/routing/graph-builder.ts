@@ -685,9 +685,20 @@ export function buildTricycleNodesAndEdges(
       }
 
       // --- Hail edges: nearby jeepney node → station (for mid-route transfer via tricycle) ---
+      // Only create hail edges for nodes close enough that the walk to the station
+      // is reasonable. Nodes further than MAX_DIRECT_WALK_INSTEAD_OF_HAIL_METERS are
+      // better served by the walk edge (above) or by staying on the jeepney longer.
+      // Also set walkToStationDist so the costing model sees the true walk cost that
+      // the leg assembler will emit — preventing A* from treating a long walk as a
+      // cheap tricycle ride.
       for (const jeepNodeId of nearbyJeepNodes) {
         const jeepNode = nodes.get(jeepNodeId)!;
-        const rideDist = haversineMeters([jeepNode.lat, jeepNode.lng], station.point) * TRICYCLE_DETOUR_FACTOR;
+        const walkToStation = haversineMeters([jeepNode.lat, jeepNode.lng], station.point);
+
+        // Skip if the walk to the station is too far — same cap used for direct hail edges.
+        if (walkToStation > MAX_DIRECT_WALK_INSTEAD_OF_HAIL_METERS) continue;
+
+        const rideDist = walkToStation * TRICYCLE_DETOUR_FACTOR;
 
         let jeepEdges = baseEdges.get(jeepNodeId);
         if (!jeepEdges) {
@@ -705,6 +716,10 @@ export function buildTricycleNodesAndEdges(
           stationPoint: station.point,
           regionId: region.id,
           isHail: true,
+          // The leg assembler will emit a WALK from the alight point to the station.
+          // Include this walk distance in costing so A* does not underestimate the
+          // true cost of this path.
+          walkToStationDist: walkToStation * WALK_DETOUR_FACTOR,
         });
       }
 
@@ -768,9 +783,15 @@ export function buildTricycleNodesAndEdges(
           return d < best.dist ? { station: s, dist: d } : best;
         }, { station: availableStations[0], dist: Infinity });
 
-        // Skip hail if walking to the station is farther than walking directly
-        // to the destination — the detour through the station isn't worthwhile.
+        // Skip hail if the station is too far from the alight point.
+        // Walking more than MAX_DIRECT_WALK_INSTEAD_OF_HAIL_METERS to reach
+        // a hailing point defeats the purpose of the last-mile tricycle — the
+        // passenger would be better served by a later alight node (closer to
+        // the station) or a direct walk. This cap is symmetric with the
+        // "just walk to destination" guard above.
+        // Also skip if the station is farther than the destination itself.
         const walkToStation = nearestStation.dist;
+        if (walkToStation > MAX_DIRECT_WALK_INSTEAD_OF_HAIL_METERS) continue;
         if (walkToStation > directToEnd) continue;
 
         // True cost: walk from jeepney alight to station + tricycle from station to destination
