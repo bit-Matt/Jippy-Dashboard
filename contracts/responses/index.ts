@@ -127,6 +127,7 @@ export interface ClosureObject {
 }
 
 export type StopRestrictionType = "universal" | "specific";
+export type StopDisallowedDirection = "direction_to" | "direction_back" | "both";
 
 export interface StopPointResponse {
   id: string;
@@ -138,6 +139,8 @@ export interface StopResponse {
   id: string;
   name: string;
   restrictionType: StopRestrictionType;
+  disallowedDirection: StopDisallowedDirection;
+  polyline: string;
   isPublic: boolean;
   points: StopPointResponse[];
   routeIds: string[];

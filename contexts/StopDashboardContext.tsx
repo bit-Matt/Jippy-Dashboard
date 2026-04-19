@@ -2,7 +2,7 @@
 
 import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from "react";
 
-import type { StopResponse, StopRestrictionType } from "@/contracts/responses";
+import type { StopResponse, StopRestrictionType, StopDisallowedDirection } from "@/contracts/responses";
 
 export type StopEditorMode = "creating" | "editing";
 export type ActiveStopTool = "none" | "draw-line" | "edit-line";
@@ -18,6 +18,7 @@ export interface StopDraftPoint {
 interface StopDraft {
   name: string;
   restrictionType: StopRestrictionType;
+  disallowedDirection: StopDisallowedDirection;
   points: StopDraftPoint[];
   routeIds: string[];
   vehicleTypeIds: string[];
@@ -43,6 +44,7 @@ interface StopDashboardContextValue extends StopDashboardState {
   closeEditor: () => void;
   updateDraftName: (name: string) => void;
   updateDraftRestrictionType: (restrictionType: StopRestrictionType) => void;
+  updateDraftDisallowedDirection: (disallowedDirection: StopDisallowedDirection) => void;
   updateDraftRouteIds: (routeIds: string[]) => void;
   updateDraftVehicleTypeIds: (vehicleTypeIds: string[]) => void;
   updateDraftPoints: (points: Array<[number, number]>) => void;
@@ -58,6 +60,7 @@ const StopDashboardContext = createContext<StopDashboardContextValue | undefined
 const buildDraftFromStop = (stop: StopResponse): StopDraft => ({
   name: stop.name,
   restrictionType: stop.restrictionType,
+  disallowedDirection: stop.disallowedDirection,
   points: [...stop.points]
     .sort((a, b) => a.sequence - b.sequence)
     .map((point, index) => ({
@@ -85,6 +88,7 @@ const buildFocusWaypoints = (stop: StopResponse | null): Array<[number, number]>
 const buildEmptyDraft = (): StopDraft => ({
   name: "",
   restrictionType: "universal",
+  disallowedDirection: "both",
   points: [],
   routeIds: [],
   vehicleTypeIds: [],
@@ -227,6 +231,22 @@ export function StopDashboardProvider({ children }: { children: ReactNode }) {
     });
   }, []);
 
+  const updateDraftDisallowedDirection = useCallback((disallowedDirection: StopDisallowedDirection) => {
+    setState((previousState) => {
+      if (!previousState.draft) {
+        return previousState;
+      }
+
+      return {
+        ...previousState,
+        draft: {
+          ...previousState.draft,
+          disallowedDirection,
+        },
+      };
+    });
+  }, []);
+
   const updateDraftRouteIds = useCallback((routeIds: string[]) => {
     setState((previousState) => {
       if (!previousState.draft) {
@@ -363,6 +383,7 @@ export function StopDashboardProvider({ children }: { children: ReactNode }) {
     closeEditor,
     updateDraftName,
     updateDraftRestrictionType,
+    updateDraftDisallowedDirection,
     updateDraftRouteIds,
     updateDraftVehicleTypeIds,
     updateDraftPoints,
@@ -380,6 +401,7 @@ export function StopDashboardProvider({ children }: { children: ReactNode }) {
     closeEditor,
     updateDraftName,
     updateDraftRestrictionType,
+    updateDraftDisallowedDirection,
     updateDraftRouteIds,
     updateDraftVehicleTypeIds,
     updateDraftPoints,

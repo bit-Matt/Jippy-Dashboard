@@ -8,6 +8,7 @@ export const snapshotState = pgEnum("snapshot_state", ["ready", "wip", "for_appr
 export const sequenceType = pgEnum("route_sequence_type", ["going_to", "going_back"]);
 export const restrictionType = pgEnum("restriction_type", ["universal", "specific"]);
 export const closureTypeEnum = pgEnum("closure_type", ["indefinite", "scheduled"]);
+export const disallowedDirectionEnum = pgEnum("disallowed_direction", ["direction_to", "direction_back", "both"]);
 export const feedbackStateEnum = pgEnum("feedback_state", ["Active", "Resolved", "Closed"]);
 
 // ============================================================================
@@ -442,6 +443,8 @@ export const stops = pgTable("stops", {
 
   name: text("name").notNull(),
   restrictionType: restrictionType("restriction_type").notNull(),
+  disallowedDirection: disallowedDirectionEnum("disallowed_direction").notNull().default("both"),
+  polyline: text("polyline").notNull().default(""),
 
   // Metadata
   isPublic: boolean("is_public").default(false).notNull(),

@@ -35,7 +35,8 @@ export async function PATCH(
     || data.points !== undefined
     || data.restrictionType !== undefined
     || data.routeIds !== undefined
-    || data.vehicleTypeIds !== undefined;
+    || data.vehicleTypeIds !== undefined
+    || data.disallowedDirection !== undefined;
   if (!hasAnyPatchField) {
     return ApiResponseBuilder.createError(StatusCodes.Status400BadRequest, [{ message: "No update fields provided." }])
       .build();
@@ -106,6 +107,15 @@ export async function PATCH(
             }
           }
 
+          return { ok: true };
+        },
+      },
+      disallowedDirection: {
+        type: "string",
+        formatterFn: async (value) => {
+          if (value !== "direction_to" && value !== "direction_back" && value !== "both") {
+            return { ok: false, error: "disallowedDirection must be 'direction_to', 'direction_back', or 'both'." };
+          }
           return { ok: true };
         },
       },
@@ -201,6 +211,7 @@ export async function DELETE(
 type PatchRequestBody = {
   name?: string;
   restrictionType?: "universal" | "specific";
+  disallowedDirection?: "direction_to" | "direction_back" | "both";
   points?: Array<{
     sequence: number;
     point: [number, number];

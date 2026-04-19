@@ -118,6 +118,15 @@ export async function POST(req: NextRequest) {
           return { ok: true };
         },
       },
+      disallowedDirection: {
+        type: "string",
+        formatterFn: async (value) => {
+          if (value !== "direction_to" && value !== "direction_back" && value !== "both") {
+            return { ok: false, error: "disallowedDirection must be 'direction_to', 'direction_back', or 'both'." };
+          }
+          return { ok: true };
+        },
+      },
     },
     requiredProperties: ["name", "restrictionType", "points"],
     allowUnvalidatedProperties: false,
@@ -166,6 +175,7 @@ export async function POST(req: NextRequest) {
 type RequestBody = {
   name: string;
   restrictionType: "universal" | "specific";
+  disallowedDirection?: "direction_to" | "direction_back" | "both";
   points: Array<{
     sequence: number;
     point: [number, number];

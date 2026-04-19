@@ -184,6 +184,7 @@ function StopsDashboardContent() {
           body: {
             name: payload.name,
             restrictionType: payload.restrictionType,
+            disallowedDirection: payload.disallowedDirection,
             points: payload.points,
             routeIds: payload.routeIds,
             vehicleTypeIds: payload.vehicleTypeIds,
@@ -210,6 +211,7 @@ function StopsDashboardContent() {
         body: {
           name: payload.name,
           restrictionType: payload.restrictionType,
+          disallowedDirection: payload.disallowedDirection,
           points: payload.points,
           routeIds: payload.routeIds,
           vehicleTypeIds: payload.vehicleTypeIds,

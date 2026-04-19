@@ -12,11 +12,12 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
 import { useStopDashboard } from "@/contexts/StopDashboardContext";
-import type { StopRestrictionType } from "@/contracts/responses";
+import type { StopRestrictionType, StopDisallowedDirection } from "@/contracts/responses";
 
 const stopDraftSchema = z.object({
   name: z.string().trim().min(1, "Stop name is required."),
   restrictionType: z.enum(["universal", "specific"]),
+  disallowedDirection: z.enum(["direction_to", "direction_back", "both"]),
   points: z.array(
     z.object({
       sequence: z.number().int().positive(),
@@ -65,6 +66,12 @@ const restrictionTypeOptions: Array<{ value: StopRestrictionType; label: string 
   { value: "specific", label: "Specific Routes/Vehicle Types" },
 ];
 
+const disallowedDirectionOptions: Array<{ value: StopDisallowedDirection; label: string }> = [
+  { value: "both", label: "Both Directions" },
+  { value: "direction_to", label: "Direction To" },
+  { value: "direction_back", label: "Direction Back" },
+];
+
 export default function StopEditor({
   routeOptions,
   vehicleTypeOptions,
@@ -80,6 +87,7 @@ export default function StopEditor({
     finishStopToolEditing,
     updateDraftName,
     updateDraftRestrictionType,
+    updateDraftDisallowedDirection,
     updateDraftRouteIds,
     updateDraftVehicleTypeIds,
     updateDraftPoints,
@@ -114,6 +122,7 @@ export default function StopEditor({
     const parsed = stopDraftSchema.safeParse({
       name: draft.name,
       restrictionType: draft.restrictionType,
+      disallowedDirection: draft.disallowedDirection,
       points: draft.points.map((point) => ({
         sequence: point.sequence,
         point: point.point,
@@ -195,6 +204,22 @@ export default function StopEditor({
               ))}
             </NativeSelect>
             {errors.restrictionType ? <p className="text-xs text-destructive">{errors.restrictionType}</p> : null}
+          </div>
+
+          <div className="grid gap-1.5">
+            <Label htmlFor="disallowed-direction">Disallowed Direction</Label>
+            <NativeSelect
+              id="disallowed-direction"
+              value={draft.disallowedDirection}
+              onChange={(event) => updateDraftDisallowedDirection(event.target.value as StopDisallowedDirection)}
+              className="w-full"
+            >
+              {disallowedDirectionOptions.map((option) => (
+                <NativeSelectOption key={option.value} value={option.value}>
+                  {option.label}
+                </NativeSelectOption>
+              ))}
+            </NativeSelect>
           </div>
 
           <div className="space-y-3">

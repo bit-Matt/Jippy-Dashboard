@@ -3,12 +3,54 @@ import { eq, sql } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { stops, stopPoints, stopRoutes, stopVehicleTypes } from "@/lib/db/schema";
 import { ErrorCodes, Failure, Result, Success } from "@/lib/one-of/types";
+import { encodePolyline } from "@/lib/routing/polyline";
 
 /**
  * Fetches all stops with their points, restricted routes, and vehicle types.
  */
 export async function getAllStops(forPublic: boolean = true): Promise<Result<BaseStopObject[] | StopObject[]>> {
   try {
+    const routeIdsAggregation = sql<string[]>`
+      COALESCE(
+        json_agg(DISTINCT ${stopRoutes.routeId}) FILTER (WHERE ${stopRoutes.routeId} IS NOT NULL),
+        '[]'::json
+      )
+    `;
+
+    const vehicleTypeIdsAggregation = sql<string[]>`
+      COALESCE(
+        json_agg(DISTINCT ${stopVehicleTypes.vehicleTypeId}) FILTER (WHERE ${stopVehicleTypes.vehicleTypeId} IS NOT NULL),
+        '[]'::json
+      )
+    `;
+
+    if (forPublic) {
+      const result = await db
+        .select({
+          id: stops.id,
+          name: stops.name,
+          restrictionType: stops.restrictionType,
+          disallowedDirection: stops.disallowedDirection,
+          polyline: stops.polyline,
+          routeIds: routeIdsAggregation,
+          vehicleTypeIds: vehicleTypeIdsAggregation,
+        })
+        .from(stops)
+        .leftJoin(stopRoutes, eq(stopRoutes.stopId, stops.id))
+        .leftJoin(stopVehicleTypes, eq(stopVehicleTypes.stopId, stops.id))
+        .where(eq(stops.isPublic, true))
+        .groupBy(
+          stops.id,
+          stops.name,
+          stops.restrictionType,
+          stops.disallowedDirection,
+          stops.polyline,
+          stops.isPublic,
+        );
+
+      return new Success(result satisfies BaseStopObject[]);
+    }
+
     const pointsAggregation = sql<StopPointObject[]>`
       COALESCE(
         json_agg(
@@ -25,49 +67,18 @@ export async function getAllStops(forPublic: boolean = true): Promise<Result<Bas
       )
     `;
 
-    const routeIdsAggregation = sql<string[]>`
-      COALESCE(
-        json_agg(DISTINCT ${stopRoutes.routeId}) FILTER (WHERE ${stopRoutes.routeId} IS NOT NULL),
-        '[]'::json
-      )
-    `;
-
-    const vehicleTypeIdsAggregation = sql<string[]>`
-      COALESCE(
-        json_agg(DISTINCT ${stopVehicleTypes.vehicleTypeId}) FILTER (WHERE ${stopVehicleTypes.vehicleTypeId} IS NOT NULL),
-        '[]'::json
-      )
-    `;
-
-    const selectQuery = {
-      id: stops.id,
-      name: stops.name,
-      restrictionType: stops.restrictionType,
-      points: pointsAggregation,
-      routeIds: routeIdsAggregation,
-      vehicleTypeIds: vehicleTypeIdsAggregation,
-    };
-
-    if (forPublic) {
-      const result = await db
-        .select(selectQuery)
-        .from(stops)
-        .leftJoin(stopPoints, eq(stopPoints.stopId, stops.id))
-        .leftJoin(stopRoutes, eq(stopRoutes.stopId, stops.id))
-        .leftJoin(stopVehicleTypes, eq(stopVehicleTypes.stopId, stops.id))
-        .where(eq(stops.isPublic, true))
-        .groupBy(
-          stops.id,
-          stops.name,
-          stops.restrictionType,
-          stops.isPublic,
-        );
-
-      return new Success(result satisfies BaseStopObject[]);
-    }
-
     const result = await db
-      .select({ ...selectQuery, isPublic: stops.isPublic })
+      .select({
+        id: stops.id,
+        name: stops.name,
+        restrictionType: stops.restrictionType,
+        disallowedDirection: stops.disallowedDirection,
+        polyline: stops.polyline,
+        isPublic: stops.isPublic,
+        points: pointsAggregation,
+        routeIds: routeIdsAggregation,
+        vehicleTypeIds: vehicleTypeIdsAggregation,
+      })
       .from(stops)
       .leftJoin(stopPoints, eq(stopPoints.stopId, stops.id))
       .leftJoin(stopRoutes, eq(stopRoutes.stopId, stops.id))
@@ -76,6 +87,8 @@ export async function getAllStops(forPublic: boolean = true): Promise<Result<Bas
         stops.id,
         stops.name,
         stops.restrictionType,
+        stops.disallowedDirection,
+        stops.polyline,
         stops.isPublic,
       );
 
@@ -96,6 +109,7 @@ export async function createStop(payload: StopAddParameters, ownerId: string): P
         .values({
           name: payload.name,
           restrictionType: payload.restrictionType,
+          disallowedDirection: payload.disallowedDirection ?? "both",
           isPublic: false,
           ownerId,
         })
@@ -104,6 +118,7 @@ export async function createStop(payload: StopAddParameters, ownerId: string): P
           name: stops.name,
           restrictionType: stops.restrictionType,
           isPublic: stops.isPublic,
+          disallowedDirection: stops.disallowedDirection,
         });
 
       if (!newStop) {
@@ -122,6 +137,10 @@ export async function createStop(payload: StopAddParameters, ownerId: string): P
           sequence: stopPoints.sequenceNumber,
           point: stopPoints.point,
         });
+
+      const sortedForPolyline = [...pointRows].sort((a, b) => a.sequence - b.sequence);
+      const encodedPolyline = encodePolyline(sortedForPolyline.map(row => [row.point[1], row.point[0]] as [number, number]));
+      await tx.update(stops).set({ polyline: encodedPolyline }).where(eq(stops.id, newStop.id));
 
       let routeIds: string[] = [];
       if (payload.restrictionType === "specific" && payload.routeIds && payload.routeIds.length > 0) {
@@ -154,6 +173,8 @@ export async function createStop(payload: StopAddParameters, ownerId: string): P
         name: newStop.name,
         restrictionType: newStop.restrictionType,
         isPublic: newStop.isPublic,
+        disallowedDirection: newStop.disallowedDirection,
+        polyline: encodedPolyline,
         points: pointRows.map((row) => ({
           id: row.id,
           sequence: row.sequence,
@@ -198,6 +219,7 @@ export async function updateStop(stopId: string, params: StopUpdateParameters): 
       const stopPatch = {
         ...(params.name !== undefined && { name: params.name }),
         ...(params.restrictionType !== undefined && { restrictionType: params.restrictionType }),
+        ...(params.disallowedDirection !== undefined && { disallowedDirection: params.disallowedDirection }),
       };
 
       let updatedStop: {
@@ -205,6 +227,8 @@ export async function updateStop(stopId: string, params: StopUpdateParameters): 
         name: string;
         restrictionType: "universal" | "specific";
         isPublic: boolean;
+        disallowedDirection: DisallowedDirection;
+        polyline: string;
       };
 
       if (Object.keys(stopPatch).length > 0) {
@@ -217,6 +241,8 @@ export async function updateStop(stopId: string, params: StopUpdateParameters): 
             name: stops.name,
             restrictionType: stops.restrictionType,
             isPublic: stops.isPublic,
+            disallowedDirection: stops.disallowedDirection,
+            polyline: stops.polyline,
           });
 
         if (!patched) {
@@ -231,6 +257,8 @@ export async function updateStop(stopId: string, params: StopUpdateParameters): 
             name: stops.name,
             restrictionType: stops.restrictionType,
             isPublic: stops.isPublic,
+            disallowedDirection: stops.disallowedDirection,
+            polyline: stops.polyline,
           })
           .from(stops)
           .where(eq(stops.id, stop.id))
@@ -245,11 +273,14 @@ export async function updateStop(stopId: string, params: StopUpdateParameters): 
 
       // Replace points if provided
       let points: StopPointObject[];
+      let currentPolyline = updatedStop.polyline;
       if (Array.isArray(params.points)) {
         await tx.delete(stopPoints).where(eq(stopPoints.stopId, updatedStop.id));
 
         if (params.points.length === 0) {
           points = [];
+          currentPolyline = "";
+          await tx.update(stops).set({ polyline: "" }).where(eq(stops.id, updatedStop.id));
         } else {
           const pointRows = await tx
             .insert(stopPoints)
@@ -269,6 +300,10 @@ export async function updateStop(stopId: string, params: StopUpdateParameters): 
             sequence: row.sequence,
             point: [row.point[1], row.point[0]] as [number, number],
           }));
+
+          const sortedForPolyline = [...points].sort((a, b) => a.sequence - b.sequence);
+          currentPolyline = encodePolyline(sortedForPolyline.map(p => p.point));
+          await tx.update(stops).set({ polyline: currentPolyline }).where(eq(stops.id, updatedStop.id));
         }
       } else {
         const existingPoints = await tx
@@ -356,6 +391,8 @@ export async function updateStop(stopId: string, params: StopUpdateParameters): 
         name: updatedStop.name,
         restrictionType: updatedStop.restrictionType,
         isPublic: updatedStop.isPublic,
+        disallowedDirection: updatedStop.disallowedDirection,
+        polyline: currentPolyline,
         points,
         routeIds,
         vehicleTypeIds,
@@ -442,20 +479,24 @@ export interface StopPointObject {
   point: [number, number];
 }
 
+export type DisallowedDirection = "direction_to" | "direction_back" | "both";
+
 export interface BaseStopObject {
   id: string;
   name: string;
   restrictionType: "universal" | "specific";
-  points: StopPointObject[];
+  disallowedDirection: DisallowedDirection;
+  polyline: string;
   routeIds: string[];
   vehicleTypeIds: string[];
 }
 
-export type StopObject = BaseStopObject & { isPublic: boolean }
+export type StopObject = BaseStopObject & { isPublic: boolean; points: StopPointObject[] }
 
 export interface StopAddParameters {
   name: string;
   restrictionType: "universal" | "specific";
+  disallowedDirection?: DisallowedDirection;
   points: Array<Omit<StopPointObject, "id">>;
   routeIds?: string[];
   vehicleTypeIds?: string[];
@@ -464,6 +505,7 @@ export interface StopAddParameters {
 export interface StopUpdateParameters {
   name?: string;
   restrictionType?: "universal" | "specific";
+  disallowedDirection?: DisallowedDirection;
   points?: Array<Omit<StopPointObject, "id">>;
   routeIds?: string[];
   vehicleTypeIds?: string[];
