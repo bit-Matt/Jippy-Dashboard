@@ -97,6 +97,9 @@ export const MAX_BOUNDARY_EXIT_WALK_METERS = 500;
 /** Average jeepney speed in km/h */
 export const JEEPNEY_SPEED_KMH = 10;
 
+/** Max distance (meters) from a graph node to a stop polyline to consider the node restricted */
+export const STOP_PROXIMITY_METERS = 30;
+
 /** Multiplier for fleet-based boarding cost: (roundTripDist / fleetCount) / 2 * this factor.
  *  Converts estimated wait time (in meters-of-route-covered) to a cost penalty.
  *  A low value keeps it as the lowest-priority factor after distance, walking, and transfers. */

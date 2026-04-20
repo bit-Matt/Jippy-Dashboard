@@ -67,4 +67,5 @@ public sealed class CachedStaticGraph
     public required Dictionary<string, GraphNode> Nodes { get; init; }
     public required Dictionary<string, List<BaseEdge>> BaseEdges { get; init; }
     public required Dictionary<string, double> RawBoardingCosts { get; init; }
+    public required HashSet<string> StopRestrictedNodes { get; init; }
 }

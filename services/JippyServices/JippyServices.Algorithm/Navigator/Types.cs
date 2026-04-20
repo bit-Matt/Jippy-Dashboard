@@ -99,6 +99,8 @@ public sealed class BaseGraph
     public required Dictionary<string, double> EgressWalkDistances { get; init; }
     public required bool HasAccessEdges { get; init; }
     public required bool HasEgressEdges { get; init; }
+    /// <summary>Node IDs where boarding, alighting, and transfers are forbidden by stop zones.</summary>
+    public required HashSet<string> StopRestrictedNodes { get; init; }
 }
 
 // -------------------------------------------------------------------------
@@ -151,11 +153,42 @@ public sealed class TransitClosure
     public required List<RegionPoint> Points { get; init; }
 }
 
+/// <summary>Restriction scope for a stop zone.</summary>
+public enum RestrictionType
+{
+    Universal,  // all routes
+    Specific,   // only listed route IDs
+}
+
+/// <summary>Direction(s) in which a stop zone restricts boarding/alighting.</summary>
+public enum DisallowedDirection
+{
+    DirectionTo,
+    DirectionBack,
+    Both,
+}
+
+/// <summary>
+/// A no-boarding / no-alighting zone defined by a decoded polyline.
+/// Graph nodes within StopProximityMeters of this line are restricted.
+/// </summary>
+public sealed class TransitStop
+{
+    public required string Id { get; init; }
+    public required RestrictionType RestrictionType { get; init; }
+    public required DisallowedDirection DisallowedDirection { get; init; }
+    /// <summary>Decoded polyline coordinates [lat, lng] defining the stop zone.</summary>
+    public required List<LatLng> DecodedPolyline { get; init; }
+    /// <summary>Route IDs that are restricted (only used when RestrictionType is Specific).</summary>
+    public required List<string> RouteIds { get; init; }
+}
+
 public sealed class TransitData
 {
     public required List<TransitRoute> Routes { get; init; }
     public required List<TransitRegion> Regions { get; init; }
     public required List<TransitClosure> Closures { get; init; }
+    public required List<TransitStop> Stops { get; init; }
 }
 
 // -------------------------------------------------------------------------

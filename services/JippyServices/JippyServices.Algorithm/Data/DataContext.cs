@@ -15,6 +15,8 @@ public class DataContext : DbContext
     public DbSet<RegionStation> RegionStations => Set<RegionStation>();
     public DbSet<RoadClosure> RoadClosures => Set<RoadClosure>();
     public DbSet<RoadClosurePoint> RoadClosurePoints => Set<RoadClosurePoint>();
+    public DbSet<Stop> Stops => Set<Stop>();
+    public DbSet<StopRoute> StopRoutes => Set<StopRoute>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -41,6 +43,14 @@ public class DataContext : DbContext
             e.HasMany(rc => rc.Points)
                 .WithOne(pt => pt.RoadClosure)
                 .HasForeignKey(pt => pt.RoadClosureId);
+        });
+
+        // Stop → routes (join)
+        modelBuilder.Entity<Stop>(e =>
+        {
+            e.HasMany(s => s.Routes)
+                .WithOne(sr => sr.Stop)
+                .HasForeignKey(sr => sr.StopId);
         });
     }
 }

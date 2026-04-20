@@ -88,10 +88,19 @@ export interface TransitClosure {
   points: { id: string; sequence: number; point: LatLng }[];
 }
 
+export interface TransitStop {
+  id: string;
+  restrictionType: "universal" | "specific";
+  disallowedDirection: "direction_to" | "direction_back" | "both";
+  decodedPolyline: LatLng[];
+  routeIds: string[];
+}
+
 export interface TransitData {
   routes: TransitRoute[];
   regions: TransitRegion[];
   closures: TransitClosure[];
+  stops: TransitStop[];
 }
 
 // -- Instruction types ------------------------------------------------------

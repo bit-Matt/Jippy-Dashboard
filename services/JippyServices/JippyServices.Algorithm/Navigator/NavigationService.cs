@@ -79,7 +79,7 @@ public sealed class NavigationService(GraphBuilder graphBuilder, LegAssembler le
         var adjacency = GraphBuilder.BuildCostedAdjacency(
             baseGraph.BaseEdges, baseGraph.RawBoardingCosts,
             baseGraph.AccessWalkDistances, baseGraph.EgressWalkDistances,
-            baseGraph.Nodes, profile);
+            baseGraph.Nodes, profile, baseGraph.StopRestrictedNodes);
 
         var graph = new Graph { Nodes = baseGraph.Nodes, Edges = adjacency };
         var nodePath = AStarPathfinder.FindOptimalPath(
@@ -130,7 +130,7 @@ public sealed class NavigationService(GraphBuilder graphBuilder, LegAssembler le
         var adjacency = GraphBuilder.BuildCostedAdjacency(
             baseGraph.BaseEdges, baseGraph.RawBoardingCosts,
             baseGraph.AccessWalkDistances, baseGraph.EgressWalkDistances,
-            baseGraph.Nodes, explorerProfile);
+            baseGraph.Nodes, explorerProfile, baseGraph.StopRestrictedNodes);
 
         var graph = new Graph { Nodes = baseGraph.Nodes, Edges = adjacency };
         var nodePath = AStarPathfinder.FindOptimalPath(

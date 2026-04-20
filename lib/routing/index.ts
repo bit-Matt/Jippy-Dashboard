@@ -120,6 +120,7 @@ async function runProfile(
     base.egressWalkDistances,
     base.nodes,
     profile,
+    base.stopRestrictedNodes,
   );
 
   const graph: Graph = { nodes: base.nodes, edges: adjacency };
@@ -167,6 +168,7 @@ async function runExplorerProfile(
     base.egressWalkDistances,
     base.nodes,
     explorerProfile,
+    base.stopRestrictedNodes,
   );
 
   const graph: Graph = { nodes: base.nodes, edges: adjacency };

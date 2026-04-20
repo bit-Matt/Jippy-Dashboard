@@ -102,6 +102,11 @@ public static class RoutingConstants
     /// <summary>Multiplier for fleet-based boarding cost.</summary>
     public const double BoardingCostFactor = 0.25;
 
+    // -- Stop zones ----------------------------------------------------------
+
+    /// <summary>Max distance (m) from a graph node to a stop polyline to consider the node restricted.</summary>
+    public const double StopProximityMeters = 30;
+
     // -- A* ------------------------------------------------------------------
 
     /// <summary>Maximum A* iterations before giving up.</summary>

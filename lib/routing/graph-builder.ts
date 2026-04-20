@@ -12,6 +12,7 @@ import { unwrap } from "@/lib/one-of";
 import * as routeManager from "@/lib/management/route-manager";
 import * as regionManager from "@/lib/management/region-manager";
 import * as closureManager from "@/lib/management/closure-manager";
+import * as stopManager from "@/lib/management/stop-manager";
 
 import { GridIndex } from "@/lib/routing/spatial-index";
 import {
@@ -31,6 +32,7 @@ import {
   MAX_BOUNDARY_EXIT_WALK_METERS,
   WALK_DETOUR_FACTOR,
   MAX_DIRECT_WALK_INSTEAD_OF_HAIL_METERS,
+  STOP_PROXIMITY_METERS,
 } from "@/lib/routing/constants";
 import type {
   GraphEdge,
@@ -41,6 +43,7 @@ import type {
   TransitRegion,
   TransitRoute,
   TransitStation,
+  TransitStop,
   WeightProfile,
 } from "@/lib/routing/types";
 
@@ -91,6 +94,8 @@ export interface BaseGraph {
   /** Whether any access / egress edges were found */
   hasAccessEdges: boolean;
   hasEgressEdges: boolean;
+  /** Node IDs where drop-off / boarding / transfer is restricted by stop zones */
+  stopRestrictedNodes: Set<string>;
 }
 
 // ---------------------------------------------------------------------------
@@ -100,10 +105,11 @@ export interface BaseGraph {
 export async function loadTransitData(): Promise<TransitData> {
   const { decodePolyline } = await import("./polyline");
 
-  const [allRoutes, allRegions, allClosures] = await Promise.all([
+  const [allRoutes, allRegions, allClosures, allStops] = await Promise.all([
     unwrap(routeManager.getAllRoutes(true)),
     unwrap(regionManager.getAllRegions(true)),
     unwrap(closureManager.getAllClosures(true)),
+    unwrap(stopManager.getAllStops(true)),
   ]);
 
   const routes: TransitRoute[] = allRoutes.map((r) => ({
@@ -132,7 +138,21 @@ export async function loadTransitData(): Promise<TransitData> {
     points: c.points,
   }));
 
-  return { routes, regions, closures };
+  const stops: TransitStop[] = (allStops as stopManager.BaseStopObject[])
+    .filter((s) => s.polyline && s.polyline.length > 0)
+    .map((s) => {
+      const decoded = decodePolyline(s.polyline);
+      return {
+        id: s.id,
+        restrictionType: s.restrictionType,
+        disallowedDirection: s.disallowedDirection,
+        decodedPolyline: decoded,
+        routeIds: s.routeIds,
+      };
+    })
+    .filter((s) => s.decodedPolyline.length >= 2);
+
+  return { routes, regions, closures, stops };
 }
 
 // ---------------------------------------------------------------------------
@@ -372,6 +392,63 @@ export function markClosureEdges(
       }
     }
   }
+}
+
+// ---------------------------------------------------------------------------
+// 5a. Mark stop-restricted nodes (no boarding / alighting / transfer)
+// ---------------------------------------------------------------------------
+
+/**
+ * Identifies graph nodes that fall within a stop zone polyline.
+ * Restricted nodes cannot be used for boarding, alighting, or transfers.
+ */
+export function markStopRestrictedNodes(
+  nodes: Map<string, GraphNode>,
+  stops: TransitStop[],
+): Set<string> {
+  const restricted = new Set<string>();
+
+  if (stops.length === 0) return restricted;
+
+  const stopLines = stops
+    .map((s) => ({
+      stop: s,
+      line: turfLineString(s.decodedPolyline.map((p) => [p[1], p[0]])),
+    }));
+
+  for (const [nodeId, node] of nodes) {
+    if (!node.routeId) continue;
+
+    const pt = turfPoint([node.lng, node.lat]);
+
+    for (const { stop, line } of stopLines) {
+      const nearest = nearestPointOnLine(line, pt, { units: "meters" });
+      const dist = nearest.properties.dist ?? nearest.properties.pointDistance ?? Infinity;
+
+      if (dist > STOP_PROXIMITY_METERS) continue;
+
+      // Check direction match
+      const directionMatches =
+        stop.disallowedDirection === "both" ||
+        (stop.disallowedDirection === "direction_to" && node.direction === "goingTo") ||
+        (stop.disallowedDirection === "direction_back" && node.direction === "goingBack");
+
+      if (!directionMatches) continue;
+
+      // Check restriction type
+      if (stop.restrictionType === "universal") {
+        restricted.add(nodeId);
+        break;
+      }
+
+      if (stop.restrictionType === "specific" && stop.routeIds.includes(node.routeId)) {
+        restricted.add(nodeId);
+        break;
+      }
+    }
+  }
+
+  return restricted;
 }
 
 // ---------------------------------------------------------------------------
@@ -1039,6 +1116,7 @@ export function buildCostedAdjacency(
   egressDistances: Map<string, number>,
   nodes: Map<string, GraphNode>,
   profile: WeightProfile,
+  stopRestrictedNodes: Set<string>,
 ): Map<string, GraphEdge[]> {
   const adjacency = new Map<string, GraphEdge[]>();
 
@@ -1047,6 +1125,10 @@ export function buildCostedAdjacency(
     const costed: GraphEdge[] = [];
 
     for (const base of edges) {
+      // Skip all non-transit edges from stop-restricted nodes —
+      // the user cannot alight, transfer, walk, or board a tricycle there.
+      if (base.type !== "transit" && stopRestrictedNodes.has(base.from)) continue;
+
       let cost: number;
 
       if (base.type === "transit") {
@@ -1113,6 +1195,8 @@ export function buildCostedAdjacency(
   for (const [nodeId, rawDist] of accessDistances) {
     const node = nodes.get(nodeId);
     if (!node) continue;
+    // Skip boarding at stop-restricted nodes
+    if (stopRestrictedNodes.has(nodeId)) continue;
     const walkCost = profileWalkCost(rawDist, profile);
     const boardingCost = (rawBoardingCosts.get(node.routeId) ?? 0) * profile.boardingCostFactor;
     existingStartEdges.push({
@@ -1129,6 +1213,8 @@ export function buildCostedAdjacency(
 
   // Add egress edges (transit nodes → VIRTUAL_END)
   for (const [nodeId, rawDist] of egressDistances) {
+    // Skip alighting at stop-restricted nodes
+    if (stopRestrictedNodes.has(nodeId)) continue;
     const walkCost = profileWalkCost(rawDist, profile);
     let nodeEdges = adjacency.get(nodeId);
     if (!nodeEdges) {
@@ -1195,6 +1281,9 @@ export async function buildBaseGraph(
   const hasAccessEdges = accessDistances.size > 0;
   const hasEgressEdges = egressDistances.size > 0;
 
+  // Mark nodes within stop zone polylines as restricted
+  const stopRestrictedNodes = markStopRestrictedNodes(nodes, transitData.stops);
+
   return {
     baseGraph: {
       nodes,
@@ -1204,6 +1293,7 @@ export async function buildBaseGraph(
       egressWalkDistances: egressDistances,
       hasAccessEdges,
       hasEgressEdges,
+      stopRestrictedNodes,
     },
     transitData,
   };

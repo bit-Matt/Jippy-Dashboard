@@ -106,7 +106,44 @@ public sealed class GraphBuilder(DataContext db, GraphHopperClient graphHopper, 
                 .ToList(),
         }).ToList();
 
-        return new TransitData { Routes = routes, Regions = regions, Closures = closures };
+        // Public stops with their associated route restrictions
+        var dbStops = await db.Stops
+            .AsNoTracking()
+            .Where(s => s.IsPublic && s.Polyline != string.Empty)
+            .Include(s => s.Routes)
+            .ToListAsync();
+
+        var stops = dbStops
+            .Select(s =>
+            {
+                var decoded = string.IsNullOrEmpty(s.Polyline) ? [] : PolylineCodec.Decode(s.Polyline);
+                if (decoded.Count < 2) return null;
+
+                var restrictionType = s.RestrictionType == "specific"
+                    ? RestrictionType.Specific
+                    : RestrictionType.Universal;
+
+                var disallowedDirection = s.DisallowedDirection switch
+                {
+                    "direction_to" => DisallowedDirection.DirectionTo,
+                    "direction_back" => DisallowedDirection.DirectionBack,
+                    _ => DisallowedDirection.Both,
+                };
+
+                return new TransitStop
+                {
+                    Id = s.Id.ToString(),
+                    RestrictionType = restrictionType,
+                    DisallowedDirection = disallowedDirection,
+                    DecodedPolyline = decoded,
+                    RouteIds = s.Routes.Select(r => r.RouteId.ToString()).ToList(),
+                };
+            })
+            .Where(s => s != null)
+            .Cast<TransitStop>()
+            .ToList();
+
+        return new TransitData { Routes = routes, Regions = regions, Closures = closures, Stops = stops };
     }
 
     /// <summary>
@@ -976,6 +1013,7 @@ public sealed class GraphBuilder(DataContext db, GraphHopperClient graphHopper, 
     /// <param name="egressDistances"></param>
     /// <param name="nodes"></param>
     /// <param name="profile"></param>
+    /// <param name="stopRestrictedNodes"></param>
     /// <returns></returns>
     public static Dictionary<string, List<GraphEdge>> BuildCostedAdjacency(
         Dictionary<string, List<BaseEdge>> baseEdges,
@@ -983,7 +1021,8 @@ public sealed class GraphBuilder(DataContext db, GraphHopperClient graphHopper, 
         Dictionary<string, double> accessDistances,
         Dictionary<string, double> egressDistances,
         Dictionary<string, GraphNode> nodes,
-        WeightProfile profile)
+        WeightProfile profile,
+        HashSet<string> stopRestrictedNodes)
     {
         var adjacency = new Dictionary<string, List<GraphEdge>>();
 
@@ -994,6 +1033,8 @@ public sealed class GraphBuilder(DataContext db, GraphHopperClient graphHopper, 
 
             foreach (var baseEdge in edges)
             {
+                // Stop-restricted nodes cannot alight, transfer, walk, or board a tricycle.
+                if (baseEdge.Type != EdgeType.Transit && stopRestrictedNodes.Contains(baseEdge.From)) continue;
                 double cost;
 
                 switch (baseEdge.Type)
@@ -1071,6 +1112,8 @@ public sealed class GraphBuilder(DataContext db, GraphHopperClient graphHopper, 
         foreach (var (nodeId, rawDist) in accessDistances)
         {
             if (!nodes.TryGetValue(nodeId, out var node)) continue;
+            // Skip boarding at stop-restricted nodes
+            if (stopRestrictedNodes.Contains(nodeId)) continue;
             var walkCost = GeoUtils.ProfileWalkCost(rawDist, profile);
             rawBoardingCosts.TryGetValue(node.RouteId, out var bc);
             var boardingCost = bc * profile.BoardingCostFactor;
@@ -1089,6 +1132,8 @@ public sealed class GraphBuilder(DataContext db, GraphHopperClient graphHopper, 
         // Add egress edges (transit nodes → VIRTUAL_END)
         foreach (var (nodeId, rawDist) in egressDistances)
         {
+            // Skip alighting at stop-restricted nodes
+            if (stopRestrictedNodes.Contains(nodeId)) continue;
             var walkCost = GeoUtils.ProfileWalkCost(rawDist, profile);
             if (!adjacency.TryGetValue(nodeId, out var nodeEdges))
             {
@@ -1134,6 +1179,7 @@ public sealed class GraphBuilder(DataContext db, GraphHopperClient graphHopper, 
             MarkClosureEdges(baseEdges, nodes, transitData.Closures);
 
             var rawBoardingCosts = ComputeRawBoardingCosts(transitData.Routes);
+            var stopRestrictedNodes = MarkStopRestrictedNodes(nodes, transitData.Stops);
 
             return new CachedStaticGraph
             {
@@ -1141,6 +1187,7 @@ public sealed class GraphBuilder(DataContext db, GraphHopperClient graphHopper, 
                 Nodes = nodes,
                 BaseEdges = baseEdges,
                 RawBoardingCosts = rawBoardingCosts,
+                StopRestrictedNodes = stopRestrictedNodes,
             };
         });
     }
@@ -1174,6 +1221,7 @@ public sealed class GraphBuilder(DataContext db, GraphHopperClient graphHopper, 
             EgressWalkDistances = egressDistances,
             HasAccessEdges = accessDistances.Count > 0,
             HasEgressEdges = egressDistances.Count > 0,
+            StopRestrictedNodes = staticGraph.StopRestrictedNodes,
         };
 
         return (baseGraph, staticGraph.TransitData);
@@ -1182,6 +1230,92 @@ public sealed class GraphBuilder(DataContext db, GraphHopperClient graphHopper, 
     // =====================================================================
     // Helpers
     // =====================================================================
+
+    /// <summary>
+    /// Identifies graph nodes that fall within StopProximityMeters of a stop zone
+    /// polyline. Restricted nodes cannot be used for boarding, alighting, or transfers.
+    /// Mirrors markStopRestrictedNodes in lib/routing/graph-builder.ts.
+    /// </summary>
+    private static HashSet<string> MarkStopRestrictedNodes(
+        Dictionary<string, GraphNode> nodes,
+        List<TransitStop> stops)
+    {
+        var restricted = new HashSet<string>();
+        if (stops.Count == 0) return restricted;
+
+        foreach (var (nodeId, node) in nodes)
+        {
+            if (string.IsNullOrEmpty(node.RouteId)) continue;
+
+            var nodePoint = new LatLng(node.Lat, node.Lng);
+
+            foreach (var stop in stops)
+            {
+                var dist = DistanceToPolylineMeters(nodePoint, stop.DecodedPolyline);
+                if (dist > RoutingConstants.StopProximityMeters) continue;
+
+                // Check direction match
+                var directionMatches =
+                    stop.DisallowedDirection == DisallowedDirection.Both ||
+                    (stop.DisallowedDirection == DisallowedDirection.DirectionTo && node.Direction == RouteDirection.GoingTo) ||
+                    (stop.DisallowedDirection == DisallowedDirection.DirectionBack && node.Direction == RouteDirection.GoingBack);
+
+                if (!directionMatches) continue;
+
+                if (stop.RestrictionType == RestrictionType.Universal)
+                {
+                    restricted.Add(nodeId);
+                    break;
+                }
+
+                if (stop.RestrictionType == RestrictionType.Specific && stop.RouteIds.Contains(node.RouteId))
+                {
+                    restricted.Add(nodeId);
+                    break;
+                }
+            }
+        }
+
+        return restricted;
+    }
+
+    /// <summary>
+    /// Computes the minimum haversine distance (meters) from a point to any
+    /// segment of the given polyline.
+    /// </summary>
+    private static double DistanceToPolylineMeters(LatLng point, List<LatLng> polyline)
+    {
+        var minDist = double.MaxValue;
+
+        for (var i = 0; i < polyline.Count - 1; i++)
+        {
+            var segA = polyline[i];
+            var segB = polyline[i + 1];
+            var d = DistanceToSegmentMeters(point, segA, segB);
+            if (d < minDist) minDist = d;
+        }
+
+        return minDist;
+    }
+
+    /// <summary>
+    /// Minimum haversine distance (meters) from a point to a line segment [a, b].
+    /// Projects point onto the segment in flat lat/lng space, then measures
+    /// haversine to the projected (or endpoint) result.
+    /// </summary>
+    private static double DistanceToSegmentMeters(LatLng p, LatLng a, LatLng b)
+    {
+        var dx = b.Lng - a.Lng;
+        var dy = b.Lat - a.Lat;
+        var lenSq = dx * dx + dy * dy;
+
+        if (lenSq == 0)
+            return GeoUtils.HaversineMeters(p, a);
+
+        var t = Math.Clamp(((p.Lng - a.Lng) * dx + (p.Lat - a.Lat) * dy) / lenSq, 0, 1);
+        var nearest = new LatLng(a.Lat + t * dy, a.Lng + t * dx);
+        return GeoUtils.HaversineMeters(p, nearest);
+    }
 
     private static bool IsStationAvailable(TransitStation station, DateTime now)
     {
