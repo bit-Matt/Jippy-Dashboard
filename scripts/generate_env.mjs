@@ -30,14 +30,14 @@ async function main() {
     process.exit(1);
   }
 
-  const resend = await utils.env.ask("Your Resend API Key", "runtime.resend.api.key");
+  const resend = await utils.env.ask("Your Resend API Key", "resend.api.key");
   if (!resend) {
     throw new Error("Resend API Key is required.");
   }
 
   const resendFromAddress = await utils.env.ask(
     "Your Resend From Address (Example: jippy <no-reply@jippy.com>)",
-    "runtime.resend.from.address",
+    "resend.from.address",
   );
   if (!resendFromAddress) {
     throw new Error("Resend From Address is required.");
