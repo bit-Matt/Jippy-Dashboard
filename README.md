@@ -122,8 +122,6 @@ The payload must be a JSON object containing `start` and `end` coordinates as [l
 }
 ```
 
-Where `start` and `end` represents `LatLng` tuple. It must be on JSON format. Other formats are not supported.
-
 ### POST `/api/public/navigate/v2`
 
 An optimized navigation endpoint utilizing the rewritten [`JippyServices.Algorithm`](services/JippyServices/JippyServices.Algorithm).
