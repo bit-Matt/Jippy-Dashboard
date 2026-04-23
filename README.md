@@ -4,11 +4,28 @@ This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-
 
 ## Getting Started
 
+### System Requirements
+
+* **CPU**: 8-core processor or higher.
+* **Memory**:
+    * **Minimum**: 8GB RAM.
+    * **Recommended**: 16GB RAM.
+* **Storage**: 20GB+ available space. High-speed storage (NVMe or SSD) is strongly recommended for optimal tile serving and routing performance.
+
 ### Requirements
 
 1. [Docker Engine/Desktop](https://www.docker.com/) with [`docker-compose`](https://docs.docker.com/compose/)
 2. [Node.js 24 (LTS) or >= 25](https://nodejs.org/en) (Recommended to use LTS versions of Node.js)
 3. [npm >= 11] (Bundled with Node.js)
+
+### Recommended IDEs for Development:
+
+- Visual Studio Code with following extensions:
+   - [C# Dev Kit (For `JippyServices.Algorithm` project)](https://marketplace.visualstudio.com/items?itemName=ms-dotnettools.csdevkit)
+   - [ESLint](https://marketplace.visualstudio.com/items?itemName=dbaeumer.vscode-eslint)
+   - [Container Tools (Optional)](https://marketplace.visualstudio.com/items?itemName=ms-azuretools.vscode-containers)
+   - [Docker (Optional)](https://marketplace.visualstudio.com/items?itemName=ms-azuretools.vscode-docker)
+- [WebStorm (Free for non-commercial use)](https://www.jetbrains.com/webstorm/) & [Rider (Free for non-commercial use)](https://www.jetbrains.com/rider/)
 
 ### Environment Setup
 
@@ -24,40 +41,92 @@ This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-
    npm run setup
    ```
 
-3. Then run the development server:
+3. Create your tileserver configurations:
+
+   ```sh
+   npm run setup:tileserver-style
+   ```
+
+4. Then run the development server:
 
    ```sh
    npm run dev
    ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+5. Register your one and only root account:
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+   ```sh
+   npm run setup:admin
+   ```
+
+6. (Optional & Recommended) Seed the routes provided:
+
+   ```sh
+   npm run db:seed:clean
+   ```
+
+   Or if you prefer to clean everything by yourself, use:
+
+   ```sh
+   npm run db:seed:raw
+   ```
+
+Open [http://localhost:6769](http://localhost:6769) with your browser to see the result.
 
 ## Learn More
 
 To learn more about how this project is developed, take a look at the following resources:
 
+### Core Framework & UI:
+
 - [Next.js Documentation](https://nextjs.org/docs) – learn about Next.js features and API.
 - [Learn Next.js](https://nextjs.org/learn) – an interactive Next.js tutorial.
 - [Shadcn Documentation](https://ui.shadcn.com/)
-- [Drizzle ORM](https://orm.drizzle.team/docs/overview) especially [PostGIS geometry point](https://orm.drizzle.team/docs/guides/postgis-geometry-point) queries.
 - [react-leaflet](https://react-leaflet.js.org/) & [Leaflet](https://leafletjs.com/)
-- [Valhalla](https://valhalla.github.io/valhalla/)
-- [Nominatim](https://nominatim.org/)
-- [mapserver/tileserver-gl](https://github.com/maptiler/tileserver-gl)
-- [systemed/tilemaker](https://github.com/systemed/tilemaker)
-- The official Software Architecture Document
 
-## Interacting with the API
+### Databases & Caching:
+- [Drizzle ORM](https://orm.drizzle.team/docs/overview) especially [PostGIS geometry point](https://orm.drizzle.team/docs/guides/postgis-geometry-point) queries.
+- [Redis](https://redis.io/docs/latest/develop/clients/nodejs/)
+- [`IMemoryCache`](https://learn.microsoft.com/en-us/dotnet/api/microsoft.extensions.caching.memory.imemorycache)
 
+### Geospatial & Routing Engines:
 
-### Route Information API
+- [Valhalla](https://valhalla.github.io/valhalla/) - The primary engine used for vehicle routing.
+- [Nominatim](https://nominatim.org/) - Geocoding service for address and location lookups.
+- [GraphHopper](https://www.graphhopper.com/) - Specialized routing engine for pedestrian and walking paths.
 
-All route information can be fetched via `/api/public/all`.
+### Map Serving & Data Processing
+- [mapserver/tileserver-gl](https://github.com/maptiler/tileserver-gl) - Our vector and raster tile server.
+- [systemed/tilemaker](https://github.com/systemed/tilemaker) - Tool for creating vector tiles directly from OSM data without a database.
 
-## Deploy on Vercel
+## API Reference
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+The public API is accessible without authentication. To ensure service stability, an aggressive rate limit of 1 requests per second (10 requests per 10 seconds) per IP address is enforced on the public deployment.
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+### GET `/api/public/all`
+
+Fetches a comprehensive dataset of all registered Routes, Regions, Tricycle stations, and current Road Closures.
+
+### POST `/api/public/navigate/v1`
+
+Generates step-by-step navigation instructions between two points.
+
+#### Request Body:
+
+The payload must be a JSON object containing `start` and `end` coordinates as [latitude, longitude] tuples.
+
+```json
+{
+   "start": [0, 0],
+   "end": [1, 1]
+}
+```
+
+Where `start` and `end` represents `LatLng` tuple. It must be on JSON format. Other formats are not supported.
+
+### POST `/api/public/navigate/v2`
+
+An optimized navigation endpoint utilizing the rewritten [`JippyServices.Algorithm`](services/JippyServices/JippyServices.Algorithm).
+
+> [!NOTE]
+> While the input schema remains identical to `v1`, this version may yield different routing results or improved transfer logic (e.g., between Jeepneys and Tricycles) compared to the legacy engine.
