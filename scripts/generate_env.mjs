@@ -46,7 +46,7 @@ async function main() {
   // Token generation for authentication
   const token = utils.token.generatePassword(32, "!#%&()*+,/:;<=>?@[]^`{|}");
   utils.env.write("better.auth.secret", token);
-  utils.env.write("better.auth.url", "http://localhost:6769");
+  await utils.env.ask("Deployment URL", "better.auth.url", "http://localhost:6769");
 
   // Database configuration
   const databaseUsername = await utils.env.ask(
