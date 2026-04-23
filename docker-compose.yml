@@ -1,11 +1,12 @@
 services:
+  # Databases and Caches
   db:
     restart: unless-stopped
     image: postgis/postgis:18-3.6
     ports:
       - "${POSTGRES_PORT}:5432"
-    networks:
-      - defaultNetwork
+    volumes:
+      - ./.osm-data/db:/var/lib/postgresql
     environment:
       POSTGRES_USERNAME: ${POSTGRES_USERNAME}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
@@ -19,6 +20,21 @@ services:
       retries: 5
       start_period: 30s
     shm_size: 1gb
+    networks:
+      - defaultNetwork
+  redis:
+    restart: unless-stopped
+    image: redis:8-trixie
+    ports:
+      - "${REDIS_PORT}:6379"
+    healthcheck:
+      test: [ "CMD", "redis-cli", "ping" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    networks:
+      - defaultNetwork
 
   # Open Street Maps
   tileserver:
@@ -76,6 +92,58 @@ services:
       interval: 30s
       retries: 9999
       start_period: 30m
+    networks:
+      - defaultNetwork
+  graphhopper:
+    image: israelhikingmap/graphhopper:latest
+    container_name: graphhopper
+    depends_on:
+      valhalla:
+        condition: service_healthy
+    restart: unless-stopped
+    ports:
+      - "6704:8989"
+    volumes:
+      - ./.osm-data/graphhopper:/data
+      - ./.osm-data/philippines-latest.osm.pbf:/data/philippines-latest.osm.pbf
+    environment:
+      - JAVA_OPTS=-Xmx2g -Xms2g -Ddw.graphhopper.graph.encoded_values=car_access,car_average_speed,country,road_class,roundabout,max_speed,foot_access,foot_average_speed,foot_priority,foot_road_access,hike_rating,average_slope,bike_access,bike_average_speed,bike_priority,bike_road_access,bike_network,mtb_rating,ferry_speed,road_environment
+    command: >
+      -i /data/philippines-latest.osm.pbf
+      -o /data/graph-cache
+      --host 0.0.0.0
+    healthcheck:
+      test: [ "CMD-SHELL", "curl -f http://localhost:8989/info || exit 1" ]
+      interval: 30s
+      timeout: 10s
+      retries: 9999
+      start_period: 10m
+    networks:
+      - defaultNetwork
+
+  # Other services
+  algorithm:
+    build:
+      context: services/JippyServices
+      dockerfile: JippyServices.Algorithm/Dockerfile
+    restart: unless-stopped
+    ports:
+      - "6705:8080"
+    environment:
+      Services__Nominatim: ${DOTNET_NOMINATIM_URL}
+      Services__Valhalla: ${DOTNET_VALHALLA_URL}
+      Services__GraphHopper: ${DOTNET_GRAPHHOPPER_URL}
+      ConnectionStrings__DefaultConnection: ${DOTNET_POSTGRES_URL}
+      ConnectionStrings__RedisCache: ${DOTNET_REDIS_URL}
+    depends_on:
+      db:
+        condition: service_healthy
+      geocoder:
+        condition: service_healthy
+      valhalla:
+        condition: service_healthy
+      graphhopper:
+        condition: service_healthy
     networks:
       - defaultNetwork
 

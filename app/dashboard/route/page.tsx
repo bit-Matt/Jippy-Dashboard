@@ -34,48 +34,10 @@ import { Switch } from "@/components/ui/switch";
 import { ClosureEditorProvider } from "@/contexts/ClosureEditorContext";
 import { RouteEditorProvider, useRouteEditor } from "@/contexts/RouteEditorContext";
 import { $fetch } from "@/lib/http/client";
-import type { IApiResponse } from "@/lib/http/ResponseComposer";
+import type { IApiResponse } from "@/lib/http/ApiResponseBuilder";
+import { decodePolyline } from "@/lib/routing/polyline";
 
 import RouteMapComponent from "./MapComponent";
-
-const POLYLINE6_PRECISION = 1_000_000;
-
-const decodePolyline6 = (encoded: string): Array<[number, number]> => {
-  if (!encoded) return [];
-
-  const coordinates: Array<[number, number]> = [];
-  let index = 0;
-  let lat = 0;
-  let lng = 0;
-
-  while (index < encoded.length) {
-    let result = 0;
-    let shift = 0;
-    let byte: number;
-
-    do {
-      byte = encoded.charCodeAt(index++) - 63;
-      result |= (byte & 0x1f) << shift;
-      shift += 5;
-    } while (byte >= 0x20);
-
-    lat += (result & 1) ? ~(result >> 1) : (result >> 1);
-
-    result = 0;
-    shift = 0;
-
-    do {
-      byte = encoded.charCodeAt(index++) - 63;
-      result |= (byte & 0x1f) << shift;
-      shift += 5;
-    } while (byte >= 0x20);
-
-    lng += (result & 1) ? ~(result >> 1) : (result >> 1);
-    coordinates.push([lat / POLYLINE6_PRECISION, lng / POLYLINE6_PRECISION]);
-  }
-
-  return coordinates;
-};
 
 const isPointInPolygon = (point: [number, number], polygon: Array<[number, number]>): boolean => {
   const [lat, lng] = point;
@@ -232,11 +194,11 @@ function RouteDashboardContent() {
       const routeLines: Array<Array<[number, number]>> = [];
 
       if (route.polylines.to) {
-        routeLines.push(decodePolyline6(route.polylines.to));
+        routeLines.push(decodePolyline(route.polylines.to));
       }
 
       if (route.polylines.back) {
-        routeLines.push(decodePolyline6(route.polylines.back));
+        routeLines.push(decodePolyline(route.polylines.back));
       }
 
       const hasIntersection = routeLines.some((line) => (
@@ -498,7 +460,8 @@ function RouteDashboardContent() {
     if (!selectedRoute) return;
 
     const selectedSnapshot = routeSnapshots.find((snapshot) => snapshot.id === snapshotId);
-    if (!selectedSnapshot || selectedSnapshot.state === "ready") return;
+    const isAdminEditingReady = selectedSnapshot?.state === "ready" && userRole === "administrator_user" && !selectedRoute.isPublic;
+    if (!selectedSnapshot || (selectedSnapshot.state === "ready" && !isAdminEditingReady)) return;
 
     setIsSnapshotActing(true);
     const routeSnapshot = await fetchRouteSnapshot(selectedRoute.id, snapshotId);
@@ -627,7 +590,7 @@ function RouteDashboardContent() {
             closures={closures}
             showClosuresOnMap={showClosuresOnMap}
             focusedWaypoints={selectedRoute
-              ? decodePolyline6(selectedRoute.polylines.to)
+              ? decodePolyline(selectedRoute.polylines.to)
               : undefined}
             focusKey={routeFocusKey}
           />

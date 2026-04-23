@@ -15,6 +15,7 @@ import "@geoman-io/leaflet-geoman-free/dist/leaflet-geoman.css";
 import "leaflet-routing-machine/dist/leaflet-routing-machine.css";
 
 import { useRouteEditor } from "@/contexts/RouteEditorContext";
+import { decodePolyline } from "@/lib/routing/polyline";
 
 const FocusRouteView = ({ focusKey, focusedWaypoints }: FocusRouteViewProps) => {
   const map = useMap();
@@ -88,44 +89,6 @@ const MapInteractionLock = ({ locked }: { locked: boolean }) => {
   }, [map, locked]);
 
   return null;
-};
-
-const POLYLINE6_PRECISION = 1_000_000;
-
-const decodePolyline6 = (encoded: string): Array<[number, number]> => {
-  const coordinates: Array<[number, number]> = [];
-  let index = 0;
-  let lat = 0;
-  let lng = 0;
-
-  while (index < encoded.length) {
-    let result = 0;
-    let shift = 0;
-    let byte: number;
-
-    do {
-      byte = encoded.charCodeAt(index++) - 63;
-      result |= (byte & 0x1f) << shift;
-      shift += 5;
-    } while (byte >= 0x20);
-
-    lat += (result & 1) ? ~(result >> 1) : (result >> 1);
-
-    result = 0;
-    shift = 0;
-
-    do {
-      byte = encoded.charCodeAt(index++) - 63;
-      result |= (byte & 0x1f) << shift;
-      shift += 5;
-    } while (byte >= 0x20);
-
-    lng += (result & 1) ? ~(result >> 1) : (result >> 1);
-
-    coordinates.push([lat / POLYLINE6_PRECISION, lng / POLYLINE6_PRECISION]);
-  }
-
-  return coordinates;
 };
 
 const VectorTileLayer = () => {
@@ -541,7 +504,7 @@ export default function RouteMapComponent({
 
       const nextPrepared = await Promise.all(routing.map(async (route) => ({
         color: route.color,
-        coordinates: decodePolyline6(route.polyline),
+        coordinates: decodePolyline(route.polyline),
       })));
 
       if (isCancelled) return;

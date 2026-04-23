@@ -1,9 +1,32 @@
 import {and, count, eq, sql} from "drizzle-orm";
+import { DateTime } from "luxon";
 
 import {db} from "@/lib/db";
 import {region, regionSequences, regionSnapshots, regionStations} from "@/lib/db/schema";
 import {ErrorCodes, Failure, Result, Success} from "@/lib/one-of/types";
 import {unwrap} from "@/lib/one-of";
+
+/**
+ * Converts a local UTC+8 time string ("HH:mm") to a UTC time string ("HH:mm").
+ * This is used when persisting availability windows so the stored values are
+ * always in UTC, matching the server runtime timezone.
+ */
+function toUtcTime(localTime: string): string {
+  const [h, m] = localTime.split(":").map(Number);
+  const dt = DateTime.fromObject({ hour: h, minute: m }, { zone: "Asia/Manila" }).toUTC();
+  return `${String(dt.hour).padStart(2, "0")}:${String(dt.minute).padStart(2, "0")}`;
+}
+
+/**
+ * Converts a stored UTC time string ("HH:mm") back to a UTC+8 time string ("HH:mm").
+ * Used when returning availability windows to API callers so they see the local
+ * Philippine time they originally configured.
+ */
+function fromUtcTime(utcTime: string): string {
+  const [h, m] = utcTime.split(":").map(Number);
+  const dt = DateTime.fromObject({ hour: h, minute: m }, { zone: "UTC" }).setZone("Asia/Manila");
+  return `${String(dt.hour).padStart(2, "0")}:${String(dt.minute).padStart(2, "0")}`;
+}
 
 /**
  * Fetches all regions with their active snapshot's points and stations.
@@ -66,7 +89,16 @@ export async function getAllRegions(forPublic = true): Promise<Result<RegionBase
         .from(region)
         .where(eq(region.isPublic, true));
 
-      return new Success(result satisfies RegionBaseObject[]);
+      return new Success(
+        (result as RegionBaseObject[]).map((r) => ({
+          ...r,
+          stations: r.stations.map((s) => ({
+            ...s,
+            availableFrom: fromUtcTime(s.availableFrom),
+            availableTo: fromUtcTime(s.availableTo),
+          })),
+        })) satisfies RegionBaseObject[],
+      );
     }
 
     const result = await db
@@ -137,7 +169,14 @@ export async function getRegionById(regionId: string): Promise<Result<RegionObje
       return new Failure(ErrorCodes.ResourceNotFound, "Unable to find region.", { regionId });
     }
 
-    return new Success(result);
+    return new Success({
+      ...result,
+      stations: result.stations.map((s) => ({
+        ...s,
+        availableFrom: fromUtcTime(s.availableFrom),
+        availableTo: fromUtcTime(s.availableTo),
+      })),
+    });
   } catch (e) {
     return new Failure(ErrorCodes.Fatal, "Failed to fetch region.", { regionId }, e);
   }
@@ -216,7 +255,14 @@ export async function getSnapshotInformationById(regionId: string, snapshotId: s
       return new Failure(ErrorCodes.ResourceNotFound, "Region not found.", { regionId });
     }
 
-    return new Success(result as RegionSnapshotObject);
+    return new Success({
+      ...result,
+      stations: (result as RegionSnapshotObject).stations.map((s) => ({
+        ...s,
+        availableFrom: fromUtcTime(s.availableFrom),
+        availableTo: fromUtcTime(s.availableTo),
+      })),
+    } as RegionSnapshotObject);
   } catch (e) {
     return new Failure(ErrorCodes.Fatal, "Failed to fetch regions.", {}, e);
   }
@@ -291,8 +337,8 @@ export async function createSnapshot(regionId: string, params: RegionAddParamete
             params.stations.map(point => ({
               regionSnapshotId: snapshot.id,
               address: point.address,
-              availableFrom: point.availableFrom ?? "00:00",
-              availableTo: point.availableTo ?? "23:59",
+              availableFrom: toUtcTime(point.availableFrom ?? "00:00"),
+              availableTo: toUtcTime(point.availableTo ?? "23:59"),
               point: [point.point[1], point.point[0]] as [number, number],
             })),
           )
@@ -300,8 +346,8 @@ export async function createSnapshot(regionId: string, params: RegionAddParamete
         stations = stationCreateResult.map(s => ({
           id: s.id,
           address: s.address,
-          availableFrom: s.availableFrom,
-          availableTo: s.availableTo,
+          availableFrom: fromUtcTime(s.availableFrom),
+          availableTo: fromUtcTime(s.availableTo),
           point: [s.point[1], s.point[0]],
         }));
       }
@@ -670,12 +716,14 @@ export async function removeRegion(regionId: string): Promise<Result<null>> {
  * @param regionId - The unique identifier of the region.
  * @param snapshotId - The unique identifier of the snapshot to update.
  * @param params - The snapshot fields and/or related collections to modify.
+ * @param bypassReadyCheck
  * @returns A `Result<RegionSnapshotObject>` containing the updated snapshot, or a failure if the update fails.
  */
 export async function updateRegionSnapshot(
   regionId: string,
   snapshotId: string,
   params: UpdateRegionParameters,
+  bypassReadyCheck: boolean = false,
 ) {
   try {
     const [snapshotToEdit] = await db
@@ -692,7 +740,7 @@ export async function updateRegionSnapshot(
       return new Failure(ErrorCodes.ResourceNotFound, "Region snapshot not found.", { regionId, snapshotId });
     }
 
-    if (snapshotToEdit.state === "ready") {
+    if (snapshotToEdit.state === "ready" && !bypassReadyCheck) {
       return new Failure(ErrorCodes.ResourceNotFound, "Snapshot is not editable. Create a new copy and edit.", { regionId, snapshotId });
     }
 
@@ -751,8 +799,8 @@ export async function updateRegionSnapshot(
             params.stations.map((station) => ({
               regionSnapshotId: snapshotToEdit.id,
               address: station.address,
-              availableFrom: station.availableFrom ?? "00:00",
-              availableTo: station.availableTo ?? "23:59",
+              availableFrom: toUtcTime(station.availableFrom ?? "00:00"),
+              availableTo: toUtcTime(station.availableTo ?? "23:59"),
               point: [station.point[1], station.point[0]] as [number, number],
             })),
           );
@@ -818,6 +866,24 @@ export async function togglePublic(regionId: string, state: boolean): Promise<Re
     });
   } catch (e) {
     return new Failure(ErrorCodes.Fatal, "Unable to toggle public viewing", { regionId, state }, e);
+  }
+}
+
+export async function isRegionPublished(regionId: string): Promise<Result<boolean>> {
+  try {
+    const [selectedRegion] = await db
+      .select({ isPublic: region.isPublic })
+      .from(region)
+      .where(eq(region.id, regionId))
+      .limit(1);
+
+    if (!selectedRegion) {
+      return new Failure(ErrorCodes.ResourceNotFound, "No region found.", { regionId });
+    }
+
+    return new Success(selectedRegion.isPublic);
+  } catch (e) {
+    return new Failure(ErrorCodes.Fatal, "Unable to check publish mode due to an error.", { regionId }, e);
   }
 }
 

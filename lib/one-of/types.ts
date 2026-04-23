@@ -16,6 +16,8 @@ export enum ErrorCodes {
    */
   ResourceExpired = 6703,
 
+  InsufficientPermissions = 6705,
+
   /**
    * Fatal Exceptions
    */

@@ -1,7 +1,7 @@
 import { LRUCache } from "lru-cache";
 import { NextResponse, type NextRequest } from "next/server";
 
-import { ResponseComposer, StatusCodes } from "@/lib/http";
+import { ApiResponseBuilder, StatusCodes } from "@/lib/http";
 
 const tokenCache = new LRUCache<string, number>({
   max: 5000,
@@ -15,8 +15,8 @@ export async function proxy(request: NextRequest) {
     const tokenCount = tokenCache.get(ip) || 0;
 
     if (tokenCount >= 1) {
-      return ResponseComposer.composeError(StatusCodes.Status429TooManyRequests, [{ message: "Too many requests "}])
-        .orchestrate();
+      return ApiResponseBuilder.createError(StatusCodes.Status429TooManyRequests, [{ message: "Too many requests "}])
+        .build();
     }
 
     // Increment and set

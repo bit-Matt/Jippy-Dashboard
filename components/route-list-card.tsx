@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { TriangleAlert } from "lucide-react";
+import { format } from "date-fns";
 
 import type {
   ClosureResponse,
@@ -219,6 +220,11 @@ export default function RouteListCard({
                           <span className="min-w-0 flex-1">
                             <span className="block truncate">
                               {closure.closureName?.trim() ? closure.closureName : "(untitled)"}
+                            </span>
+                            <span className="block text-xs text-muted-foreground">
+                              {closure.closureType === "scheduled" && closure.endDate
+                                ? `Until ${format(new Date(closure.endDate), "MMM d, yyyy")}`
+                                : "Indefinite"}
                             </span>
                           </span>
                         </button>

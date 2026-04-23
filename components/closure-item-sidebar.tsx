@@ -1,6 +1,7 @@
 "use client";
 
 import { X } from "lucide-react";
+import { format } from "date-fns";
 
 import type { ClosureResponse } from "@/contracts/responses";
 import { Badge } from "@/components/ui/badge";
@@ -49,6 +50,15 @@ export default function ClosureItemSidebar({
             >
               {closure.isPublic ? "Published" : "Draft"}
             </Badge>
+            {closure.closureType === "indefinite" ? (
+              <Badge className="mt-1 w-fit border-slate-300 bg-slate-50 text-slate-700" variant="outline">
+                Indefinite
+              </Badge>
+            ) : (
+              <Badge className="mt-1 w-fit border-sky-300 bg-sky-50 text-sky-700" variant="outline">
+                {closure.endDate ? `Until ${format(new Date(closure.endDate), "MMM d, yyyy")}` : "Scheduled"}
+              </Badge>
+            )}
           </div>
           <Button type="button" size="icon" variant="ghost" aria-label="Close closure details" onClick={onClose}>
             <X className="h-4 w-4" />
@@ -86,6 +96,13 @@ export default function ClosureItemSidebar({
             <p className="text-muted-foreground text-xs">Only administrators can change visibility.</p>
           ) : null}
         </div>
+
+        {closure.closureType === "scheduled" && closure.endDate && (
+          <div className="space-y-1 rounded-md border p-3">
+            <p className="text-xs text-muted-foreground">Scheduled End Date</p>
+            <p className="text-sm font-medium">{format(new Date(closure.endDate), "PPP")}</p>
+          </div>
+        )}
 
         <Separator />
 

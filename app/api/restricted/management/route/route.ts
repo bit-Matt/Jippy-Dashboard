@@ -2,9 +2,10 @@ import type { NextRequest } from "next/server";
 
 import { getRoutePolyline } from "@/lib/osm/valhalla";
 import { oneOf, unwrap } from "@/lib/one-of";
-import { ResponseComposer, StatusCodes } from "@/lib/http";
+import { ApiResponseBuilder, StatusCodes } from "@/lib/http";
 import * as closure from "@/lib/management/closure-manager";
 import * as route from "@/lib/management/route-manager";
+import * as stops from "@/lib/management/stop-manager";
 import { tryParseJson } from "@/lib/http/RequestUtilities";
 import { utils, validator } from "@/lib/validator";
 import { session, SessionCode } from "@/lib/auth";
@@ -13,8 +14,8 @@ import { logActivity, logDashboardVisit } from "@/lib/management/activity-logger
 export async function GET() {
   const currentSession = await session.verify();
   if (currentSession.code !== SessionCode.Ok) {
-    return ResponseComposer.composeFromSessionValidation(currentSession)
-      .orchestrate();
+    return ApiResponseBuilder.createFromSessionValidation(currentSession)
+      .build();
   }
 
   void logDashboardVisit({
@@ -25,37 +26,39 @@ export async function GET() {
   });
 
   try {
-    const [allRoutes, allClosures] = await Promise.all([
+    const [allRoutes, allClosures, allStops] = await Promise.all([
       unwrap(route.getAllRoutes(false)),
       unwrap(closure.getAllClosures(true)),
+      unwrap(stops.getAllStops(true)),
     ]);
 
-    return ResponseComposer.compose(StatusCodes.Status200Ok)
-      .setBody({
+    return ApiResponseBuilder.create(StatusCodes.Status200Ok)
+      .withBody({
         routes: allRoutes as route.RouteListItem[],
         closures: allClosures,
+        stops: allStops,
       })
-      .orchestrate();
+      .build();
   } catch {
-    return ResponseComposer.composeError(StatusCodes.Status500InternalServerError, [{
+    return ApiResponseBuilder.createError(StatusCodes.Status500InternalServerError, [{
       message: "Unknown error occurred.",
-    }]).orchestrate();
+    }]).build();
   }
 }
 
 export async function POST(req: NextRequest) {
   const currentSession = await session.verify();
   if (currentSession.code !== SessionCode.Ok) {
-    return ResponseComposer.composeFromSessionValidation(currentSession)
-      .orchestrate();
+    return ApiResponseBuilder.createFromSessionValidation(currentSession)
+      .build();
   }
 
   const data = await tryParseJson<RequestBody>(req);
 
   // Body is unparseable.
   if (!data) {
-    return ResponseComposer.composeError(StatusCodes.Status400BadRequest, [{ message: "Invalid Payload." }])
-      .orchestrate();
+    return ApiResponseBuilder.createError(StatusCodes.Status400BadRequest, [{ message: "Invalid Payload." }])
+      .build();
   }
 
   // Validate the body first.
@@ -74,6 +77,7 @@ export async function POST(req: NextRequest) {
       routeName: { type: "string", formatter: "non-empty-string" },
       routeColor: { type: "string", formatter: "hex-color" },
       routeDetails: { type: "string", formatter: "non-empty-string" },
+      fleetCount: { type: "number", formatter: "positive-integer" },
       vehicleTypeId: { type: "string", formatter: "uuid" },
       availableFrom: { type: "string", formatter: "time-hh-mm" },
       availableTo: { type: "string", formatter: "time-hh-mm" },
@@ -106,23 +110,23 @@ export async function POST(req: NextRequest) {
         },
       },
     },
-    requiredProperties: ["routeNumber", "routeName", "routeColor", "routeDetails", "vehicleTypeId", "points"],
+    requiredProperties: ["routeNumber", "routeName", "routeColor", "routeDetails", "fleetCount", "vehicleTypeId", "points"],
     allowUnvalidatedProperties: false,
   });
   if (!validation.ok) {
-    return ResponseComposer.composeError(StatusCodes.Status400BadRequest, [validation.errors!])
-      .orchestrate();
+    return ApiResponseBuilder.createError(StatusCodes.Status400BadRequest, [validation.errors!])
+      .build();
   }
 
   const timeRangeValidation = utils.isValidTimeRange(data.availableFrom, data.availableTo);
   if (!timeRangeValidation) {
-    return ResponseComposer.composeError(StatusCodes.Status400BadRequest, [{ message: "Invalid time range" }])
-      .orchestrate();
+    return ApiResponseBuilder.createError(StatusCodes.Status400BadRequest, [{ message: "Invalid time range" }])
+      .build();
   }
 
   if (data.snapshotState === "ready" && currentSession.user?.role !== "administrator_user") {
-    return ResponseComposer.composeError(StatusCodes.Status403Forbidden, [{ message: "Insufficient permissions to set ready state." }])
-      .orchestrate();
+    return ApiResponseBuilder.createError(StatusCodes.Status403Forbidden, [{ message: "Insufficient permissions to set ready state." }])
+      .build();
   }
 
   const [polylineGoingTo, polylineGoingBack] = await Promise.all([
@@ -152,9 +156,9 @@ export async function POST(req: NextRequest) {
         payload: data,
       });
 
-      return ResponseComposer.compose(StatusCodes.Status201Created).setBody(s).orchestrate();
+      return ApiResponseBuilder.create(StatusCodes.Status201Created).withBody(s).build();
     },
-    e => ResponseComposer.composeFromFailure(e).orchestrate(),
+    e => ApiResponseBuilder.createFromFailure(e).build(),
   );
 }
 
@@ -165,6 +169,7 @@ type RequestBody = {
   routeName: string;
   routeColor: string;
   routeDetails: string;
+  fleetCount: number;
   vehicleTypeId: string;
   availableFrom?: string;
   availableTo?: string;

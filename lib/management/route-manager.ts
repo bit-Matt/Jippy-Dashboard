@@ -1,9 +1,9 @@
 import {and, count, eq, sql} from "drizzle-orm";
 
-import { db } from "@/lib/db";
-import { routes, routeSnapshots, routeSequences, vehicleTypes } from "@/lib/db/schema";
-import { ErrorCodes, Failure, Result, Success } from "@/lib/one-of/types";
-import { unwrap } from "@/lib/one-of";
+import {db} from "@/lib/db";
+import {routes, routeSequences, routeSnapshots, vehicleTypes} from "@/lib/db/schema";
+import {ErrorCodes, Failure, Result, Success} from "@/lib/one-of/types";
+import {unwrap} from "@/lib/one-of";
 
 /**
  * Fetches all routes from the denormalized `routes` table.
@@ -24,6 +24,7 @@ export async function getAllRoutes(forPublic: boolean = false): Promise<Result<R
           routeName: routes.routeName,
           routeColor: routes.routeColor,
           routeDetails: routes.routeDetails,
+          fleetCount: routes.fleetCount,
           availableFrom: routes.availableFrom,
           availableTo: routes.availableTo,
           vehicleTypeId: routes.vehicleTypeId,
@@ -41,6 +42,7 @@ export async function getAllRoutes(forPublic: boolean = false): Promise<Result<R
         routeName: x.routeName,
         routeColor: x.routeColor,
         routeDetails: x.routeDetails,
+        fleetCount: x.fleetCount ?? 100,
         polylines: {
           to: x.polylineGoingTo,
           back: x.polylineGoingBack,
@@ -100,6 +102,7 @@ export async function getRouteById(routeId: string): Promise<Result<RouteObject>
         routeName: routes.routeName,
         routeColor: routes.routeColor,
         routeDetails: routes.routeDetails,
+        fleetCount: routes.fleetCount,
         availableFrom: routes.availableFrom,
         availableTo: routes.availableTo,
         vehicleTypeId: routes.vehicleTypeId,
@@ -125,6 +128,7 @@ export async function getRouteById(routeId: string): Promise<Result<RouteObject>
       routeName: result.routeName,
       routeColor: result.routeColor,
       routeDetails: result.routeDetails,
+      fleetCount: result.fleetCount,
       isPublic: result.isPublic,
       availability: {
         from: result.availableFrom,
@@ -157,6 +161,7 @@ export async function getRouteSnapshotById(routeId: string, snapshotId?: string)
         routeName: routeSnapshots.routeName,
         routeColor: routeSnapshots.routeColor,
         routeDetails: routeSnapshots.routeDetails,
+        fleetCount: routeSnapshots.fleetCount,
         availableFrom: routeSnapshots.availableFrom,
         availableTo: routeSnapshots.availableTo,
         vehicleTypeId: routeSnapshots.vehicleTypeId,
@@ -219,6 +224,7 @@ export async function getRouteSnapshotById(routeId: string, snapshotId?: string)
       routeName: result.routeName ?? "",
       routeColor: result.routeColor ?? "",
       routeDetails: result.routeDetails ?? "",
+      fleetCount: result.fleetCount ?? 100,
       isPublic: result.isPublic,
       availability: {
         from: result.availableFrom ?? "",
@@ -346,7 +352,7 @@ export async function createSnapshot(routeId: string, params: AddRouteParameters
     }
 
     const [vehicleType] = await db
-      .select({ id: vehicleTypes.id })
+      .select({ id: vehicleTypes.id, name: vehicleTypes.name })
       .from(vehicleTypes)
       .where(eq(vehicleTypes.id, params.vehicleTypeId))
       .limit(1);
@@ -370,6 +376,7 @@ export async function createSnapshot(routeId: string, params: AddRouteParameters
           routeNumber: params.routeNumber,
           routeColor: params.routeColor,
           routeDetails: params.routeDetails ?? "",
+          fleetCount: params.fleetCount ?? 100,
           availableFrom: params.availableFrom ?? "00:00",
           availableTo: params.availableTo ?? "23:59",
           vehicleTypeId: params.vehicleTypeId,
@@ -414,6 +421,7 @@ export async function createSnapshot(routeId: string, params: AddRouteParameters
         routeName: snapshot.routeName,
         routeColor: snapshot.routeColor,
         routeDetails: snapshot.routeDetails,
+        fleetCount: snapshot.fleetCount,
         isPublic: false,
         availability: {
           from: snapshot.availableFrom,
@@ -421,7 +429,7 @@ export async function createSnapshot(routeId: string, params: AddRouteParameters
         },
         vehicle: {
           id: snapshot.vehicleTypeId,
-          name: "",
+          name: vehicleType.name,
         },
         polylines: {
           to: snapshot.polylineGoingTo,
@@ -509,6 +517,7 @@ export async function copySnapshot(routeId: string, sourceSnapshotId: string, ow
           routeName: snapshot.routeName,
           routeColor: snapshot.routeColor,
           routeDetails: snapshot.routeDetails,
+          fleetCount: snapshot.fleetCount,
           availableFrom: snapshot.availableFrom,
           availableTo: snapshot.availableTo,
           vehicleTypeId: snapshot.vehicleTypeId,
@@ -665,6 +674,7 @@ export async function switchSnapshot(routeId: string, snapshotId: string): Promi
         routeNumber: routeSnapshots.routeNumber,
         routeColor: routeSnapshots.routeColor,
         routeDetails: routeSnapshots.routeDetails,
+        fleetCount: routeSnapshots.fleetCount,
         availableFrom: routeSnapshots.availableFrom,
         availableTo: routeSnapshots.availableTo,
         polylineGoingTo: routeSnapshots.polylineGoingTo,
@@ -702,6 +712,7 @@ export async function switchSnapshot(routeId: string, snapshotId: string): Promi
         routeName: snapshotToUse.routeName,
         routeColor: snapshotToUse.routeColor,
         routeDetails: snapshotToUse.routeDetails,
+        fleetCount: snapshotToUse.fleetCount,
         availableFrom: snapshotToUse.availableFrom,
         availableTo: snapshotToUse.availableTo,
         polylineGoingTo: snapshotToUse.polylineGoingTo,
@@ -746,6 +757,7 @@ export async function addRoute(params: AddRouteParameters, ownerId: string): Pro
         routeName: params.routeName,
         routeColor: params.routeColor,
         routeDetails: params.routeDetails ?? "",
+        fleetCount: params.fleetCount ?? 100,
         availableFrom: params.availableFrom ?? "00:00",
         availableTo: params.availableTo ?? "23:59",
         polylineGoingTo: params.polylineGoingTo ?? "",
@@ -757,7 +769,14 @@ export async function addRoute(params: AddRouteParameters, ownerId: string): Pro
     }
 
     // Create the snapshot
-    const snapshot = await unwrap(createSnapshot(route.id, params, ownerId));
+    const snapshotResult = await createSnapshot(route.id, params, ownerId);
+    if (snapshotResult instanceof Failure) {
+      // Clean up the orphaned route since snapshot creation failed
+      await db.delete(routes).where(eq(routes.id, route.id));
+      return snapshotResult;
+    }
+
+    const snapshot = snapshotResult.value;
 
     // Apply the snapshot as the active state:
     await db.update(routes)
@@ -813,12 +832,14 @@ export async function removeRoute(routeId: string): Promise<Result<null>> {
  * @param routeId - The unique identifier of the route to update.
  * @param snapshotId - The unique identifier of the snapshot to update.
  * @param params - The route fields and/or point collections to modify.
+ * @param bypassReadyCheck
  * @returns A `Result<RouteSnapshotObject>` containing the updated route, or a failure if the update fails.
  */
 export async function updateRouteSnapshot(
   routeId: string,
   snapshotId: string,
   params: UpdateRouteParameters,
+  bypassReadyCheck: boolean = false,
 ): Promise<Result<RouteSnapshotObject>> {
   try {
     // Check if the snapshot is editable
@@ -840,7 +861,7 @@ export async function updateRouteSnapshot(
       );
     }
 
-    if (snapshotToEdit.state === "ready") {
+    if (snapshotToEdit.state === "ready" && !bypassReadyCheck) {
       return new Failure(
         ErrorCodes.ValidationFailure,
         "Snapshot is not editable. Create a new copy and edit.",
@@ -856,6 +877,7 @@ export async function updateRouteSnapshot(
         ...(params.routeName !== undefined && { routeName: params.routeName }),
         ...(params.routeColor !== undefined && { routeColor: params.routeColor }),
         ...(params.routeDetails !== undefined && { routeDetails: params.routeDetails }),
+        ...(params.fleetCount !== undefined && { fleetCount: params.fleetCount }),
         ...(params.availableFrom !== undefined && { availableFrom: params.availableFrom }),
         ...(params.availableTo !== undefined && { availableTo: params.availableTo }),
         ...(params.polylineGoingTo !== undefined && { polylineGoingTo: params.polylineGoingTo }),
@@ -997,6 +1019,24 @@ export async function togglePublic(routeId: string, state: boolean): Promise<Res
   }
 }
 
+export async function isRoutePublished(routeId: string): Promise<Result<boolean>> {
+  try {
+    const [selectedRoute] = await db
+      .select({ isPublic: routes.isPublic })
+      .from(routes)
+      .where(eq(routes.id, routeId))
+      .limit(1);
+
+    if (!selectedRoute) {
+      return new Failure(ErrorCodes.ResourceNotFound, "No route found.", { routeId });
+    }
+
+    return new Success(selectedRoute.isPublic);
+  } catch (e) {
+    return new Failure(ErrorCodes.Fatal, "Unable to determine publishing status due to an error", { routeId }, e);
+  }
+}
+
 export interface PointObject {
   id: string;
   sequence: number;
@@ -1011,6 +1051,7 @@ export interface AddRouteParameters {
   routeName: string;
   routeColor: string;
   routeDetails: string;
+  fleetCount: number;
   vehicleTypeId: string;
   availableFrom?: string;
   availableTo?: string;
@@ -1029,6 +1070,7 @@ export interface UpdateRouteParameters {
   routeName?: string;
   routeColor?: string;
   routeDetails?: string;
+  fleetCount?: number;
   vehicleTypeId?: string;
   availableFrom?: string;
   availableTo?: string;
@@ -1046,6 +1088,7 @@ export interface RouteBaseObject {
   routeName: string;
   routeColor: string;
   routeDetails: string;
+  fleetCount: number;
   availability: {
     from: string;
     to: string;
@@ -1069,6 +1112,7 @@ export type RouteListItem = Omit<RouteBaseObject,
   | "availability"
   | "vehicle"
   | "routeDetails"
+  | "fleetCount"
 >;
 
 export interface RouteSnapshotObject extends RouteObject {

@@ -1,12 +1,13 @@
 import type { NextRequest } from "next/server";
 
-import { ResponseComposer, StatusCodes } from "@/lib/http";
+import { ApiResponseBuilder, StatusCodes } from "@/lib/http";
 import * as route from "@/lib/management/route-manager";
 import { tryParseJson } from "@/lib/http/RequestUtilities";
-import { oneOf } from "@/lib/one-of";
+import { oneOf, unwrap } from "@/lib/one-of";
 import { utils, validator } from "@/lib/validator";
 import { logActivity } from "@/lib/management/activity-logger";
 import { session, SessionCode } from "@/lib/auth";
+import { invalidate } from "@/lib/routing-fast";
 
 export async function GET(
   request: NextRequest,
@@ -15,14 +16,14 @@ export async function GET(
   const { id } = await params;
 
   if (!utils.isUuid(id)) {
-    return ResponseComposer.composeError(StatusCodes.Status404NotFound, [{ message: "No such route ID found" }])
-      .orchestrate();
+    return ApiResponseBuilder.createError(StatusCodes.Status404NotFound, [{ message: "No such route ID found" }])
+      .build();
   }
 
   const result = await route.getAllSnapshotByRouteId(id);
   return oneOf(result).match(
-    s => ResponseComposer.compose(StatusCodes.Status200Ok).setBody(s).orchestrate(),
-    e => ResponseComposer.composeFromFailure(e).orchestrate(),
+    s => ApiResponseBuilder.create(StatusCodes.Status200Ok).withBody(s).build(),
+    e => ApiResponseBuilder.createFromFailure(e).build(),
   );
 }
 
@@ -32,22 +33,22 @@ export async function PATCH(
 ) {
   const currentSession = await session.verify("administrator_user");
   if (currentSession.code !== SessionCode.Ok) {
-    return ResponseComposer.composeFromSessionValidation(currentSession)
-      .orchestrate();
+    return ApiResponseBuilder.createFromSessionValidation(currentSession)
+      .build();
   }
 
   const { id } = await params;
 
   // Invalid ID format.
   if (!utils.isUuid(id)) {
-    return ResponseComposer.composeError(StatusCodes.Status404NotFound, [{ message: "No closure found with given ID." }])
-      .orchestrate();
+    return ApiResponseBuilder.createError(StatusCodes.Status404NotFound, [{ message: "No closure found with given ID." }])
+      .build();
   }
 
   const data = await tryParseJson<SwitchPatchBody>(request);
   if (!data) {
-    return ResponseComposer.composeError(StatusCodes.Status400BadRequest, [{ message: "Invalid Payload." }])
-      .orchestrate();
+    return ApiResponseBuilder.createError(StatusCodes.Status400BadRequest, [{ message: "Invalid Payload." }])
+      .build();
   }
 
   // Validate the body first.
@@ -59,14 +60,20 @@ export async function PATCH(
     allowUnvalidatedProperties: false,
   });
   if (!validation.ok) {
-    return ResponseComposer
-      .composeError(StatusCodes.Status400BadRequest, validation.errors!)
-      .orchestrate();
+    return ApiResponseBuilder
+      .createError(StatusCodes.Status400BadRequest, validation.errors!)
+      .build();
   }
+
+  const routeInfo = await unwrap(route.getRouteById(id));
 
   const result = await route.switchSnapshot(id, data.snapshotId);
   return oneOf(result).match(
     s => {
+      if (routeInfo.isPublic && routeInfo.activeSnapshotId !== s.activeSnapshotId) {
+        void invalidate();
+      }
+
       void logActivity({
         actorUserId: currentSession.user!.id,
         actorRole: currentSession.user!.role,
@@ -81,9 +88,9 @@ export async function PATCH(
         payload: data,
       });
 
-      return ResponseComposer.compose(StatusCodes.Status200Ok).setBody(s).orchestrate();
+      return ApiResponseBuilder.create(StatusCodes.Status200Ok).withBody(s).build();
     },
-    e => ResponseComposer.composeFromFailure(e).orchestrate(),
+    e => ApiResponseBuilder.createFromFailure(e).build(),
   );
 }
 

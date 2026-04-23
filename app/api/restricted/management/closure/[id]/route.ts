@@ -1,7 +1,7 @@
 import type { NextRequest } from "next/server";
 
 import * as closure from "@/lib/management/closure-manager";
-import { ResponseComposer, StatusCodes } from "@/lib/http";
+import { ApiResponseBuilder, StatusCodes } from "@/lib/http";
 import { tryParseJson } from "@/lib/http/RequestUtilities";
 import {oneOf, unwrap, UnwrappedException} from "@/lib/one-of";
 import { utils, validator } from "@/lib/validator";
@@ -14,32 +14,34 @@ export async function PATCH(
 ) {
   const currentSession = await session.verify();
   if (currentSession.code !== SessionCode.Ok) {
-    return ResponseComposer.composeFromSessionValidation(currentSession)
-      .orchestrate();
+    return ApiResponseBuilder.createFromSessionValidation(currentSession)
+      .build();
   }
 
   const { id } = await params;
 
   // Invalid ID format.
   if (!utils.isUuid(id)) {
-    return ResponseComposer.composeError(StatusCodes.Status404NotFound, [{ message: "No closure found with given ID." }])
-      .orchestrate();
+    return ApiResponseBuilder.createError(StatusCodes.Status404NotFound, [{ message: "No closure found with given ID." }])
+      .build();
   }
 
   const data = await tryParseJson<PatchRequestBody>(request);
   if (!data) {
-    return ResponseComposer.composeError(StatusCodes.Status400BadRequest, [{ message: "Invalid Payload." }])
-      .orchestrate();
+    return ApiResponseBuilder.createError(StatusCodes.Status400BadRequest, [{ message: "Invalid Payload." }])
+      .build();
   }
 
   // Validate the body first.
   const hasAnyPatchField = data.shape !== undefined
     || data.closureName !== undefined
     || data.closureDescription !== undefined
-    || data.points !== undefined;
+    || data.points !== undefined
+    || data.closureType !== undefined
+    || data.endDate !== undefined;
   if (!hasAnyPatchField) {
-    return ResponseComposer.composeError(StatusCodes.Status400BadRequest, [{ message: "No update fields provided." }])
-      .orchestrate();
+    return ApiResponseBuilder.createError(StatusCodes.Status400BadRequest, [{ message: "No update fields provided." }])
+      .build();
   }
 
   const validation = await validator.validate<PatchRequestBody>(data, {
@@ -71,16 +73,46 @@ export async function PATCH(
           return { ok: true };
         },
       },
+      closureType: {
+        type: "string",
+        formatterFn: async (value) => {
+          if (value !== "indefinite" && value !== "scheduled") {
+            return { ok: false, error: "closureType must be 'indefinite' or 'scheduled'." };
+          }
+          return { ok: true };
+        },
+      },
+      endDate: { type: "string" },
     },
     requiredProperties: [],
     allowUnvalidatedProperties: false,
   });
   if (!validation.ok) {
-    return ResponseComposer.composeError(StatusCodes.Status400BadRequest, [validation.errors!])
-      .orchestrate();
+    return ApiResponseBuilder.createError(StatusCodes.Status400BadRequest, [validation.errors!])
+      .build();
   }
 
-  const result = await closure.updateClosure(id, data);
+  // Cross-field: if switching to scheduled, a valid endDate is required.
+  if (data.closureType === "scheduled") {
+    const parsedEnd = data.endDate ? new Date(data.endDate) : null;
+    if (!parsedEnd || isNaN(parsedEnd.getTime())) {
+      return ApiResponseBuilder
+        .createError(StatusCodes.Status400BadRequest, [{ message: "endDate is required and must be a valid date for scheduled closures." }])
+        .build();
+    }
+  }
+
+  const updateParams: Parameters<typeof closure.updateClosure>[1] = {
+    ...(data.closureName !== undefined && { closureName: data.closureName }),
+    ...(data.closureDescription !== undefined && { closureDescription: data.closureDescription }),
+    ...(data.shape !== undefined && { shape: data.shape }),
+    ...(data.points !== undefined && { points: data.points }),
+    ...(data.closureType !== undefined && { closureType: data.closureType }),
+    ...(data.closureType === "indefinite" && { endDate: null }),
+    ...(data.closureType === "scheduled" && { endDate: new Date(data.endDate!) }),
+  };
+
+  const result = await closure.updateClosure(id, updateParams);
   return oneOf(result).match(
     success => {
       void logActivity({
@@ -97,11 +129,11 @@ export async function PATCH(
         payload: data,
       });
 
-      return ResponseComposer.compose(StatusCodes.Status200Ok)
-        .setBody(success)
-        .orchestrate();
+      return ApiResponseBuilder.create(StatusCodes.Status200Ok)
+        .withBody(success)
+        .build();
     },
-    e => ResponseComposer.composeFromFailure(e).orchestrate(),
+    e => ApiResponseBuilder.createFromFailure(e).build(),
   );
 }
 
@@ -111,16 +143,16 @@ export async function DELETE(
 ) {
   const currentSession = await session.verify();
   if (currentSession.code !== SessionCode.Ok) {
-    return ResponseComposer.composeFromSessionValidation(currentSession)
-      .orchestrate();
+    return ApiResponseBuilder.createFromSessionValidation(currentSession)
+      .build();
   }
 
   const { id } = await params;
 
   // Invalid ID format.
   if (!utils.isUuid(id)) {
-    return ResponseComposer.composeError(StatusCodes.Status404NotFound, [{ message: "Invalid closure ID" }])
-      .orchestrate();
+    return ApiResponseBuilder.createError(StatusCodes.Status404NotFound, [{ message: "Invalid closure ID" }])
+      .build();
   }
 
   try {
@@ -128,8 +160,8 @@ export async function DELETE(
 
     // Content is not deletable
     if (!isDeletable && currentSession.user!.role !== "administrator_user") {
-      return ResponseComposer.composeError(StatusCodes.Status403Forbidden, { message: "Insufficient Permissions" })
-        .orchestrate();
+      return ApiResponseBuilder.createError(StatusCodes.Status403Forbidden, { message: "Insufficient Permissions" })
+        .build();
     }
 
     // Delete the closure
@@ -149,17 +181,17 @@ export async function DELETE(
           entityId: id,
         });
 
-        return ResponseComposer.compose(StatusCodes.Status200Ok)
-          .setBody({ ok: true })
-          .orchestrate();
+        return ApiResponseBuilder.create(StatusCodes.Status200Ok)
+          .withBody({ ok: true })
+          .build();
       },
-      e => ResponseComposer.composeFromFailure(e).orchestrate(),
+      e => ApiResponseBuilder.createFromFailure(e).build(),
     );
   } catch (e) {
     const err = e as unknown as UnwrappedException;
-    return ResponseComposer
-      .composeError(StatusCodes.Status500InternalServerError, { message: err.message })
-      .orchestrate();
+    return ApiResponseBuilder
+      .createError(StatusCodes.Status500InternalServerError, { message: err.message })
+      .build();
   }
 }
 
@@ -167,6 +199,8 @@ type PatchRequestBody = {
   shape?: string;
   closureName?: string;
   closureDescription?: string;
+  closureType?: "indefinite" | "scheduled";
+  endDate?: string;
   points?: Array<{
     sequence: number;
     point: [number, number];

@@ -7,7 +7,7 @@ import { db } from "@/lib/db";
 import { user } from "@/lib/db/schema";
 import { logBannedSignIn } from "@/lib/management/activity-logger";
 import {
-  ResponseComposer,
+  ApiResponseBuilder,
   StatusCodes,
   utils as httpUtils,
 } from "@/lib/http";
@@ -16,8 +16,8 @@ import { validator } from "@/lib/validator";
 export async function POST(req: NextRequest) {
   const body = await httpUtils.tryParseJson<SignInRequest>(req);
   if (!body) {
-    return ResponseComposer.composeError(StatusCodes.Status400BadRequest, [{ message: "Invalid Payload." }])
-      .orchestrate();
+    return ApiResponseBuilder.createError(StatusCodes.Status400BadRequest, [{ message: "Invalid Payload." }])
+      .build();
   }
 
   const validation = await validator.validate<SignInRequest>(body, {
@@ -30,8 +30,8 @@ export async function POST(req: NextRequest) {
     allowUnvalidatedProperties: false,
   });
   if (!validation.ok) {
-    return ResponseComposer.composeError(StatusCodes.Status400BadRequest, [validation.errors!])
-      .orchestrate();
+    return ApiResponseBuilder.createError(StatusCodes.Status400BadRequest, [validation.errors!])
+      .build();
   }
 
   try {
@@ -61,14 +61,14 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    return ResponseComposer.compose<null>(StatusCodes.Status204NoContent)
-      .setBody(null)
-      .orchestrate();
+    return ApiResponseBuilder.create<null>(StatusCodes.Status204NoContent)
+      .withBody(null)
+      .build();
   } catch (e) {
     Sentry.captureException(e);
 
-    return ResponseComposer.composeError(StatusCodes.Status400BadRequest, [{ message: "Invalid Credentials." }])
-      .orchestrate();
+    return ApiResponseBuilder.createError(StatusCodes.Status400BadRequest, [{ message: "Invalid Credentials." }])
+      .build();
   }
 }
 

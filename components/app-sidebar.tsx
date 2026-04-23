@@ -1,7 +1,7 @@
 "use client";
 
 import { type ComponentProps } from "react";
-import { Command, Map, ShieldCheck, SquareDashed } from "lucide-react";
+import { Command, Map, Navigation, ShieldCheck, SquareDashed, TrafficCone } from "lucide-react";
 import useSWR from "swr";
 
 import { NavMain } from "@/components/nav-main";
@@ -42,10 +42,37 @@ export function AppSidebar({
       isActive: true,
       icon: SquareDashed,
     },
+    {
+      title: "Stop Management",
+      url: "/dashboard/stops",
+      isActive: true,
+      icon: TrafficCone,
+    },
+    {
+      title: "Simulator",
+      url: "/dashboard/simulator",
+      isActive: true,
+      icon: Navigation,
+    },
   ];
 
   const navData = {
     navMain,
+
+    feedbackAndReporting: [
+      {
+        title: "Feedback & Reporting",
+        url: "#",
+        icon: Command,
+        isActive: true,
+        items: [
+          {
+            title: "Reports",
+            url: "/dashboard/feedback",
+          },
+        ],
+      },
+    ],
 
     administration: [
       {
@@ -96,12 +123,11 @@ export function AppSidebar({
       </SidebarHeader>
       <SidebarContent>
         <NavMain label="Editors" items={navData.navMain} />
-        {currentUser?.role === "administrator_user" ? (
-          <>
-            <div className="grow" />
-            <NavMain label="Administrator" items={navData.administration} />
-          </>
-        ) : null}
+        <div className="grow" />
+        <NavMain label="Tools" items={[
+          ...navData.feedbackAndReporting,
+          ...(currentUser?.role === "administrator_user" ? navData.administration : []),
+        ]} />
       </SidebarContent>
       <SidebarFooter>
         <NavUser

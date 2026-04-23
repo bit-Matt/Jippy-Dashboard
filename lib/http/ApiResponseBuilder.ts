@@ -4,7 +4,7 @@ import { ErrorCodes, Failure } from "@/lib/one-of";
 import { SessionCode, type SessionVerifiedResult } from "@/lib/auth";
 import { StatusCodes } from "@/lib/http/StatusCodes";
 
-export class ResponseComposer<TResponse> implements IResponseComposer<TResponse> {
+export class ApiResponseBuilder<TResponse> implements IResponseComposer<TResponse> {
   private _code: StatusCodes | number = StatusCodes.Status200Ok;
   private readonly _additionalHeaders: Record<string, string> = {};
 
@@ -15,7 +15,7 @@ export class ResponseComposer<TResponse> implements IResponseComposer<TResponse>
 
   private constructor() { }
 
-  addHeader(key: string, value: string): IResponseComposer<TResponse> {
+  withHeader(key: string, value: string): IResponseComposer<TResponse> {
     if (!this._additionalHeaders[key]) {
       this._additionalHeaders[key] = value;
     }
@@ -23,20 +23,22 @@ export class ResponseComposer<TResponse> implements IResponseComposer<TResponse>
     return this;
   }
 
-  setStatusCode(code: StatusCodes | number): IResponseComposer<TResponse> {
+  withStatusCode(code: StatusCodes | number): IResponseComposer<TResponse> {
     if (code >= 100 && code <= 599) {
       this._code = code;
     }
 
+    this._body.ok = !(code >= 400 && code <= 599);
+
     return this;
   }
 
-  setBody(body: TResponse): IResponseComposer<TResponse> {
+  withBody(body: TResponse): IResponseComposer<TResponse> {
     this._body.data = body;
     return this;
   }
 
-  orchestrate(): NextResponse {
+  build(): NextResponse {
     // For empty responses, Next.js returns a 204 No Content response.
     if (this._code === StatusCodes.Status204NoContent) {
       return new NextResponse(null, { status: this._code });
@@ -49,33 +51,33 @@ export class ResponseComposer<TResponse> implements IResponseComposer<TResponse>
   }
 
   /**
-   * Creates a new instance of ResponseComposer.
+   * Creates a new instance of ApiResponseBuilder.
    * @param {StatusCodes | number} code HTTP Status Code
    * @remarks For Exceptions, see ExceptionResponseComposer.
    * @returns {Types}
    */
-  static compose<T>(code: StatusCodes | number): IResponseComposer<T> {
-    return new ResponseComposer<T>()
-      .setStatusCode(code);
+  static create<T>(code: StatusCodes | number): IResponseComposer<T> {
+    return new ApiResponseBuilder<T>()
+      .withStatusCode(code);
   }
 
   /**
-   * Creates a new instance of ResponseComposer for exceptions.
+   * Creates a new instance of ApiResponseBuilder for exceptions.
    *
    * @template T
    * @param {StatusCodes | number} code HTTP status code.
    * @param {T} errorBody Error body.
-   * @remarks For regular responses, use `ResponseComposer.compose` method instead.
-   * @returns {ResponseComposer<IApiResponseError<T>>}
+   * @remarks For regular responses, use `ApiResponseBuilder.compose` method instead.
+   * @returns {ApiResponseBuilder<IApiResponseError<T>>}
    * @throws {Error} Throws exception when you provide non 4XX or 5XX status code.
    */
-  static composeError<T>(code: StatusCodes | number, errorBody: T): IResponseComposer<IApiResponseError<T>> {
+  static createError<T>(code: StatusCodes | number, errorBody: T): IResponseComposer<IApiResponseError<T>> {
     // Accept only 4XX or 5XX codes
     if (code < 400 || code >= 600) {
       throw new Error("Invalid status code. This method only supports 4XX or 5XX codes.");
     }
 
-    const response = new ResponseComposer<IApiResponseError<T>>();
+    const response = new ApiResponseBuilder<IApiResponseError<T>>();
 
     // Compose the exception here.
     const body: IApiResponseError<T> = {
@@ -86,7 +88,7 @@ export class ResponseComposer<TResponse> implements IResponseComposer<TResponse>
     };
 
     // Set the status code
-    response.setStatusCode(code);
+    response.withStatusCode(code);
     body.status = code;
 
     // Provide proper IETF link for the response for reference
@@ -258,7 +260,7 @@ export class ResponseComposer<TResponse> implements IResponseComposer<TResponse>
     }
 
     // Add the body to the response
-    response.setBody(body);
+    response.withBody(body);
 
     return response;
   }
@@ -269,41 +271,44 @@ export class ResponseComposer<TResponse> implements IResponseComposer<TResponse>
    * @param {Failure} failure - An object representing the failure details, including its type and message.
    * @return {object} The composed error response object, including the appropriate HTTP status code and error message.
    */
-  static composeFromFailure(failure: Failure): IResponseComposer<IApiResponseError<{ message: string; }>> {
+  static createFromFailure(failure: Failure): IResponseComposer<IApiResponseError<{ message: string; }>> {
     switch (failure.type) {
     case ErrorCodes.ValidationFailure:
     case ErrorCodes.ResourceExpired:
-      return ResponseComposer
-        .composeError(StatusCodes.Status400BadRequest, { message: failure.message });
+      return ApiResponseBuilder
+        .createError(StatusCodes.Status400BadRequest, { message: failure.message });
     case ErrorCodes.ResourceNotFound:
-      return ResponseComposer
-        .composeError(StatusCodes.Status404NotFound, { message: failure.message });
+      return ApiResponseBuilder
+        .createError(StatusCodes.Status404NotFound, { message: failure.message });
+    case ErrorCodes.InsufficientPermissions:
+      return ApiResponseBuilder
+        .createError(StatusCodes.Status403Forbidden, { message: failure.message });
     default:
-      return ResponseComposer
-        .composeError(StatusCodes.Status500InternalServerError, { message: failure.message });
+      return ApiResponseBuilder
+        .createError(StatusCodes.Status500InternalServerError, { message: failure.message });
     }
   }
 
-  static composeFromSessionValidation(result: Optional<SessionVerifiedResult>): IResponseComposer<IApiResponseError<{ message: string; }>> {
+  static createFromSessionValidation(result: Optional<SessionVerifiedResult>): IResponseComposer<IApiResponseError<{ message: string; }>> {
     if (!result) {
-      return ResponseComposer
-        .composeError(StatusCodes.Status401Unauthorized, { message: "Invalid session." });
+      return ApiResponseBuilder
+        .createError(StatusCodes.Status401Unauthorized, { message: "Invalid session." });
     }
 
     switch (result.code) {
     case SessionCode.Banned:
-      return ResponseComposer
-        .composeError(StatusCodes.Status403Forbidden, { message: "Your account has been banned." });
+      return ApiResponseBuilder
+        .createError(StatusCodes.Status403Forbidden, { message: "Your account has been banned." });
     case SessionCode.ShadowBanned:
     case SessionCode.Pending:
-      return ResponseComposer
-        .composeError(StatusCodes.Status403Forbidden, { message: "Your account is pending verification." });
+      return ApiResponseBuilder
+        .createError(StatusCodes.Status403Forbidden, { message: "Your account is pending verification." });
     case SessionCode.InsufficientPermissions:
-      return ResponseComposer
-        .composeError(StatusCodes.Status403Forbidden, { message: "You don't have permission to perform this action." });
+      return ApiResponseBuilder
+        .createError(StatusCodes.Status403Forbidden, { message: "You don't have permission to perform this action." });
     default:
-      return ResponseComposer
-        .composeError(StatusCodes.Status401Unauthorized, { message: "Invalid session." });
+      return ApiResponseBuilder
+        .createError(StatusCodes.Status401Unauthorized, { message: "Invalid session." });
     }
   }
 }
@@ -320,26 +325,26 @@ export interface IResponseComposer<TResponse> {
    * @param value {string} Value of the header
    * @remarks If the key already exists, it will be ignored during .orchestrate() call.
    */
-  addHeader(key: string, value: string): IResponseComposer<TResponse>;
+  withHeader(key: string, value: string): IResponseComposer<TResponse>;
 
   /**
    * Set the status code of the response.
    *
    * @param {StatusCodes | number} code Set the status code of the response.
    */
-  setStatusCode(code: StatusCodes | number): IResponseComposer<TResponse>;
+  withStatusCode(code: StatusCodes | number): IResponseComposer<TResponse>;
 
   /**
    * Set the body of the response.
    * @param body
    */
-  setBody(body: TResponse): IResponseComposer<TResponse>;
+  withBody(body: TResponse): IResponseComposer<TResponse>;
 
   /**
    * Finalize the response and return it.
    * @returns {Response}
    */
-  orchestrate(): NextResponse;
+  build(): NextResponse;
 }
 
 export interface IApiResponseError<T> {

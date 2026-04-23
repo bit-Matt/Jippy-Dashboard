@@ -15,7 +15,7 @@ import type { ClosureResponse, ClosureResponseList } from "@/contracts/responses
 import { ClosureEditorProvider, useClosureEditor } from "@/contexts/ClosureEditorContext";
 import { RouteEditorProvider } from "@/contexts/RouteEditorContext";
 import { $fetch } from "@/lib/http/client";
-import type { IApiResponse } from "@/lib/http/ResponseComposer";
+import type { IApiResponse } from "@/lib/http/ApiResponseBuilder";
 
 import ClosureMapComponent from "./MapComponent";
 

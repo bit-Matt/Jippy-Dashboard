@@ -54,7 +54,7 @@ export default function RegionItemSidebar({
   const isAdministrator = userRole === "administrator_user";
   const selectedSnapshot = snapshots.find((snapshot) => snapshot.id === selectedSnapshotId) ?? null;
   const canSetActive = !!selectedSnapshot && selectedSnapshot.state === "ready" && selectedSnapshot.id !== activeSnapshotId;
-  const canEditOrDelete = !!selectedSnapshot && selectedSnapshot.state !== "ready";
+  const canEditOrDelete = !!selectedSnapshot && (selectedSnapshot.state !== "ready" || (isAdministrator && !isPublic));
 
   return (
     <Card>

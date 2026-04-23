@@ -68,6 +68,21 @@ validator.addFormat("valid-number", {
   },
 });
 
+validator.addFormat("positive-integer", {
+  forType: "number",
+  formatterFn: async (v) => {
+    const value = Number(v);
+    if (!Number.isInteger(value) || value < 1) {
+      return {
+        ok: false,
+        error: "Value must be an integer greater than or equal to 1.",
+      };
+    }
+
+    return { ok: true };
+  },
+});
+
 validator.addFormat("strong-password", {
   forType: "string",
   formatterFn: async (value) => {
@@ -186,6 +201,11 @@ const utils = {
     return TIME_PATTERN.test(from!)
       && TIME_PATTERN.test(to!)
       && from! < to!;
+  },
+
+  isWithinPhilippines: (lat: number, lng: number): boolean => {
+    // Generous bounds for the Philippines archipelago
+    return lat >= 4.5 && lat <= 21.5 && lng >= 116.0 && lng <= 127.0;
   },
 };
 

@@ -21,6 +21,8 @@ interface ClosureEditorState {
     shape: string;
     closureName: string;
     closureDescription: string;
+    closureType: "indefinite" | "scheduled";
+    endDate: Date | null;
     points: ClosureDraftPoint[];
   } | null;
 }
@@ -36,6 +38,8 @@ interface ClosureEditorContextValue extends ClosureEditorState {
   finishClosureToolEditing: () => void;
   setClosureName: (name: string) => void;
   setClosureDescription: (description: string) => void;
+  setClosureType: (closureType: "indefinite" | "scheduled") => void;
+  setEndDate: (endDate: Date | null) => void;
 }
 
 const ClosureEditorContext = createContext<ClosureEditorContextValue | undefined>(undefined);
@@ -57,6 +61,8 @@ export function ClosureEditorProvider({ children }: { children: ReactNode }) {
         shape: "polygon",
         closureName: "",
         closureDescription: "",
+        closureType: "indefinite",
+        endDate: null,
         points: [],
       },
     });
@@ -73,6 +79,8 @@ export function ClosureEditorProvider({ children }: { children: ReactNode }) {
         shape: closure.shape || "polygon",
         closureName: closure.closureName,
         closureDescription: closure.closureDescription,
+        closureType: closure.closureType,
+        endDate: closure.endDate ? new Date(closure.endDate) : null,
         points: sortedPoints.map((point, index) => ({
           id: String(point.id ?? crypto.randomUUID()),
           sequence: index + 1,
@@ -176,6 +184,38 @@ export function ClosureEditorProvider({ children }: { children: ReactNode }) {
     });
   }, []);
 
+  const setClosureType = useCallback((closureType: "indefinite" | "scheduled") => {
+    setState((previousState) => {
+      if (!previousState.draft) {
+        return previousState;
+      }
+
+      return {
+        ...previousState,
+        draft: {
+          ...previousState.draft,
+          closureType,
+        },
+      };
+    });
+  }, []);
+
+  const setEndDate = useCallback((endDate: Date | null) => {
+    setState((previousState) => {
+      if (!previousState.draft) {
+        return previousState;
+      }
+
+      return {
+        ...previousState,
+        draft: {
+          ...previousState.draft,
+          endDate,
+        },
+      };
+    });
+  }, []);
+
   const value = useMemo<ClosureEditorContextValue>(
     () => ({
       ...state,
@@ -189,6 +229,8 @@ export function ClosureEditorProvider({ children }: { children: ReactNode }) {
       finishClosureToolEditing,
       setClosureName,
       setClosureDescription,
+      setClosureType,
+      setEndDate,
     }),
     [
       state,
@@ -201,6 +243,8 @@ export function ClosureEditorProvider({ children }: { children: ReactNode }) {
       finishClosureToolEditing,
       setClosureName,
       setClosureDescription,
+      setClosureType,
+      setEndDate,
     ],
   );
 

@@ -3,12 +3,12 @@ import type { NextRequest } from "next/server";
 import * as accounts from "@/lib/accounts";
 import { session as auth, SessionCode } from "@/lib/auth";
 import { oneOf } from "@/lib/one-of";
-import { ResponseComposer, StatusCodes } from "@/lib/http";
+import { ApiResponseBuilder, StatusCodes } from "@/lib/http";
 
 export async function GET(req: NextRequest) {
   const currentSession = await auth.verify("administrator_user");
   if (!currentSession || currentSession.code !== SessionCode.Ok) {
-    return ResponseComposer.composeFromSessionValidation(currentSession).orchestrate();
+    return ApiResponseBuilder.createFromSessionValidation(currentSession).build();
   }
 
   const result = await accounts.getAllAccounts();
@@ -17,21 +17,21 @@ export async function GET(req: NextRequest) {
   return oneOf(result).match(
     users => {
       if (status === "banned") {
-        return ResponseComposer
-          .compose(StatusCodes.Status200Ok)
-          .setBody(users.filter(user => user.banned))
-          .orchestrate();
+        return ApiResponseBuilder
+          .create(StatusCodes.Status200Ok)
+          .withBody(users.filter(user => user.banned))
+          .build();
       }
 
       if (status === "active") {
-        return ResponseComposer
-          .compose(StatusCodes.Status200Ok)
-          .setBody(users.filter(user => !user.banned))
-          .orchestrate();
+        return ApiResponseBuilder
+          .create(StatusCodes.Status200Ok)
+          .withBody(users.filter(user => !user.banned))
+          .build();
       }
 
-      return ResponseComposer.compose(StatusCodes.Status200Ok).setBody(users).orchestrate();
+      return ApiResponseBuilder.create(StatusCodes.Status200Ok).withBody(users).build();
     },
-    e => ResponseComposer.composeFromFailure(e).orchestrate(),
+    e => ApiResponseBuilder.createFromFailure(e).build(),
   );
 }

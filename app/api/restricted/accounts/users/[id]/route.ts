@@ -3,7 +3,7 @@ import type { NextRequest } from "next/server";
 import * as accounts from "@/lib/accounts";
 import { session as auth, SessionCode } from "@/lib/auth";
 import { oneOf } from "@/lib/one-of";
-import { ResponseComposer, StatusCodes } from "@/lib/http";
+import { ApiResponseBuilder, StatusCodes } from "@/lib/http";
 import { utils } from "@/lib/validator";
 import { logActivity } from "@/lib/management/activity-logger";
 
@@ -13,14 +13,14 @@ export async function PATCH(
 ) {
   const currentSession = await auth.verify("administrator_user");
   if (!currentSession || currentSession.code !== SessionCode.Ok) {
-    return ResponseComposer.composeFromSessionValidation(currentSession).orchestrate();
+    return ApiResponseBuilder.createFromSessionValidation(currentSession).build();
   }
 
   const { id } = await params;
   if (!utils.isNonEmpty(id)) {
-    return ResponseComposer
-      .composeError(StatusCodes.Status400BadRequest, "Invalid ID.")
-      .orchestrate();
+    return ApiResponseBuilder
+      .createError(StatusCodes.Status400BadRequest, "Invalid ID.")
+      .build();
   }
 
   const result = await accounts.toggleBan(id);
@@ -44,8 +44,8 @@ export async function PATCH(
         },
       });
 
-      return ResponseComposer.compose(StatusCodes.Status200Ok).setBody(user).orchestrate();
+      return ApiResponseBuilder.create(StatusCodes.Status200Ok).withBody(user).build();
     },
-    e => ResponseComposer.composeFromFailure(e).orchestrate(),
+    e => ApiResponseBuilder.createFromFailure(e).build(),
   );
 }

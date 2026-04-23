@@ -17,6 +17,7 @@ export interface RouteListItemResponse {
   routeNumber: string;
   routeName: string;
   routeColor: string;
+  fleetCount: number;
   polylines: {
     to: string;
     back: string;
@@ -100,6 +101,8 @@ export interface ClosureResponse {
   closureName: string;
   closureDescription: string;
   shape: string;
+  closureType: "indefinite" | "scheduled";
+  endDate: string | null;
   isPublic: boolean;
   points: ClosurePointResponse[];
 }
@@ -117,6 +120,78 @@ export interface ClosureObject {
   closureName: string;
   closureDescription: string;
   shape: string;
+  closureType: "indefinite" | "scheduled";
+  endDate: string | null;
   isPublic: boolean;
   points: Array<ClosurePointObject>;
+}
+
+export type StopRestrictionType = "universal" | "specific";
+export type StopDisallowedDirection = "direction_to" | "direction_back" | "both";
+
+export interface StopPointResponse {
+  id: string;
+  sequence: number;
+  point: [number, number];
+}
+
+export interface StopResponse {
+  id: string;
+  name: string;
+  restrictionType: StopRestrictionType;
+  disallowedDirection: StopDisallowedDirection;
+  polyline: string;
+  isPublic: boolean;
+  points: StopPointResponse[];
+  routeIds: string[];
+  vehicleTypeIds: string[];
+}
+
+export type StopResponseList = StopResponse[];
+
+// -- Navigate API response types -------------------------------------------
+
+export type NavigateManeuverType =
+  | "depart"
+  | "turn"
+  | "board"
+  | "alight"
+  | "transfer"
+  | "arrive";
+
+export type NavigateLegType = "WALK" | "TRICYCLE" | "JEEPNEY";
+
+export interface NavigateInstruction {
+  text: string;
+  maneuver_type: NavigateManeuverType;
+}
+
+export interface NavigateRouteLeg {
+  type: NavigateLegType;
+  route_name: string | null;
+  polyline: string;
+  color: string | null;
+  distance: number;
+  duration: number;
+  instructions: NavigateInstruction[];
+  bbox: [number, number, number, number];
+}
+
+export interface NavigateRouteResponse {
+  legs: NavigateRouteLeg[];
+  total_distance: number;
+  total_duration: number;
+  total_transfers: number;
+  global_bbox: [number, number, number, number];
+}
+
+export type NavigateSuggestionLabel = "fastest" | "least_walking" | "simplest" | "explorer" | "tricycle";
+
+export interface NavigateRouteSuggestion {
+  label: NavigateSuggestionLabel;
+  route: NavigateRouteResponse;
+}
+
+export interface MultiNavigateRouteResponse {
+  suggestions: NavigateRouteSuggestion[];
 }
