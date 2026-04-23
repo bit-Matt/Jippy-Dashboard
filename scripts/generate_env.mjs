@@ -89,9 +89,9 @@ async function main() {
   }
 
   // Service URLs
-  utils.env.write("next.public.nominatim.url", "http://localhost:6701");
-  utils.env.write("next.public.valhalla.url", "http://localhost:6702");
-  utils.env.write("tileserver.url", "http://localhost:6703");
+  await utils.env.ask("Nominatim URL", "next.public.nominatim.url", "http://localhost:6701");
+  await utils.env.ask("Valhalla URL", "next.public.valhalla.url", "http://localhost:6702");
+  await utils.env.ask("Tileserver URL", "tileserver.url", "http://localhost:6703");
   utils.env.write("graphhopper.url", "http://localhost:6704");
   utils.env.write("algorithm.url", "http://localhost:6705");
 
