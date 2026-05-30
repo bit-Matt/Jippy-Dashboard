@@ -1,6 +1,6 @@
 import type { NextRequest } from "next/server";
 
-import { getRoutePolyline } from "@/lib/osm/valhalla";
+import { getRoutePolyline } from "@/lib/osm/osrm";
 import { ApiResponseBuilder, StatusCodes } from "@/lib/http";
 import * as route from "@/lib/management/route-manager";
 import { tryParseJson } from "@/lib/http/RequestUtilities";

@@ -12,6 +12,7 @@ import "leaflet/dist/leaflet.css";
 import "@geoman-io/leaflet-geoman-free/dist/leaflet-geoman.css";
 
 import type { ClosureResponse, ClosureResponseList } from "@/contracts/responses";
+import { getPositronStyleUrl } from "@/lib/map/style-url";
 import { useClosureEditor } from "@/contexts/ClosureEditorContext";
 
 type ClosureDrawingTool = "none" | "draw-polygon" | "edit-region";
@@ -69,7 +70,7 @@ const VectorTileLayer = () => {
     if (!map) return;
 
     const glLayer = L.maplibreGL({
-      style: "/tileserver/style.json",
+			style: getPositronStyleUrl(),
     });
 
     glLayer.addTo(map);

@@ -8,13 +8,13 @@ import "@maplibre/maplibre-gl-leaflet";
 import "@geoman-io/leaflet-geoman-free";
 import "leaflet-routing-machine";
 import "leaflet.vectorgrid";
-import "lrm-mapzen";
 
 import "leaflet/dist/leaflet.css";
 import "@geoman-io/leaflet-geoman-free/dist/leaflet-geoman.css";
 import "leaflet-routing-machine/dist/leaflet-routing-machine.css";
 
 import { useRouteEditor } from "@/contexts/RouteEditorContext";
+import { getPositronStyleUrl } from "@/lib/map/style-url";
 import { decodePolyline } from "@/lib/routing/polyline";
 
 const FocusRouteView = ({ focusKey, focusedWaypoints }: FocusRouteViewProps) => {
@@ -98,7 +98,7 @@ const VectorTileLayer = () => {
     if (!map) return;
 
     const glLayer = L.maplibreGL({
-      style: "/tileserver/style.json",
+      style: getPositronStyleUrl(),
     });
 
     glLayer.addTo(map);
@@ -117,15 +117,14 @@ const RoutingMachine = ({ waypoints, color, onRouteCoordinatesChange }: RoutingM
   useEffect(() => {
     if (!map || waypoints.length < 2) return;
 
-    const serviceUrl = new URL("route", process.env.NEXT_PUBLIC_VALHALLA_URL);
-    const mapzenRouter = L.Routing.mapzen("valhalla-", {
-      costing: "auto",
-      serviceUrl: `${serviceUrl.toString()}?`,
+    const osrmRouter = L.Routing.osrmv1({
+      serviceUrl: "/api/public/osrm/car/route/v1",
+      profile: "driving",
     });
 
     const routingControl = L.Routing.control({
-      router: mapzenRouter,
-      formatter: new L.Routing.mapzenFormatter(),
+      router: osrmRouter,
+      formatter: new L.Routing.Formatter(),
       waypoints: waypoints.map(([lat, lng]) => L.latLng(lat, lng)),
       routeWhileDragging: true,
       // @ts-expect-error createMarker is required but not used with custom markers

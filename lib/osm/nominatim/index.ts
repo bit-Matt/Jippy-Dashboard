@@ -1,7 +1,9 @@
 import { $fetch } from "@/lib/http/client";
 
+const NOMINATIM_PROXY_BASE = "/api/public/nominatim";
+
 export async function reverse(payload: Record<string, string | number>) {
-  const reverseUrl = new URL("/reverse", process.env.NEXT_PUBLIC_NOMINATIM_URL);
+  const reverseUrl = new URL(`${NOMINATIM_PROXY_BASE}/reverse`, "http://localhost");
   for (const [key, value] of Object.entries(payload)) {
     reverseUrl.searchParams.set(key, String(value));
   }
@@ -9,7 +11,7 @@ export async function reverse(payload: Record<string, string | number>) {
   // Force
   reverseUrl.searchParams.set("format", "jsonv2");
 
-  const { data, error } = await $fetch<NominatimReverseResponse>(reverseUrl.toString(), {
+  const { data, error } = await $fetch<NominatimReverseResponse>(`${NOMINATIM_PROXY_BASE}/reverse?${reverseUrl.searchParams.toString()}`, {
     method: "GET",
   });
 
@@ -20,7 +22,7 @@ export async function reverse(payload: Record<string, string | number>) {
 }
 
 export async function search(payload: Record<string, string>) {
-  const reverseUrl = new URL("/search", process.env.NEXT_PUBLIC_NOMINATIM_URL);
+  const reverseUrl = new URL(`${NOMINATIM_PROXY_BASE}/search`, "http://localhost");
   for (const [key, value] of Object.entries(payload)) {
     reverseUrl.searchParams.set(key, String(value));
   }
@@ -31,7 +33,7 @@ export async function search(payload: Record<string, string>) {
   reverseUrl.searchParams.set("viewbox", "122.019,11.628,123.336,10.407");
   reverseUrl.searchParams.set("bounded", "1");
 
-  const { data, error } = await $fetch<NominatimSearchResponse>(reverseUrl.toString(), {
+  const { data, error } = await $fetch<NominatimSearchResponse>(`${NOMINATIM_PROXY_BASE}/search?${reverseUrl.searchParams.toString()}`, {
     method: "GET",
   });
 

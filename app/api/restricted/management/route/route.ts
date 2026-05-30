@@ -1,6 +1,6 @@
 import type { NextRequest } from "next/server";
 
-import { getRoutePolyline } from "@/lib/osm/valhalla";
+import { getRoutePolyline } from "@/lib/osm/osrm";
 import { oneOf, unwrap } from "@/lib/one-of";
 import { ApiResponseBuilder, StatusCodes } from "@/lib/http";
 import * as closure from "@/lib/management/closure-manager";

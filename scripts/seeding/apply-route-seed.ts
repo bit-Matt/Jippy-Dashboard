@@ -7,7 +7,7 @@ import path from "node:path";
 
 import { addRoute } from "@/lib/management/route-manager";
 import { db } from "@/lib/db";
-import { getRoutePolyline } from "@/lib/osm/valhalla";
+import { getRoutePolyline } from "@/lib/osm/osrm";
 import { user } from "@/lib/db/schema";
 
 const jsonPath = path.join(__dirname, "route-seed-data.json");
@@ -86,14 +86,13 @@ async function main() {
       const goingToMapped = await map(goingTo, async (s) => {
         console.log("--> reversing %s - %d", s.shape_id, s.shape_pt_sequence);
 
-        const url = new URL("/reverse", process.env.NEXT_PUBLIC_NOMINATIM_URL);
+        const url = new URL("/reverse", process.env.NOMINATIM_URL);
         url.searchParams.append("format", "jsonv2");
         url.searchParams.append("lat", String(s.shape_pt_lat));
         url.searchParams.append("lon", String(s.shape_pt_lon));
 
         const response = await fetch(url.toString(), {
           method: "GET",
-          // FIX: Added required User-Agent to prevent Nominatim from blocking the request
           headers: {
             "User-Agent": "RouteSeederApp/1.0 (contact@yourdomain.com)",
           },
@@ -115,14 +114,13 @@ async function main() {
       const goingBackMapped = await map(goingBack, async (s) => {
         console.log("--> reversing %s - %d", s.shape_id, s.shape_pt_sequence);
 
-        const url = new URL("/reverse", process.env.NEXT_PUBLIC_NOMINATIM_URL);
+        const url = new URL("/reverse", process.env.NOMINATIM_URL);
         url.searchParams.append("format", "jsonv2");
         url.searchParams.append("lat", String(s.shape_pt_lat));
         url.searchParams.append("lon", String(s.shape_pt_lon));
 
         const response = await fetch(url.toString(), {
           method: "GET",
-          // FIX: Added required User-Agent
           headers: {
             "User-Agent": "RouteSeederApp/1.0 (contact@yourdomain.com)",
           },
@@ -146,7 +144,6 @@ async function main() {
         snapshotState: "ready",
         routeNumber: route.route_id,
         routeName: route.route_long_name,
-        // FIX: Multiplied instead of subtracted to get a valid random index
         routeColor: COLORS[Math.floor(Math.random() * COLORS.length)],
         routeDetails: "Seeded, needed to be filled",
         polylineGoingTo: goingToPolyline,

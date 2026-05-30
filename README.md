@@ -37,29 +37,27 @@ This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-
 
 2. Run the automated environment setup script:
 
-   ```sh
-   npm run setup
+   ```ps1
+   .\setup.ps1 # For Windows
    ```
 
-3. Create your tileserver configurations:
-
    ```sh
-   npm run setup:tileserver-style
+   ./setup.sh # For *nixes and macOS
    ```
 
-4. Then run the development server:
+3. Then run the development server:
 
    ```sh
    npm run dev
    ```
 
-5. Register your one and only root account:
+4. Create your one and only root account:
 
    ```sh
    npm run setup:admin
    ```
 
-6. (Optional & Recommended) Seed the routes provided:
+5. (Optional & Recommended) Seed the routes provided:
 
    ```sh
    npm run db:seed:clean

@@ -10,6 +10,7 @@ import "leaflet.vectorgrid";
 import "leaflet/dist/leaflet.css";
 
 import type { NavigateRouteLeg } from "@/contracts/responses";
+import { getLibertyStyleUrl } from "@/lib/map/style-url";
 import { decodePolyline } from "@/lib/routing/polyline";
 
 const fixLeafletIcons = () => {
@@ -31,7 +32,7 @@ const VectorTileLayer = () => {
     if (!map) return;
 
     const glLayer = L.maplibreGL({
-      style: "/tileserver/liberty.json",
+      style: getLibertyStyleUrl(),
     });
 
     glLayer.addTo(map);

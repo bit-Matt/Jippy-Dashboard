@@ -129,7 +129,7 @@ function formatDistance(meters: number): string {
   return `${Math.round(meters)} m`;
 }
 
-const NOMINATIM_BASE = process.env.NEXT_PUBLIC_NOMINATIM_URL ?? "";
+const NOMINATIM_BASE = process.env.NOMINATIM_URL ?? "";
 
 async function reverseGeocodePoint(lat: number, lng: number): Promise<string> {
   try {

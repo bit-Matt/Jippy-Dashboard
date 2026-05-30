@@ -71,11 +71,11 @@ export async function POST(req: NextRequest) {
   } catch (error) {
     console.error("[navigate] Route computation failed:", error);
 
-    const isValhallaError =
+    const isRoutingEngineError =
       error instanceof Error &&
-      error.message.includes("Valhalla");
+      (error.message.includes("OSRM") || error.message.includes("routing"));
 
-    if (isValhallaError) {
+    if (isRoutingEngineError) {
       return ApiResponseBuilder.createError(
         StatusCodes.Status503ServiceUnavailable,
         { message: "Routing engine is temporarily unavailable." },

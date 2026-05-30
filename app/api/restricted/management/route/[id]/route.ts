@@ -4,7 +4,7 @@ import { ApiResponseBuilder, StatusCodes } from "@/lib/http";
 import * as route from "@/lib/management/route-manager";
 import { tryParseJson } from "@/lib/http/RequestUtilities";
 import { oneOf, unwrap, UnwrappedException } from "@/lib/one-of";
-import { getRoutePolyline } from "@/lib/osm/valhalla";
+import { getRoutePolyline } from "@/lib/osm/osrm";
 import { utils, validator } from "@/lib/validator";
 import { session, SessionCode } from "@/lib/auth";
 import { logActivity } from "@/lib/management/activity-logger";

@@ -12,6 +12,7 @@ import "leaflet/dist/leaflet.css";
 import "@geoman-io/leaflet-geoman-free/dist/leaflet-geoman.css";
 
 import { useRegionEditor, type ActiveRegionTool } from "@/contexts/RegionEditorContext";
+import { getPositronStyleUrl } from "@/lib/map/style-url";
 
 const FocusRegionView = ({ regionFocusKey, focusedRegionWaypoints }: FocusRegionViewProps) => {
   const map = useMap();
@@ -57,7 +58,7 @@ const VectorTileLayer = () => {
     if (!map) return;
 
     const glLayer = L.maplibreGL({
-      style: "/tileserver/style.json",
+      style: getPositronStyleUrl(),
     });
 
     glLayer.addTo(map);

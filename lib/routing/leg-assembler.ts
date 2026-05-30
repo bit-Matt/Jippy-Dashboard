@@ -7,7 +7,7 @@ import { lineString as turfLineString } from "@turf/helpers";
 
 import { encodePolyline, decodePolyline } from "@/lib/routing/polyline";
 import { getWalkRoute } from "@/lib/routing/graphhopper-walk";
-import { getTricycleRoute } from "@/lib/routing/valhalla-motorcycle";
+import { getTricycleRoute } from "@/lib/routing/osrm-motorcycle";
 import { haversineMeters } from "@/lib/routing/graph-builder";
 import {
   generateWalkInstructions,
@@ -152,7 +152,7 @@ export async function buildEgressLeg(
 }
 
 // ---------------------------------------------------------------------------
-// Build a TRICYCLE leg using Valhalla motorcycle routing
+// Build a TRICYCLE leg using OSRM bicycle routing
 // ---------------------------------------------------------------------------
 
 export async function buildTricycleLeg(
@@ -207,8 +207,8 @@ async function buildLocalTricycleLeg(
   let distance: number;
   const straight = haversineMeters(from, to);
 
-  // Try Valhalla first — for short intra-region rides it usually stays local.
-  // Fall back to GraphHopper walking geometry if Valhalla detours too much.
+  // Try OSRM bicycle first — for short intra-region rides it usually stays local.
+  // Fall back to GraphHopper walking geometry if OSRM detours too much.
   try {
     const route = await getTricycleRoute(from, to);
     if (route.distance <= straight * 2.0) {
