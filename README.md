@@ -89,7 +89,7 @@ To learn more about how this project is developed, take a look at the following 
 
 ### Geospatial & Routing Engines:
 
-- [Valhalla](https://valhalla.github.io/valhalla/) - The primary engine used for vehicle routing.
+- [OSRM](https://project-osrm.org/) - Primary routing engine for car and motorcycle/tricycle path generation.
 - [Nominatim](https://nominatim.org/) - Geocoding service for address and location lookups.
 - [GraphHopper](https://www.graphhopper.com/) - Specialized routing engine for pedestrian and walking paths.
 
@@ -100,6 +100,54 @@ To learn more about how this project is developed, take a look at the following 
 ## API Reference
 
 The public API is accessible without authentication. To ensure service stability, an aggressive rate limit of 1 requests per second (10 requests per 10 seconds) per IP address is enforced on the public deployment.
+
+### Proxy Endpoints (`/api/public/*`)
+
+The dashboard now exposes proxy routes for external map/routing providers. Frontend and public clients should call these proxied endpoints instead of directly calling container/service hosts.
+
+#### `/api/public/osrm/car/*`
+
+Proxy to the OSRM car deployment (`driving_router`).
+
+Example:
+
+```http
+GET /api/public/osrm/car/route/v1/driving/122.56876,10.69199;122.56795,10.69191?overview=full&steps=true&alternatives=false
+```
+
+#### `/api/public/osrm/bicycle/*`
+
+Proxy to the OSRM motorcycle/tricycle deployment (`driving_bicycle`).
+
+Example:
+
+```http
+GET /api/public/osrm/bicycle/route/v1/driving/122.56876,10.69199;122.58769,10.69956?overview=full&steps=false
+```
+
+#### `/api/public/nominatim/*`
+
+Proxy to Nominatim for search and reverse geocoding.
+
+Examples:
+
+```http
+GET /api/public/nominatim/reverse?lat=10.69199&lon=122.56876&format=jsonv2
+GET /api/public/nominatim/search?q=Jaro%20Plaza&format=jsonv2&countrycodes=ph
+```
+
+#### `/api/public/graphhopper/*`
+
+Proxy to GraphHopper, primarily used for pedestrian routing.
+
+Example:
+
+```http
+GET /api/public/graphhopper/route?point=10.69199,122.56876&point=10.69956,122.58769&profile=foot&points_encoded=false
+```
+
+> [!NOTE]
+> Proxy handlers return raw upstream responses and preserve provider status codes. Responses are intentionally not wrapped with `ApiResponseBuilder`.
 
 ### GET `/api/public/all`
 
@@ -122,7 +170,7 @@ The payload must be a JSON object containing `start` and `end` coordinates as [l
 
 ### POST `/api/public/navigate/v2`
 
-An optimized navigation endpoint utilizing the rewritten [`JippyServices.Algorithm`](services/JippyServices/JippyServices.Algorithm).
+An optimized navigation endpoint utilizing the rewritten [`JippyServices.Algorithm`](services/JippyServices.Algorithm).
 
 > [!NOTE]
 > While the input schema remains identical to `v1`, this version may yield different routing results or improved transfer logic (e.g., between Jeepneys and Tricycles) compared to the legacy engine.
