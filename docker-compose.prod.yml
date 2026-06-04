@@ -50,10 +50,10 @@ services:
       - ./.osm-data/tileserver:/data
       - ./scripts/tileserver/config.json:/data/config.json
     command:
+      - "-c"
+      - "/data/config.json"
       - "--public_url"
       - "${NEXT_PUBLIC_TILESERVER_URL}"
-      - "--file"
-      - "/data/map.mbtiles"
     healthcheck:
       test: [ "CMD-SHELL", "node /usr/src/app/src/healthcheck.js" ]
       interval: 30s
@@ -111,32 +111,16 @@ services:
       - "mld"
       - "/data/philippines-latest.osrm"
 
-  #############################################################################
-  # GraphHopper routing engine for walking
-  #############################################################################
-  graphhopper:
-    image: israelhikingmap/graphhopper:latest
+  osrm_foot:
+    image: osrm/osrm-backend:latest
     restart: unless-stopped
     volumes:
-      - ./.osm-data/graphhopper:/data
-      - ./.osm-data/philippines-latest.osm.pbf:/data/philippines-latest.osm.pbf
-    environment:
-      - JAVA_OPTS=-Xmx2g -Xms2g -Ddw.graphhopper.graph.encoded_values=car_access,car_average_speed,country,road_class,roundabout,max_speed,foot_access,foot_average_speed,foot_priority,foot_road_access,hike_rating,average_slope,bike_access,bike_average_speed,bike_priority,bike_road_access,bike_network,mtb_rating,ferry_speed,road_environment
-    command: >
-      -i /data/philippines-latest.osm.pbf
-      -o /data/graph-cache
-      --host 0.0.0.0
-    healthcheck:
-      test: [ "CMD-SHELL", "curl -f http://localhost:8989/info || exit 1" ]
-      interval: 30s
-      timeout: 10s
-      retries: 9999
-      start_period: 10m
-    depends_on:
-      db:
-        condition: service_healthy
-      geocoder:
-        condition: service_healthy
+      - ./.osm-data/osrm-foot:/data
+    command:
+      - "osrm-routed"
+      - "--algorithm"
+      - "mld"
+      - "/data/philippines-latest.osrm"
 
   #############################################################################
   # Algorithm
@@ -150,7 +134,7 @@ services:
       Services__Nominatim: http://geocoder:8080
       Services__OSRM__Driving: http://driving_router:5000
       Services__OSRM__Bicycle: http://driving_bicycle:5000
-      Services__GraphHopper: http://graphhopper:8989
+      Services__OSRM__Foot: http://osrm_foot:5000
       ConnectionStrings__DefaultConnection: ${DOTNET_POSTGRES_URL}
       ConnectionStrings__RedisCache: cache:6379
     depends_on:
@@ -164,8 +148,8 @@ services:
         condition: service_started
       driving_bicycle:
         condition: service_started
-      graphhopper:
-        condition: service_healthy
+      osrm_foot:
+        condition: service_started
 
   #############################################################################
   # Main Application
@@ -186,7 +170,7 @@ services:
       NOMINATIM_URL: http://geocoder:8080
       OSRM_DRIVING_URL: http://driving_router:5000
       OSRM_BICYCLE_URL: http://driving_bicycle:5000
-      GRAPHHOPPER_URL: http://graphhopper:8989
+      OSRM_FOOT_URL: http://osrm_foot:5000
       ALGORITHM_URL: http://algorithm:8080
       NEXT_PUBLIC_TILESERVER_URL: ${NEXT_PUBLIC_TILESERVER_URL}
     depends_on:
@@ -200,8 +184,8 @@ services:
         condition: service_started
       driving_bicycle:
         condition: service_started
-      graphhopper:
-        condition: service_healthy
+      osrm_foot:
+        condition: service_started
 
   #############################################################################
   # Cloudflare Proxy to expose in the public web

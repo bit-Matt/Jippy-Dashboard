@@ -27,7 +27,7 @@ builder.Services.AddStackExchangeRedisCache(options =>
 builder.Services.AddMemoryCache();
 
 // HTTP clients for external routing services
-builder.Services.AddHttpClient<GraphHopperClient>();
+builder.Services.AddHttpClient<OsrmWalkClient>();
 builder.Services.AddHttpClient<OsrmClient>();
 builder.Services.AddHttpClient<NominatimClient>();
 

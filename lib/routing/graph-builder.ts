@@ -1032,7 +1032,7 @@ export async function queryUserNodeDistances(
   accessCandidates.sort((a, b) => a.geoDist - b.geoDist);
   const cappedAccess = accessCandidates.slice(0, MAX_ACCESS_QUERIES);
 
-  const { getWalkDistance } = await import("@/lib/routing/graphhopper-walk");
+  const { getWalkDistance } = await import("@/lib/routing/osrm-walk");
 
   const accessResults = await Promise.all(
     cappedAccess.map(async (c) => {

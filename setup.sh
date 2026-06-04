@@ -19,6 +19,46 @@ fi
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
+yellow() {
+  printf '\033[33m%s\033[0m\n' "$1"
+}
+
+###############################################################################
+# Load existing .env variables for re-runs
+###############################################################################
+declare -A ENV_HASH
+ENV_FILE_PATH="${SCRIPT_DIR}/.env"
+
+if [[ -f "$ENV_FILE_PATH" ]]; then
+  printf '\033[36m%s\033[0m\n' "Found .env file. Building configuration record..."
+
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    line="${line#"${line%%[![:space:]]*}"}"
+    line="${line%"${line##*[![:space:]]}"}"
+    [[ -z "$line" || "$line" =~ ^# ]] && continue
+    [[ "$line" != *"="* ]] && continue
+
+    name="${line%%=*}"
+    value="${line#*=}"
+    name="${name#"${name%%[![:space:]]*}"}"
+    name="${name%"${name##*[![:space:]]}"}"
+    value="${value#"${value%%[![:space:]]*}"}"
+    value="${value%"${value##*[![:space:]]}"}"
+
+    if [[ "$value" =~ ^\"(.*)\"$ ]]; then
+      value="${BASH_REMATCH[1]}"
+    elif [[ "$value" =~ ^\'(.*)\'$ ]]; then
+      value="${BASH_REMATCH[1]}"
+    fi
+
+    ENV_HASH["$name"]="$value"
+  done < "$ENV_FILE_PATH"
+
+  printf '\033[32m%s\033[0m\n' "Configuration record built successfully."
+else
+  yellow ".env file not found at ${ENV_FILE_PATH}. Using default/empty configuration."
+fi
+
 ###############################################################################
 # Utilities
 ###############################################################################
@@ -64,10 +104,6 @@ invoke_7z() {
   fi
 
   7z x "$path" "-o${output}"
-}
-
-yellow() {
-  printf '\033[33m%s\033[0m\n' "$1"
 }
 
 ###############################################################################
@@ -120,19 +156,31 @@ fi
 ###############################################################################
 # Main Setup
 ###############################################################################
-read -r -p "Your Sentry Auth Token: " SENTRY_TOKEN
+if [[ -n "${ENV_HASH[SENTRY_AUTH_TOKEN]:-}" ]]; then
+  SENTRY_TOKEN="${ENV_HASH[SENTRY_AUTH_TOKEN]}"
+else
+  read -r -p "Your Sentry Auth Token: " SENTRY_TOKEN
+fi
 if [[ -z "$SENTRY_TOKEN" ]]; then
   yellow "Empty Sentry Token."
   exit 1
 fi
 
-read -r -p "Your Resend API Key: " RESEND_TOKEN
+if [[ -n "${ENV_HASH[RESEND_API_KEY]:-}" ]]; then
+  RESEND_TOKEN="${ENV_HASH[RESEND_API_KEY]}"
+else
+  read -r -p "Your Resend API Key: " RESEND_TOKEN
+fi
 if [[ -z "$RESEND_TOKEN" ]]; then
   yellow "Empty Resend API Key."
   exit 1
 fi
 
-read -r -p "Your Resend From Address Domain: " RESEND_ADDRESS
+if [[ -n "${ENV_HASH[RESEND_FROM_ADDRESS]:-}" ]]; then
+  RESEND_ADDRESS="${ENV_HASH[RESEND_FROM_ADDRESS]}"
+else
+  read -r -p "Your Resend From Address Domain: " RESEND_ADDRESS
+fi
 if [[ -z "$RESEND_ADDRESS" ]]; then
   yellow "Empty Resend Address Domain."
   exit 1
@@ -140,14 +188,22 @@ fi
 
 CLOUDFLARE_TOKEN="IS_DEV_NOT_SET"
 if [[ "$IS_PRODUCTION" == "true" ]]; then
-  read -r -p "Your cloudflared token: " CLOUDFLARE_TOKEN
+  if [[ -n "${ENV_HASH[DOCKER_CLOUDFLARED_TOKEN]:-}" ]]; then
+    CLOUDFLARE_TOKEN="${ENV_HASH[DOCKER_CLOUDFLARED_TOKEN]}"
+  else
+    read -r -p "Your cloudflared token: " CLOUDFLARE_TOKEN
+  fi
   if [[ -z "$CLOUDFLARE_TOKEN" ]]; then
     yellow "Empty cloudflared token."
   fi
 fi
 
 BETTER_AUTH_SECRET="$(new_secure_password 32)"
-read -r -p "Deployment Host (Default: http://localhost:6769): " BETTER_AUTH_URL
+if [[ -n "${ENV_HASH[BETTER_AUTH_URL]:-}" ]]; then
+  BETTER_AUTH_URL="${ENV_HASH[BETTER_AUTH_URL]}"
+else
+  read -r -p "Deployment Host (Default: http://localhost:6769): " BETTER_AUTH_URL
+fi
 if [[ -z "$BETTER_AUTH_URL" ]]; then
   BETTER_AUTH_URL="http://localhost:6769"
 fi
@@ -163,16 +219,16 @@ if [[ -z "$TILESERVER_URL" && "$IS_PRODUCTION" == "true" ]]; then
 fi
 
 if [[ "$IS_PRODUCTION" == "true" ]]; then
-  NOMINATIM_URL=""
-  OSRM_DRIVING_URL=""
-  OSRM_BICYCLE_URL=""
-  GRAPHHOPPER_URL=""
-  ALGORITHM_SERV_URL=""
+  NOMINATIM_URL="http://geocoder:8080"
+  OSRM_DRIVING_URL="http://driving_router:5000"
+  OSRM_BICYCLE_URL="http://driving_bicycle:5000"
+  OSRM_FOOT_URL="http://osrm_foot:5000"
+  ALGORITHM_SERV_URL="http://algorithm:8080"
 else
   NOMINATIM_URL="http://localhost:6701"
   OSRM_DRIVING_URL="http://localhost:6702"
   OSRM_BICYCLE_URL="http://localhost:6703"
-  GRAPHHOPPER_URL="http://localhost:6704"
+  OSRM_FOOT_URL="http://localhost:6704"
   ALGORITHM_SERV_URL="http://localhost:6705"
 fi
 
@@ -184,7 +240,11 @@ DATABASE_NAME="jippy"
 DATABASE_HOST="localhost"
 DATABASE_USERNAME="postgres"
 DATABASE_PORT="$(get_available_port)"
-DATABASE_PASSWORD="$(new_secure_password 32)"
+if [[ -n "${ENV_HASH[DOCKER_POSTGRES_PASSWORD]:-}" ]]; then
+  DATABASE_PASSWORD="${ENV_HASH[DOCKER_POSTGRES_PASSWORD]}"
+else
+  DATABASE_PASSWORD="$(new_secure_password 32)"
+fi
 DATABASE_CONNSTR="postgres://${DATABASE_USERNAME}:${DATABASE_PASSWORD}@${DATABASE_HOST}:${DATABASE_PORT}/${DATABASE_NAME}?schema=public"
 DATABASE_CONNSTR_DOTNET="Host=db;Port=5432;Database=${DATABASE_NAME};Username=${DATABASE_USERNAME};Password=${DATABASE_PASSWORD}"
 
@@ -198,7 +258,7 @@ BETTER_AUTH_SECRET="${BETTER_AUTH_SECRET}"
 BETTER_AUTH_URL="${BETTER_AUTH_URL}"
 SENTRY_AUTH_TOKEN="${SENTRY_TOKEN}"
 RESEND_API_KEY="${RESEND_TOKEN}"
-RESEND_FROM_ADDRESS="Jippy <${RESEND_ADDRESS}>"
+RESEND_FROM_ADDRESS="${RESEND_ADDRESS}"
 POSTGRES_URL="${DATABASE_CONNSTR}"
 REDIS_URL="${REDIS_CONNSTR}"
 
@@ -206,7 +266,7 @@ REDIS_URL="${REDIS_CONNSTR}"
 NOMINATIM_URL="${NOMINATIM_URL}"
 OSRM_DRIVING_URL="${OSRM_DRIVING_URL}"
 OSRM_BICYCLE_URL="${OSRM_BICYCLE_URL}"
-GRAPHHOPPER_URL="${GRAPHHOPPER_URL}"
+OSRM_FOOT_URL="${OSRM_FOOT_URL}"
 ALGORITHM_URL="${ALGORITHM_SERV_URL}"
 
 # Service URLs that meant to be accessed outside
@@ -329,7 +389,7 @@ cat > "${SCRIPT_DIR}/.osm-data/tileserver/config.json" <<EOF
     }
   },
   "data": {
-    "openmaptiles": {
+    "philippines-map": {
       "mbtiles": "/data/map.mbtiles"
     }
   }
@@ -342,6 +402,8 @@ OSRM_VOLUME_PATH[Driving]="${SCRIPT_DIR}/.osm-data/osrm-driving"
 OSRM_LUA_PATH[Driving]="/opt/car.lua"
 OSRM_VOLUME_PATH[Bicycle]="${SCRIPT_DIR}/.osm-data/osrm-bicycle"
 OSRM_LUA_PATH[Bicycle]="/opt/bicycle.lua"
+OSRM_VOLUME_PATH[Foot]="${SCRIPT_DIR}/.osm-data/osrm-foot"
+OSRM_LUA_PATH[Foot]="/opt/foot.lua"
 
 for KEY in "${!OSRM_VOLUME_PATH[@]}"; do
   echo "Preparing data for ${KEY}..."

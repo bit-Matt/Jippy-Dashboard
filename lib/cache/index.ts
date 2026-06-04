@@ -2,32 +2,21 @@ import { createClient } from "redis";
 import { DateTime } from "luxon";
 import * as Sentry from "@sentry/nextjs";
 
-import { utils } from "@/lib/validator";
+const REDIS_URL = process.env.REDIS_URL;
 
 // Prevent TypeScript errors for global augmentation
 const globalForRedis = global as unknown as {
   cacheManager: CacheManager | undefined;
 };
 
+async function createRedisClient() {
+  return await createClient({ url: REDIS_URL })
+    .on("error", (e) => Sentry.captureException(e))
+    .connect();
+}
+
 class CacheManager {
-  private readonly _url: string | null = null;
-  private readonly _disabled: boolean = false;
-
-  private _client?: ReturnType<typeof createClient>;
-
-  constructor() {
-    if (utils.isExisty(process.env.REDIS_URL) && utils.isNonEmpty(process.env.REDIS_URL)) {
-      this._url = process.env.REDIS_URL!;
-      this._disabled = false;
-
-      return;
-    }
-
-    this._url = null;
-    this._disabled = true;
-
-    Sentry.logger.warn("Redis is disabled. REDIS_URL is not set.");
-  }
+  private _client?: Awaited<ReturnType<typeof createRedisClient>>;
 
   /**
    * Returns a connected and healthy Redis client, creating/reconnecting if needed.
@@ -38,19 +27,14 @@ class CacheManager {
    *
    * @returns {Promise<ReturnType<typeof createClient>>} A ready-to-use Redis client.
    */
-  private async getClient(): Promise<ReturnType<typeof createClient>> {
-    if (this._disabled) throw new Error("Redis is disabled.");
-
+  private async getClient(): Promise<ReturnType<typeof createRedisClient>> {
     // If a client exists and is healthy, return it
     if (this._client?.isOpen && this._client?.isReady) {
       return this._client;
     }
 
     // Otherwise, create/reconnect
-    this._client = await createClient({ url: this._url! })
-      .on("error", (e) => Sentry.captureException(e))
-      .connect();
-
+    this._client = await createRedisClient();
     return this._client;
   }
 
@@ -65,18 +49,10 @@ class CacheManager {
    * Assumes each hash field value is a JSON-encoded string.
    */
   async hgetAll<T>(key: string): Promise<T[]> {
-    if (this._disabled) return [];
-
     const client = await this.getClient();
 
     const object = await client.hGetAll(key);
-    return Object.values(object).map((i) => {
-      try {
-        return JSON.parse(i);
-      } catch {
-        return null;
-      }
-    }).filter(x => x !== null) as T[];
+    return Object.values(object).map((i) => JSON.parse(i)) as T[];
   }
 
   /**
@@ -91,8 +67,6 @@ class CacheManager {
    * @returns {Promise<void>} Resolves when the write (and optional expiry) completes.
    */
   async hset(key: string, value: Record<string, string>, options?: CacheOptions): Promise<void> {
-    if (this._disabled) return;
-
     const client = await this.getClient();
     await client.hSet(key, value);
 
@@ -114,8 +88,6 @@ class CacheManager {
    * @returns {Promise<void>} Resolves when the update completes (or immediately if the key is missing).
    */
   async hsetWrite(key: string, innerKey: string, newValue: string): Promise<void> {
-    if (this._disabled) return;
-
     const client = await this.getClient();
 
     const isKeyExists = await client.exists(key);
@@ -139,8 +111,6 @@ class CacheManager {
    * @returns {Promise<void>} Resolves when the write (and optional expiry) completes.
    */
   async writeJson(key: string, value: ValueType, options?: CacheOptions): Promise<void> {
-    if (this._disabled) return;
-
     const client = await this.getClient();
 
     const isKeyExists = await client.exists(key);
@@ -167,8 +137,6 @@ class CacheManager {
    * @returns {Promise<void>} Resolves when the update completes (or immediately if the key is missing).
    */
   async writeJsonAtomic(key: string, path: string, value: ValueType): Promise<void> {
-    if (this._disabled) return;
-
     const client = await this.getClient();
 
     const isKeyExists = await client.exists(key);
@@ -188,8 +156,6 @@ class CacheManager {
    * @returns {Promise<T | null>} The parsed JSON value, or `null` if not found.
    */
   async getJson<T>(key: string): Promise<T | null> {
-    if (this._disabled) return null;
-
     const client = await this.getClient();
     const json = await client.json.get(key, { path: "$" });
 
@@ -212,8 +178,6 @@ class CacheManager {
    * @returns {Promise<T | null>} The value at the path, or `null` if not found.
    */
   async getJsonAtomic<T>(key: string, path: string): Promise<T | null> {
-    if (this._disabled) return null;
-
     const client = await this.getClient();
     const json = await client.json.get(key, { path });
 
@@ -229,8 +193,6 @@ class CacheManager {
    * @returns {Promise<void>} Resolves when deletion completes (or immediately if missing).
    */
   async delete(key: string): Promise<void> {
-    if (this._disabled) return;
-
     const client = await this.getClient();
     const exists = await client.exists(key);
     if (exists) {
@@ -246,8 +208,6 @@ class CacheManager {
    * @returns {Promise<void>} Resolves when deletion completes (or immediately if missing).
    */
   async deleteAtomic(key: string, path: string): Promise<void> {
-    if (this._disabled) return;
-
     const client = await this.getClient();
     const exists = await client.exists(key);
     if (exists) {
@@ -263,7 +223,8 @@ export type CacheOptions = Partial<{
   overwrite: boolean;
 
   /**
-   * Non-zero positive integer representing the number of MINUTES until the cache entry expires.
+   * Non-zero positive integer representing the number of seconds until the cache entry expires.
+   * @remarks The value represents in minutes.
    */
   lifetime: number;
 }>

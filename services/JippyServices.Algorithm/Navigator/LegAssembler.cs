@@ -8,7 +8,7 @@ namespace JippyServices.Algorithm.Navigator;
 // -------------------------------------------------------------------------
 
 public sealed class LegAssembler(
-    GraphHopperClient graphHopper,
+    OsrmWalkClient osrmWalk,
     OsrmClient osrm,
     InstructionGenerator instructions)
 {
@@ -18,7 +18,7 @@ public sealed class LegAssembler(
 
     public async Task<List<RouteLeg>> BuildWalkOnlyRouteAsync(LatLng from, LatLng to)
     {
-        var walk = await graphHopper.GetWalkRouteAsync(from, to);
+        var walk = await osrmWalk.GetWalkRouteAsync(from, to);
         var instr = InstructionGenerator.GenerateWalkInstructions(walk.Maneuvers);
         var bbox = GeoUtils.ComputeBbox([from, to]);
 
@@ -134,7 +134,7 @@ public sealed class LegAssembler(
                     var to = new LatLng(walk.ToNode.Lat, walk.ToNode.Lng);
                     if (GeoUtils.HaversineMeters(from, to) < 1) continue;
 
-                    var walkRoute = await graphHopper.GetWalkRouteAsync(from, to);
+                    var walkRoute = await osrmWalk.GetWalkRouteAsync(from, to);
                     legs.Add(new RouteLeg
                     {
                         Type = LegType.Walk,
@@ -177,7 +177,7 @@ public sealed class LegAssembler(
                         {
                             try
                             {
-                                var walkRoute = await graphHopper.GetWalkRouteAsync(from, stationPt);
+                                var walkRoute = await osrmWalk.GetWalkRouteAsync(from, stationPt);
                                 legs.Add(new RouteLeg
                                 {
                                     Type = LegType.Walk,
@@ -269,9 +269,9 @@ public sealed class LegAssembler(
 
     /// <summary>
     /// After leg assembly, detect cases where the end of one leg does not
-    /// connect to the start of the next (GraphHopper road-snapping causes
+    /// connect to the start of the next (OSRM road-snapping causes
     /// this). When a gap > 10 m is found, a bridging WALK is inserted via
-    /// GraphHopper. If the following leg is already a WALK, the two walks
+    /// OSRM foot. If the following leg is already a WALK, the two walks
     /// are merged to avoid WALK→WALK.
     /// </summary>
     private async Task<List<RouteLeg>> FillLegGapsAsync(List<RouteLeg> legs)
@@ -317,7 +317,7 @@ public sealed class LegAssembler(
 
             try
             {
-                var walk = await graphHopper.GetWalkRouteAsync(prevEnd, currStart);
+                var walk = await osrmWalk.GetWalkRouteAsync(prevEnd, currStart);
                 glueCoords = PolylineCodec.Decode(walk.Polyline);
                 glueDistance = walk.Distance;
                 glueDuration = walk.Duration;
@@ -423,7 +423,7 @@ public sealed class LegAssembler(
     }
 
     /// <summary>
-    /// Build a tricycle leg using local road geometry (GraphHopper walking
+    /// Build a tricycle leg using local road geometry (OSRM foot walking
     /// geometry at tricycle speed) for station → jeepney transfers.
     /// </summary>
     private async Task<RouteLeg> BuildLocalTricycleLegAsync(
@@ -433,7 +433,7 @@ public sealed class LegAssembler(
         double distance;
         var straight = GeoUtils.HaversineMeters(from, to);
 
-        // Try OSRM bicycle first; fall back to GraphHopper walking geometry
+        // Try OSRM bicycle first; fall back to OSRM foot walking geometry
         try
         {
             var route = await osrm.GetTricycleRouteAsync(from, to);
@@ -448,7 +448,7 @@ public sealed class LegAssembler(
         {
             try
             {
-                var walk = await graphHopper.GetWalkRouteAsync(from, to);
+                var walk = await osrmWalk.GetWalkRouteAsync(from, to);
                 polyline = walk.Polyline;
                 distance = walk.Distance;
             }

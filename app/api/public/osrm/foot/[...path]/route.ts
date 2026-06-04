@@ -1,6 +1,6 @@
 import type { NextRequest } from "next/server";
 
-const BASE_URL = process.env.GRAPHHOPPER_URL;
+const BASE_URL = process.env.OSRM_FOOT_URL;
 
 function buildResponseHeaders(upstreamHeaders: Headers): Headers {
   const headers = new Headers(upstreamHeaders);
@@ -16,9 +16,9 @@ function buildResponseHeaders(upstreamHeaders: Headers): Headers {
   return headers;
 }
 
-async function proxy(req: NextRequest, { params }: RouteContext<"/api/public/graphhopper/[...path]">) {
+async function proxy(req: NextRequest, { params }: RouteContext<"/api/public/osrm/foot/[...path]">) {
   if (!BASE_URL) {
-    return new Response("GraphHopper service is not configured.", { status: 500 });
+    return new Response("OSRM foot service is not configured.", { status: 500 });
   }
 
   const { path } = await params;
@@ -45,30 +45,30 @@ async function proxy(req: NextRequest, { params }: RouteContext<"/api/public/gra
   });
 }
 
-export async function GET(req: NextRequest, ctx: RouteContext<"/api/public/graphhopper/[...path]">) {
+export async function GET(req: NextRequest, ctx: RouteContext<"/api/public/osrm/foot/[...path]">) {
   return proxy(req, ctx);
 }
 
-export async function POST(req: NextRequest, ctx: RouteContext<"/api/public/graphhopper/[...path]">) {
+export async function POST(req: NextRequest, ctx: RouteContext<"/api/public/osrm/foot/[...path]">) {
   return proxy(req, ctx);
 }
 
-export async function PUT(req: NextRequest, ctx: RouteContext<"/api/public/graphhopper/[...path]">) {
+export async function PUT(req: NextRequest, ctx: RouteContext<"/api/public/osrm/foot/[...path]">) {
   return proxy(req, ctx);
 }
 
-export async function PATCH(req: NextRequest, ctx: RouteContext<"/api/public/graphhopper/[...path]">) {
+export async function PATCH(req: NextRequest, ctx: RouteContext<"/api/public/osrm/foot/[...path]">) {
   return proxy(req, ctx);
 }
 
-export async function DELETE(req: NextRequest, ctx: RouteContext<"/api/public/graphhopper/[...path]">) {
+export async function DELETE(req: NextRequest, ctx: RouteContext<"/api/public/osrm/foot/[...path]">) {
   return proxy(req, ctx);
 }
 
-export async function OPTIONS(req: NextRequest, ctx: RouteContext<"/api/public/graphhopper/[...path]">) {
+export async function OPTIONS(req: NextRequest, ctx: RouteContext<"/api/public/osrm/foot/[...path]">) {
   return proxy(req, ctx);
 }
 
-export async function HEAD(req: NextRequest, ctx: RouteContext<"/api/public/graphhopper/[...path]">) {
+export async function HEAD(req: NextRequest, ctx: RouteContext<"/api/public/osrm/foot/[...path]">) {
   return proxy(req, ctx);
 }

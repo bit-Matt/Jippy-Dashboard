@@ -6,7 +6,7 @@ import turfBbox from "@turf/bbox";
 import { lineString as turfLineString } from "@turf/helpers";
 
 import { encodePolyline, decodePolyline } from "@/lib/routing/polyline";
-import { getWalkRoute } from "@/lib/routing/graphhopper-walk";
+import { getWalkRoute } from "@/lib/routing/osrm-walk";
 import { getTricycleRoute } from "@/lib/routing/osrm-motorcycle";
 import { haversineMeters } from "@/lib/routing/graph-builder";
 import {

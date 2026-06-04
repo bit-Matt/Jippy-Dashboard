@@ -8,7 +8,7 @@ namespace JippyServices.Algorithm.Navigator;
 /// <summary>
 /// Dynamic graph construction from transit data.
 /// </summary>
-public sealed class GraphBuilder(DataContext db, GraphHopperClient graphHopper, TransitDataCache transitCache)
+public sealed class GraphBuilder(DataContext db, OsrmWalkClient osrmWalk, TransitDataCache transitCache)
 {
     /// <summary>
     /// Load transit data from database
@@ -854,7 +854,7 @@ public sealed class GraphBuilder(DataContext db, GraphHopperClient graphHopper, 
     }
 
     /// <summary>
-    /// Query raw walk distances for virtual start/end nodes (GraphHopper I/O)
+    /// Query raw walk distances for virtual start/end nodes (OSRM foot I/O)
     /// </summary>
     /// <param name="start"></param>
     /// <param name="end"></param>
@@ -938,11 +938,11 @@ public sealed class GraphBuilder(DataContext db, GraphHopperClient graphHopper, 
         accessCandidates.Sort((a, b) => a.GeoDist.CompareTo(b.GeoDist));
         var cappedAccess = accessCandidates.Take(RoutingConstants.MaxAccessQueries).ToList();
 
-        // Query GraphHopper in parallel
+        // Query OSRM foot in parallel
         var accessTasks = cappedAccess.Select(async c =>
         {
             var node = nodes[c.NodeId];
-            var d = await graphHopper.GetWalkDistanceAsync(start, new LatLng(node.Lat, node.Lng));
+            var d = await osrmWalk.GetWalkDistanceAsync(start, new LatLng(node.Lat, node.Lng));
             return (c.NodeId, Dist: double.IsPositiveInfinity(d) ? c.GeoDist * 1.4 : d);
         });
 
@@ -989,7 +989,7 @@ public sealed class GraphBuilder(DataContext db, GraphHopperClient graphHopper, 
         var egressTasks = cappedEgress.Select(async c =>
         {
             var node = nodes[c.NodeId];
-            var d = await graphHopper.GetWalkDistanceAsync(new LatLng(node.Lat, node.Lng), end);
+            var d = await osrmWalk.GetWalkDistanceAsync(new LatLng(node.Lat, node.Lng), end);
             return (c.NodeId, Dist: double.IsPositiveInfinity(d) ? c.GeoDist * 1.4 : d);
         });
 
@@ -1208,7 +1208,7 @@ public sealed class GraphBuilder(DataContext db, GraphHopperClient graphHopper, 
         BuildTricycleNodesAndEdges(
             staticGraph.TransitData.Regions, nodes, baseEdges, start, end, now ?? DateTime.UtcNow);
 
-        // Query GraphHopper for real walk distances (expensive I/O — done once)
+        // Query OSRM foot for real walk distances (expensive I/O — done once)
         var (accessDistances, egressDistances) = await QueryUserNodeDistancesAsync(
             start, end, staticGraph.TransitData.Routes, nodes);
 

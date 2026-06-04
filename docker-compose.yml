@@ -66,7 +66,7 @@ services:
       - "-c"
       - "/data/config.json"
       - "--public_url"
-      - "http://localhost:6700"
+      - "${NEXT_PUBLIC_TILESERVER_URL}"
     healthcheck:
       test: [ "CMD-SHELL", "node /usr/src/app/src/healthcheck.js" ]
       interval: 30s
@@ -117,6 +117,7 @@ services:
       - "--algorithm"
       - "mld"
       - "/data/philippines-latest.osrm"
+
   driving_bicycle:
     image: osrm/osrm-backend:latest
     restart: unless-stopped
@@ -129,6 +130,20 @@ services:
       - "--algorithm"
       - "mld"
       - "/data/philippines-latest.osrm"
+
+  osrm_foot:
+    image: osrm/osrm-backend:latest
+    restart: unless-stopped
+    ports:
+      - "6704:5000"
+    volumes:
+      - ./.osm-data/osrm-foot:/data
+    command:
+      - "osrm-routed"
+      - "--algorithm"
+      - "mld"
+      - "/data/philippines-latest.osrm"
+
   debug_frontend:
     image: osrm/osrm-frontend:latest
     restart: unless-stopped
@@ -136,41 +151,14 @@ services:
       - "6901:9966"
     environment:
       OSRM_BACKEND: "http://localhost:6702"
-      OSRM_MODES: '[{"name":"driving","url":"http://localhost:6702"},{"name":"bicycle","url":"http://localhost:6703"}]'
+      OSRM_MODES: '[{"name":"driving","url":"http://localhost:6702"},{"name":"bicycle","url":"http://localhost:6703"},{"name":"foot","url":"http://localhost:6704"}]'
     depends_on:
       driving_router:
         condition: service_started
       driving_bicycle:
         condition: service_started
-
-  #############################################################################
-  # GraphHopper routing engine for walking
-  #############################################################################
-  graphhopper:
-    image: israelhikingmap/graphhopper:latest
-    restart: unless-stopped
-    ports:
-      - "6704:8989"
-    volumes:
-      - ./.osm-data/graphhopper:/data
-      - ./.osm-data/philippines-latest.osm.pbf:/data/philippines-latest.osm.pbf
-    environment:
-      - JAVA_OPTS=-Xmx2g -Xms2g -Ddw.graphhopper.graph.encoded_values=car_access,car_average_speed,country,road_class,roundabout,max_speed,foot_access,foot_average_speed,foot_priority,foot_road_access,hike_rating,average_slope,bike_access,bike_average_speed,bike_priority,bike_road_access,bike_network,mtb_rating,ferry_speed,road_environment
-    command: >
-      -i /data/philippines-latest.osm.pbf
-      -o /data/graph-cache
-      --host 0.0.0.0
-    healthcheck:
-      test: [ "CMD-SHELL", "curl -f http://localhost:8989/info || exit 1" ]
-      interval: 30s
-      timeout: 10s
-      retries: 9999
-      start_period: 10m
-    depends_on:
-      db:
-        condition: service_healthy
-      geocoder:
-        condition: service_healthy
+      osrm_foot:
+        condition: service_started
 
   #############################################################################
   # Algorithm
@@ -186,7 +174,7 @@ services:
       Services__Nominatim: http://geocoder:8080
       Services__OSRM__Driving: http://driving_router:5000
       Services__OSRM__Bicycle: http://driving_bicycle:5000
-      Services__GraphHopper: http://graphhopper:8989
+      Services__OSRM__Foot: http://osrm_foot:5000
       ConnectionStrings__DefaultConnection: ${DOCKER_DOTNET_POSTGRES}
       ConnectionStrings__RedisCache: cache:6379
     depends_on:
@@ -198,7 +186,7 @@ services:
         condition: service_started
       driving_bicycle:
         condition: service_started
-      graphhopper:
-        condition: service_healthy
+      osrm_foot:
+        condition: service_started
       cache:
         condition: service_healthy

@@ -13,6 +13,38 @@ Write-Host ""
 $IsProduction = (Test-Path -Path Env:NODE_ENV) -and ($env:NODE_ENV -eq "production")
 
 ###############################################################################
+# Load existing .env variables for re-runs
+###############################################################################
+$envFilePath = Join-Path $PSScriptRoot ".env"
+
+# Initialize an empty hashtable to hold our records
+$envHash = @{}
+
+if (Test-Path $envFilePath) {
+    Write-Host "Found .env file. Building configuration record..." -ForegroundColor Cyan
+
+    Get-Content $envFilePath | Where-Object {
+        $_.Trim() -match '=' -and $_.Trim() -notmatch '^#'
+    } | ForEach-Object {
+        $name, $value = $_.Split('=', 2)
+
+        $name = $name.Trim()
+        $value = $value.Trim()
+
+        if ($value -match '^"(.*)"$' -or $value -match "^'(.*)'$") {
+            $value = $Matches[1]
+        }
+
+        # Add the key-value pair to our hashtable instead of the system environment
+        $envHash[$name] = $value
+    }
+
+    Write-Host "Configuration record built successfully." -ForegroundColor Green
+} else {
+    Write-Host ".env file not found at $envFilePath. Using default/empty configuration." -ForegroundColor Yellow
+}
+
+###############################################################################
 # Utilities
 ###############################################################################
 function New-SecurePassword {
@@ -133,20 +165,20 @@ if (-not (Get-Command curl -ErrorAction SilentlyContinue)) {
 ###############################################################################
 
 # Ask for Sentry Token
-$Sentry_Token       = Read-Host -Prompt "Your Sentry Auth Token"
+$Sentry_Token       = $envHash.SENTRY_AUTH_TOKEN ? $envHash.SENTRY_AUTH_TOKEN : (Read-Host -Prompt "Your Sentry Auth Token")
 if (-not $Sentry_Token) {
   Write-Host "Empty Sentry Token." -ForegroundColor Yellow
   exit 1
 }
 
 # Resend configuration
-$Resend_Token       = Read-Host -Prompt "Your Resend API Key"
+$Resend_Token       = $envHash.RESEND_API_KEY ? $envHash.RESEND_API_KEY : (Read-Host -Prompt "Your Resend API Key")
 if (-not $Resend_Token) {
   Write-Host "Empty Resend API Key." -ForegroundColor Yellow
   exit 1
 }
 
-$Resend_Address     = Read-Host -Prompt "Your Resend From Address Domain"
+$Resend_Address     = $envHash.RESEND_FROM_ADDRESS ? $envHash.RESEND_FROM_ADDRESS : (Read-Host -Prompt "Your Resend From Address Domain")
 if (-not $Resend_Address) {
   Write-Host "Empty Resend Address Domain." -ForegroundColor Yellow
   exit 1
@@ -154,7 +186,7 @@ if (-not $Resend_Address) {
 
 $Cloudflare_Token   = "IS_DEV_NOT_SET"
 if ($IsProduction) {
-  $Cloudflare_Token = Read-Host -Prompt "Your cloudflared token"
+  $Cloudflare_Token = $envHash.DOCKER_CLOUDFLARED_TOKEN ? $envHash.DOCKER_CLOUDFLARED_TOKEN : (Read-Host -Prompt "Your cloudflared token")
   if (-not $Cloudflare_Token) {
     Write-Host "Empty cloudflared token." -ForegroundColor Yellow
   }
@@ -162,7 +194,7 @@ if ($IsProduction) {
 
 # BetterAuth Configuration
 $Better_Auth_Secret = New-SecurePassword -Length 32 -AdditionalCharacters "!#%&()*+,/:;<=>?@[]^`{|}"
-$Better_Auth_URL    = Read-Host -Prompt "Deployment Host (Default: http://localhost:6769)"
+$Better_Auth_URL    = $envHash.BETTER_AUTH_URL ? $envHash.BETTER_AUTH_URL : (Read-Host -Prompt "Deployment Host (Default: http://localhost:6769)")
 if (-not ($Better_Auth_URL)) {
   $Better_Auth_URL  = "http://localhost:6769"
 }
@@ -173,11 +205,11 @@ if (($Tileserver_URL -eq "http://localhost:6700") -and ($IsProduction)) {
   $Tileserver_URL   = Read-Host -Prompt "Tileserver URL"
 }
 
-$Nominatim_URL      = $IsProduction ? "" : "http://localhost:6701"
-$OSRM_Driving_URL   = $IsProduction ? "" : "http://localhost:6702"
-$OSRM_Bicycle_URL   = $IsProduction ? "" : "http://localhost:6703"
-$GraphHopper_URL    = $IsProduction ? "" : "http://localhost:6704"
-$Algorithm_Serv_URL = $IsProduction ? "" : "http://localhost:6705"
+$Nominatim_URL      = $IsProduction ? "http://geocoder:8080" : "http://localhost:6701"
+$OSRM_Driving_URL   = $IsProduction ? "http://driving_router:5000" : "http://localhost:6702"
+$OSRM_Bicycle_URL   = $IsProduction ? "http://driving_bicycle:5000" : "http://localhost:6703"
+$OSRM_Foot_URL      = $IsProduction ? "http://osrm_foot:5000" : "http://localhost:6704"
+$Algorithm_Serv_URL = $IsProduction ? "http://algorithm:8080" : "http://localhost:6705"
 
 # Database Configuration
 $Redis_Port             = Get-AvailablePort
@@ -188,7 +220,7 @@ $Database_Name          = "jippy"
 $Database_Host          = "localhost"
 $Database_Username      = "postgres"
 $Database_Port          = Get-AvailablePort
-$Database_Password      = New-SecurePassword -Length 32
+$Database_Password      = $envHash.DOCKER_POSTGRES_PASSWORD ? $envHash.DOCKER_POSTGRES_PASSWORD : (New-SecurePassword -Length 32)
 $Database_ConnStr       = "postgres://$Database_Username`:$Database_password@$Database_Host`:$Database_Port/$Database_Name`?schema=public"
 $Database_ConnStrDotnet = "Host=db;Port=5432;Database=$Database_Name;Username=$Database_Username;Password=$Database_Password"
 
@@ -203,7 +235,7 @@ BETTER_AUTH_SECRET=`"$Better_Auth_Secret`"
 BETTER_AUTH_URL=`"$Better_Auth_URL`"
 SENTRY_AUTH_TOKEN=`"$Sentry_Token`"
 RESEND_API_KEY=`"$Resend_Token`"
-RESEND_FROM_ADDRESS=`"Jippy <$Resend_Address>`"
+RESEND_FROM_ADDRESS=`"$Resend_Address`"
 POSTGRES_URL=`"$Database_ConnStr`"
 REDIS_URL=`"$Redis_ConnStr`"
 
@@ -211,7 +243,7 @@ REDIS_URL=`"$Redis_ConnStr`"
 NOMINATIM_URL=`"$Nominatim_URL`"
 OSRM_DRIVING_URL=`"$OSRM_Driving_URL`"
 OSRM_BICYCLE_URL=`"$OSRM_Bicycle_URL`"
-GRAPHHOPPER_URL=`"$GraphHopper_URL`"
+OSRM_FOOT_URL=`"$OSRM_Foot_URL`"
 ALGORITHM_URL=`"$Algorithm_Serv_URL`"
 
 # Service URLs that meant to be accessed outside
@@ -331,7 +363,7 @@ $tileserver_config = @{
     }
   }
   data = @{
-    "openmaptiles" = @{
+    "philippines-map" = @{
       mbtiles = "/data/map.mbtiles"
     }
   }
@@ -349,6 +381,10 @@ $osrm_configs = @{
   Bicycle = @{
     VolumePath = Join-Path -Path $PSScriptRoot ".osm-data\osrm-bicycle"
     LuaPath = "/opt/bicycle.lua"
+  }
+  Foot = @{
+    VolumePath = Join-Path -Path $PSScriptRoot ".osm-data\osrm-foot"
+    LuaPath = "/opt/foot.lua"
   }
 }
 

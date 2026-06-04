@@ -89,9 +89,8 @@ To learn more about how this project is developed, take a look at the following 
 
 ### Geospatial & Routing Engines:
 
-- [OSRM](https://project-osrm.org/) - Primary routing engine for car and motorcycle/tricycle path generation.
+- [OSRM](https://project-osrm.org/) - Routing engine for car, motorcycle/tricycle, and pedestrian (foot) path generation.
 - [Nominatim](https://nominatim.org/) - Geocoding service for address and location lookups.
-- [GraphHopper](https://www.graphhopper.com/) - Specialized routing engine for pedestrian and walking paths.
 
 ### Map Serving & Data Processing
 - [mapserver/tileserver-gl](https://github.com/maptiler/tileserver-gl) - Our vector and raster tile server.
@@ -125,6 +124,16 @@ Example:
 GET /api/public/osrm/bicycle/route/v1/driving/122.56876,10.69199;122.58769,10.69956?overview=full&steps=false
 ```
 
+#### `/api/public/osrm/foot/*`
+
+Proxy to the OSRM foot deployment (`osrm_foot`), used for pedestrian routing.
+
+Example:
+
+```http
+GET /api/public/osrm/foot/route/v1/foot/122.56876,10.69199;122.58769,10.69956?overview=full&geometries=polyline6&steps=true
+```
+
 #### `/api/public/nominatim/*`
 
 Proxy to Nominatim for search and reverse geocoding.
@@ -134,16 +143,6 @@ Examples:
 ```http
 GET /api/public/nominatim/reverse?lat=10.69199&lon=122.56876&format=jsonv2
 GET /api/public/nominatim/search?q=Jaro%20Plaza&format=jsonv2&countrycodes=ph
-```
-
-#### `/api/public/graphhopper/*`
-
-Proxy to GraphHopper, primarily used for pedestrian routing.
-
-Example:
-
-```http
-GET /api/public/graphhopper/route?point=10.69199,122.56876&point=10.69956,122.58769&profile=foot&points_encoded=false
 ```
 
 > [!NOTE]
