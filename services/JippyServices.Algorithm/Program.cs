@@ -49,6 +49,16 @@ app.MapPost("/navigate", async (NavigationRequest request, NavigationService nav
     return Results.Ok(result);
 });
 
+app.MapPost("/navigate/simulate", async (SimulationRequest request, NavigationService nav) =>
+{
+    var start = new LatLng(request.Start.Lat, request.Start.Lng);
+    var end = new LatLng(request.End.Lat, request.End.Lng);
+    var config = RoutingConfig.FromOverrides(request.Overrides);
+
+    var result = await nav.ComputeRouteAsync(start, end, config);
+    return Results.Ok(result);
+});
+
 // Called by the dashboard when routes/regions/closures are edited
 app.MapPost("/cache/invalidate", async (TransitDataCache transitCache) =>
 {
@@ -65,6 +75,18 @@ internal sealed class NavigationRequest
 
     [JsonPropertyName("end")]
     public LatLngObject End { get; init; } = null!;
+}
+
+internal sealed class SimulationRequest
+{
+    [JsonPropertyName("start")]
+    public LatLngObject Start { get; init; } = null!;
+
+    [JsonPropertyName("end")]
+    public LatLngObject End { get; init; } = null!;
+
+    [JsonPropertyName("overrides")]
+    public SimulationOverrides? Overrides { get; init; }
 }
 
 internal sealed class LatLngObject

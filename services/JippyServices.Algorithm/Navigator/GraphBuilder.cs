@@ -420,7 +420,8 @@ public sealed class GraphBuilder(DataContext db, OsrmWalkClient osrmWalk, Transi
         Dictionary<string, List<BaseEdge>> baseEdges,
         LatLng start,
         LatLng end,
-        DateTime now)
+        DateTime now,
+        RoutingConfig config)
     {
         var factory = NetTopologySuite.NtsGeometryServices.Instance.CreateGeometryFactory(4326);
 
@@ -446,7 +447,7 @@ public sealed class GraphBuilder(DataContext db, OsrmWalkClient osrmWalk, Transi
             {
                 var nearestBp = NearestBoundaryPoint(factory, end, region);
                 var distToBoundary = GeoUtils.HaversineMeters(end, nearestBp);
-                if (distToBoundary <= RoutingConstants.MaxRegionBoundaryMeters)
+                if (distToBoundary <= config.MaxRegionBoundaryMeters)
                 {
                     boundaryDropoff = nearestBp;
                     boundaryDropoffId = $"tricycle_dropoff:{region.Id}";
@@ -504,7 +505,7 @@ public sealed class GraphBuilder(DataContext db, OsrmWalkClient osrmWalk, Transi
                     if (node.RouteId == "__virtual__") continue;
                     if (node.RouteId.StartsWith("__tricycle_region__:")) continue;
                     var dist = GeoUtils.HaversineMeters(station.Point, new LatLng(node.Lat, node.Lng));
-                    if (dist <= RoutingConstants.MaxTricycleStationWalkMeters)
+                    if (dist <= config.MaxTricycleStationWalkMeters)
                     {
                         nearbyJeepNodes.Add(nodeId);
                         jeepneyNodesInRegion.Add(nodeId);
@@ -525,12 +526,12 @@ public sealed class GraphBuilder(DataContext db, OsrmWalkClient osrmWalk, Transi
                     {
                         // Rare: jeepney node inside region — direct tricycle OK
                         var straightDist = GeoUtils.HaversineMeters(station.Point, jeepPoint);
-                        if (straightDist > RoutingConstants.MaxTricycleRideToTransitMeters) continue;
+                        if (straightDist > config.MaxTricycleRideToTransitMeters) continue;
                         stationEdges.Add(new BaseEdge
                         {
                             From = stationNodeId,
                             To = jeepNodeId,
-                            Distance = straightDist * RoutingConstants.TricycleDetourFactor,
+                            Distance = straightDist * config.TricycleDetourFactor,
                             Type = EdgeType.Tricycle,
                             StationId = station.Id,
                             StationName = station.Address,
@@ -545,7 +546,7 @@ public sealed class GraphBuilder(DataContext db, OsrmWalkClient osrmWalk, Transi
                     // Jeepney outside region — route through boundary exit node
                     var exitPt = NearestBoundaryPoint(factory, jeepPoint, region);
                     var exitToJeep = GeoUtils.HaversineMeters(exitPt, jeepPoint);
-                    if (exitToJeep > RoutingConstants.MaxBoundaryExitWalkMeters) continue;
+                    if (exitToJeep > config.MaxBoundaryExitWalkMeters) continue;
 
                     // Dedup: reuse an existing boundary exit within 100 m
                     string? exitId = null;
@@ -576,7 +577,7 @@ public sealed class GraphBuilder(DataContext db, OsrmWalkClient osrmWalk, Transi
                     if (addedStationToExit.Add(exitId))
                     {
                         var actualExit = boundaryExitNodes[exitId];
-                        var stToExit = GeoUtils.HaversineMeters(station.Point, actualExit) * RoutingConstants.TricycleDetourFactor;
+                        var stToExit = GeoUtils.HaversineMeters(station.Point, actualExit) * config.TricycleDetourFactor;
                         stationEdges.Add(new BaseEdge
                         {
                             From = stationNodeId,
@@ -598,7 +599,7 @@ public sealed class GraphBuilder(DataContext db, OsrmWalkClient osrmWalk, Transi
                         {
                             From = exitId,
                             To = jeepNodeId,
-                            Distance = exitToJeep * RoutingConstants.WalkDetourFactor,
+                            Distance = exitToJeep * config.WalkDetourFactor,
                             Type = EdgeType.Walk,
                         });
                     }
@@ -607,7 +608,7 @@ public sealed class GraphBuilder(DataContext db, OsrmWalkClient osrmWalk, Transi
                 // --- Station → VIRTUAL_END (ride, if destination inside region) ---
                 if (endInRegion)
                 {
-                    var rideDist = GeoUtils.HaversineMeters(station.Point, end) * RoutingConstants.TricycleDetourFactor;
+                    var rideDist = GeoUtils.HaversineMeters(station.Point, end) * config.TricycleDetourFactor;
                     stationEdges.Add(new BaseEdge
                     {
                         From = stationNodeId,
@@ -624,7 +625,7 @@ public sealed class GraphBuilder(DataContext db, OsrmWalkClient osrmWalk, Transi
                 // --- Station → boundary drop-off (ride, if near boundary) ---
                 if (boundaryDropoff.HasValue && boundaryDropoffId != null)
                 {
-                    var rideDist = GeoUtils.HaversineMeters(station.Point, boundaryDropoff.Value) * RoutingConstants.TricycleDetourFactor;
+                    var rideDist = GeoUtils.HaversineMeters(station.Point, boundaryDropoff.Value) * config.TricycleDetourFactor;
                     stationEdges.Add(new BaseEdge
                     {
                         From = stationNodeId,
@@ -645,7 +646,7 @@ public sealed class GraphBuilder(DataContext db, OsrmWalkClient osrmWalk, Transi
                 {
                     var jeepNode = nodes[jeepNodeId];
                     var walkDist = GeoUtils.HaversineMeters(
-                        new LatLng(jeepNode.Lat, jeepNode.Lng), station.Point) * RoutingConstants.WalkDetourFactor;
+                        new LatLng(jeepNode.Lat, jeepNode.Lng), station.Point) * config.WalkDetourFactor;
 
                     // Backtracking penalty
                     var distFromNodeToEnd = GeoUtils.HaversineMeters(new LatLng(jeepNode.Lat, jeepNode.Lng), end);
@@ -683,9 +684,9 @@ public sealed class GraphBuilder(DataContext db, OsrmWalkClient osrmWalk, Transi
                         new LatLng(jeepNode.Lat, jeepNode.Lng), station.Point);
 
                     // Skip if walk to station is too far — same cap as direct hail edges
-                    if (walkToStation > RoutingConstants.MaxDirectWalkInsteadOfHailMeters) continue;
+                    if (walkToStation > config.MaxDirectWalkInsteadOfHailMeters) continue;
 
-                    var hailRideDist = walkToStation * RoutingConstants.TricycleDetourFactor;
+                    var hailRideDist = walkToStation * config.TricycleDetourFactor;
 
                     if (!baseEdges.TryGetValue(jeepNodeId, out var jeepEdges))
                     {
@@ -706,7 +707,7 @@ public sealed class GraphBuilder(DataContext db, OsrmWalkClient osrmWalk, Transi
                         IsHail = true,
                         // The leg assembler emits a WALK from the alight point to the station.
                         // Include this cost so A* does not underestimate the true path cost.
-                        WalkToStationDist = walkToStation * RoutingConstants.WalkDetourFactor,
+                        WalkToStationDist = walkToStation * config.WalkDetourFactor,
                     });
                 }
 
@@ -714,7 +715,7 @@ public sealed class GraphBuilder(DataContext db, OsrmWalkClient osrmWalk, Transi
                 if (startInRegion)
                 {
                     var walkDist = GeoUtils.HaversineMeters(start, station.Point);
-                    if (!(walkDist <= RoutingConstants.MaxTricycleStationWalkMeters)) continue;
+                    if (!(walkDist <= config.MaxTricycleStationWalkMeters)) continue;
                     if (!baseEdges.TryGetValue(RoutingConstants.VirtualStartId, out var startEdges))
                     {
                         startEdges = [];
@@ -734,7 +735,7 @@ public sealed class GraphBuilder(DataContext db, OsrmWalkClient osrmWalk, Transi
                     });
 
                     // Hail from start
-                    var hailDist = walkDist * RoutingConstants.TricycleDetourFactor;
+                    var hailDist = walkDist * config.TricycleDetourFactor;
                     startEdges.Add(new BaseEdge
                     {
                         From = RoutingConstants.VirtualStartId,
@@ -759,7 +760,7 @@ public sealed class GraphBuilder(DataContext db, OsrmWalkClient osrmWalk, Transi
                     var jeepPoint = new LatLng(jeepNode.Lat, jeepNode.Lng);
 
                     var directToEnd = GeoUtils.HaversineMeters(jeepPoint, end);
-                    if (directToEnd < RoutingConstants.MaxDirectWalkInsteadOfHailMeters) continue;
+                    if (directToEnd < config.MaxDirectWalkInsteadOfHailMeters) continue;
 
                     // Pick nearest station to jeepney node
                     TransitStation? nearestStation = null;
@@ -774,7 +775,7 @@ public sealed class GraphBuilder(DataContext db, OsrmWalkClient osrmWalk, Transi
                     var walkToStation = nearestDist;
                     if (walkToStation > directToEnd) continue;
 
-                    var tricycleFromStation = GeoUtils.HaversineMeters(nearestStation.Point, end) * RoutingConstants.TricycleDetourFactor;
+                    var tricycleFromStation = GeoUtils.HaversineMeters(nearestStation.Point, end) * config.TricycleDetourFactor;
 
                     if (!baseEdges.TryGetValue(jeepNodeId, out var jeepEdges))
                     {
@@ -801,7 +802,7 @@ public sealed class GraphBuilder(DataContext db, OsrmWalkClient osrmWalk, Transi
             // --- Boundary drop-off → VIRTUAL_END (walk from boundary to destination) ---
             if (boundaryDropoff.HasValue && boundaryDropoffId != null)
             {
-                var walkDist = GeoUtils.HaversineMeters(boundaryDropoff.Value, end) * RoutingConstants.WalkDetourFactor;
+                var walkDist = GeoUtils.HaversineMeters(boundaryDropoff.Value, end) * config.WalkDetourFactor;
                 if (!baseEdges.TryGetValue(boundaryDropoffId, out var dropoffEdges))
                 {
                     dropoffEdges = [];
@@ -835,7 +836,7 @@ public sealed class GraphBuilder(DataContext db, OsrmWalkClient osrmWalk, Transi
                         baseEdges[RoutingConstants.VirtualStartId] = startEdges;
                     }
 
-                    var rideDist = GeoUtils.HaversineMeters(start, end) * RoutingConstants.TricycleDetourFactor;
+                    var rideDist = GeoUtils.HaversineMeters(start, end) * config.TricycleDetourFactor;
                     startEdges.Add(new BaseEdge
                     {
                         From = RoutingConstants.VirtualStartId,
@@ -866,7 +867,8 @@ public sealed class GraphBuilder(DataContext db, OsrmWalkClient osrmWalk, Transi
             LatLng start,
             LatLng end,
             List<TransitRoute> routes,
-            Dictionary<string, GraphNode> nodes)
+            Dictionary<string, GraphNode> nodes,
+            RoutingConfig config)
     {
         // Ensure virtual nodes exist
         nodes[RoutingConstants.VirtualStartId] = new GraphNode
@@ -933,10 +935,10 @@ public sealed class GraphBuilder(DataContext db, OsrmWalkClient osrmWalk, Transi
         foreach (var (_, group) in candidatesByGroup)
         {
             group.Sort((a, b) => a.GeoDist.CompareTo(b.GeoDist));
-            accessCandidates.AddRange(group.Take(RoutingConstants.AccessCandidatesPerDirection));
+            accessCandidates.AddRange(group.Take(config.AccessCandidatesPerDirection));
         }
         accessCandidates.Sort((a, b) => a.GeoDist.CompareTo(b.GeoDist));
-        var cappedAccess = accessCandidates.Take(RoutingConstants.MaxAccessQueries).ToList();
+        var cappedAccess = accessCandidates.Take(config.MaxAccessQueries).ToList();
 
         // Query OSRM foot in parallel
         var accessTasks = cappedAccess.Select(async c =>
@@ -981,10 +983,10 @@ public sealed class GraphBuilder(DataContext db, OsrmWalkClient osrmWalk, Transi
         foreach (var (_, group) in egressByGroup)
         {
             group.Sort((a, b) => a.GeoDist.CompareTo(b.GeoDist));
-            egressCandidates.AddRange(group.Take(RoutingConstants.EgressCandidatesPerDirection));
+            egressCandidates.AddRange(group.Take(config.EgressCandidatesPerDirection));
         }
         egressCandidates.Sort((a, b) => a.GeoDist.CompareTo(b.GeoDist));
-        var cappedEgress = egressCandidates.Take(RoutingConstants.MaxEgressQueries).ToList();
+        var cappedEgress = egressCandidates.Take(config.MaxEgressQueries).ToList();
 
         var egressTasks = cappedEgress.Select(async c =>
         {
@@ -1022,8 +1024,10 @@ public sealed class GraphBuilder(DataContext db, OsrmWalkClient osrmWalk, Transi
         Dictionary<string, double> egressDistances,
         Dictionary<string, GraphNode> nodes,
         WeightProfile profile,
-        HashSet<string> stopRestrictedNodes)
+        HashSet<string> stopRestrictedNodes,
+        RoutingConfig? config = null)
     {
+        var cfg = config ?? RoutingConfig.Default;
         var adjacency = new Dictionary<string, List<GraphEdge>>();
 
         // Apply costs to all base edges
@@ -1059,9 +1063,9 @@ public sealed class GraphBuilder(DataContext db, OsrmWalkClient osrmWalk, Transi
                     case EdgeType.Tricycle:
                     {
                         var waitPenalty = baseEdge.IsHail
-                            ? RoutingConstants.HailingWaitPenaltyMeters
-                            : RoutingConstants.StationWaitPenaltyMeters;
-                        cost = baseEdge.Distance * RoutingConstants.TricycleRideCostFactor + waitPenalty;
+                            ? cfg.HailingWaitPenaltyMeters
+                            : cfg.StationWaitPenaltyMeters;
+                        cost = baseEdge.Distance * cfg.TricycleRideCostFactor + waitPenalty;
 
                         if (baseEdge.WalkToStationDist.HasValue)
                             cost += GeoUtils.ProfileWalkCost(baseEdge.WalkToStationDist.Value, profile);
@@ -1078,7 +1082,7 @@ public sealed class GraphBuilder(DataContext db, OsrmWalkClient osrmWalk, Transi
                     {
                         var effectiveDist = baseEdge.Distance;
                         if (baseEdge.DetourRatio is > 1)
-                            effectiveDist *= Math.Min(baseEdge.DetourRatio.Value, RoutingConstants.BacktrackPenaltyMultiplier);
+                            effectiveDist *= Math.Min(baseEdge.DetourRatio.Value, cfg.BacktrackPenaltyMultiplier);
                         cost = GeoUtils.ProfileWalkCost(effectiveDist, profile);
                         break;
                     }
@@ -1193,8 +1197,9 @@ public sealed class GraphBuilder(DataContext db, OsrmWalkClient osrmWalk, Transi
     }
 
     public async Task<(BaseGraph Graph, TransitData Data)?> BuildBaseGraphAsync(
-        LatLng start, LatLng end, DateTime? now = null)
+        LatLng start, LatLng end, DateTime? now = null, RoutingConfig? config = null)
     {
+        var cfg = config ?? RoutingConfig.Default;
         var staticGraph = await GetStaticGraphAsync();
         if (staticGraph == null) return null;
 
@@ -1206,11 +1211,11 @@ public sealed class GraphBuilder(DataContext db, OsrmWalkClient osrmWalk, Transi
 
         // Tricycle station nodes & edges (time-window filtered, depends on start/end)
         BuildTricycleNodesAndEdges(
-            staticGraph.TransitData.Regions, nodes, baseEdges, start, end, now ?? DateTime.UtcNow);
+            staticGraph.TransitData.Regions, nodes, baseEdges, start, end, now ?? DateTime.UtcNow, cfg);
 
         // Query OSRM foot for real walk distances (expensive I/O — done once)
         var (accessDistances, egressDistances) = await QueryUserNodeDistancesAsync(
-            start, end, staticGraph.TransitData.Routes, nodes);
+            start, end, staticGraph.TransitData.Routes, nodes, cfg);
 
         var baseGraph = new BaseGraph
         {

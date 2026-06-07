@@ -11,6 +11,7 @@ import type { IApiResponse } from "@/lib/http/ApiResponseBuilder";
 import { $fetch } from "@/lib/http/client";
 import * as nominatim from "@/lib/osm/nominatim";
 import { getErrorMessage } from "@/contracts/parsers";
+import type { SimulationOverrides } from "@/lib/routing-fast";
 
 const SimulatorMapDynamic = dynamic(() => import("./SimulatorMap"), { ssr: false });
 
@@ -25,6 +26,7 @@ export default function SimulatorPage() {
   const [activeSuggestion, setActiveSuggestion] = useState<NavigateRouteSuggestion | null>(null);
   const [isSimulating, setIsSimulating] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [overrides, setOverrides] = useState<SimulationOverrides>({});
 
   const handleApiVersionChange = useCallback((version: "v1" | "v2") => {
     setApiVersion(version);
@@ -68,11 +70,19 @@ export default function SimulatorPage() {
     setResult(null);
     setActiveSuggestion(null);
 
+    const endpoint = apiVersion === "v2"
+      ? "/api/public/navigate/simulate"
+      : `/api/public/navigate/${apiVersion}`;
+
+    const body = apiVersion === "v2"
+      ? JSON.stringify({ start: startPoint, end: endPoint, overrides })
+      : JSON.stringify({ start: startPoint, end: endPoint });
+
     const { data, error: fetchError } = await $fetch<IApiResponse<MultiNavigateRouteResponse>>(
-      `/api/public/navigate/${apiVersion}`,
+      endpoint,
       {
         method: "POST",
-        body: JSON.stringify({ start: startPoint, end: endPoint }),
+        body,
         headers: { "Content-Type": "application/json" },
       },
     );
@@ -86,7 +96,7 @@ export default function SimulatorPage() {
 
     setResult(data.data);
     setActiveSuggestion(data.data.suggestions[0] ?? null);
-  }, [apiVersion, startPoint, endPoint]);
+  }, [apiVersion, startPoint, endPoint, overrides]);
 
   return (
     <SidebarProvider>
@@ -111,10 +121,12 @@ export default function SimulatorPage() {
             isSimulating={isSimulating}
             result={result}
             error={error}
+            overrides={overrides}
             onApiVersionChange={handleApiVersionChange}
             onPickingModeChange={setPickingMode}
             onSimulate={handleSimulate}
             onSuggestionChange={setActiveSuggestion}
+            onOverridesChange={setOverrides}
           />
         </div>
       </SidebarInset>

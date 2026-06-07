@@ -10,8 +10,11 @@ public sealed class NavigationService(GraphBuilder graphBuilder, LegAssembler le
     /// <summary>
     /// Compute multi-suggestion transit routing from start to end.
     /// </summary>
-    public async Task<MultiNavigateResponse> ComputeRouteAsync(LatLng start, LatLng end)
+    public async Task<MultiNavigateResponse> ComputeRouteAsync(
+        LatLng start, LatLng end, RoutingConfig? config = null)
     {
+        config ??= RoutingConfig.Default;
+
         var straightLineDistance = GeoUtils.HaversineMeters(start, end);
         if (straightLineDistance < RoutingConstants.WalkOnlyThresholdMeters)
         {
@@ -20,7 +23,7 @@ public sealed class NavigationService(GraphBuilder graphBuilder, LegAssembler le
         }
 
         var now = DateTime.UtcNow;
-        var result = await graphBuilder.BuildBaseGraphAsync(start, end, now);
+        var result = await graphBuilder.BuildBaseGraphAsync(start, end, now, config);
         if (result == null)
         {
             var walkOnly = AssembleResponse(await legAssembler.BuildWalkOnlyRouteAsync(start, end));
@@ -38,9 +41,9 @@ public sealed class NavigationService(GraphBuilder graphBuilder, LegAssembler le
         // Run 3 profiles in parallel (pure computation on shared base graph)
         var profileTasks = new[]
         {
-            RunProfileAsync(SuggestionLabel.Fastest, RoutingConstants.ProfileFastest, baseGraph),
-            RunProfileAsync(SuggestionLabel.LeastWalking, RoutingConstants.ProfileLeastWalking, baseGraph),
-            RunProfileAsync(SuggestionLabel.Simplest, RoutingConstants.ProfileSimplest, baseGraph),
+            RunProfileAsync(SuggestionLabel.Fastest, config.ToFastestProfile(), baseGraph, config),
+            RunProfileAsync(SuggestionLabel.LeastWalking, config.ToLeastWalkingProfile(), baseGraph, config),
+            RunProfileAsync(SuggestionLabel.Simplest, config.ToSimplestProfile(), baseGraph, config),
         };
         var profileResults = await Task.WhenAll(profileTasks);
 
@@ -50,7 +53,7 @@ public sealed class NavigationService(GraphBuilder graphBuilder, LegAssembler le
         var fastest = suggestions.Find(s => s.Label == SuggestionLabel.Fastest);
         if (fastest != null)
         {
-            var explorer = await RunExplorerProfileAsync(fastest.Route, baseGraph, transitData);
+            var explorer = await RunExplorerProfileAsync(fastest.Route, baseGraph, transitData, config);
             if (explorer != null) suggestions.Add(explorer);
         }
 
@@ -74,19 +77,19 @@ public sealed class NavigationService(GraphBuilder graphBuilder, LegAssembler le
     // =====================================================================
 
     private async Task<RouteSuggestion?> RunProfileAsync(
-        SuggestionLabel label, WeightProfile profile, BaseGraph baseGraph)
+        SuggestionLabel label, WeightProfile profile, BaseGraph baseGraph, RoutingConfig config)
     {
         var adjacency = GraphBuilder.BuildCostedAdjacency(
             baseGraph.BaseEdges, baseGraph.RawBoardingCosts,
             baseGraph.AccessWalkDistances, baseGraph.EgressWalkDistances,
-            baseGraph.Nodes, profile, baseGraph.StopRestrictedNodes);
+            baseGraph.Nodes, profile, baseGraph.StopRestrictedNodes, config);
 
         var graph = new Graph { Nodes = baseGraph.Nodes, Edges = adjacency };
         var nodePath = AStarPathfinder.FindOptimalPath(
             graph, RoutingConstants.VirtualStartId, RoutingConstants.VirtualEndId, profile);
         if (nodePath is not { Count: >= 2 }) return null;
 
-        var legs = await AssembleLegsAsync(nodePath, graph);
+        var legs = await AssembleLegsAsync(nodePath, graph, config);
         if (legs == null) return null;
 
         return new RouteSuggestion { Label = label, Route = AssembleResponse(legs) };
@@ -97,7 +100,7 @@ public sealed class NavigationService(GraphBuilder graphBuilder, LegAssembler le
     // =====================================================================
 
     private async Task<RouteSuggestion?> RunExplorerProfileAsync(
-        NavigateResponse fastestResponse, BaseGraph baseGraph, TransitData transitData)
+        NavigateResponse fastestResponse, BaseGraph baseGraph, TransitData transitData, RoutingConfig config)
     {
         var fastestRouteIds = new HashSet<string>();
         foreach (var leg in fastestResponse.Legs)
@@ -113,37 +116,38 @@ public sealed class NavigationService(GraphBuilder graphBuilder, LegAssembler le
         }
         if (fastestRouteIds.Count == 0) return null;
 
+        var fastestProfile = config.ToFastestProfile();
         var explorerProfile = new WeightProfile
         {
-            WalkPenaltyMultiplier = RoutingConstants.ProfileFastest.WalkPenaltyMultiplier,
-            WalkComfortMeters = RoutingConstants.ProfileFastest.WalkComfortMeters,
-            WalkEscalationRate = RoutingConstants.ProfileFastest.WalkEscalationRate,
-            TransitCostFactor = RoutingConstants.ProfileFastest.TransitCostFactor,
-            TransferPenaltyMeters = RoutingConstants.ProfileFastest.TransferPenaltyMeters,
-            BoardingCostFactor = RoutingConstants.ProfileFastest.BoardingCostFactor,
-            ClosurePenaltyMultiplier = RoutingConstants.ProfileFastest.ClosurePenaltyMultiplier,
+            WalkPenaltyMultiplier = fastestProfile.WalkPenaltyMultiplier,
+            WalkComfortMeters = fastestProfile.WalkComfortMeters,
+            WalkEscalationRate = fastestProfile.WalkEscalationRate,
+            TransitCostFactor = fastestProfile.TransitCostFactor,
+            TransferPenaltyMeters = fastestProfile.TransferPenaltyMeters,
+            BoardingCostFactor = fastestProfile.BoardingCostFactor,
+            ClosurePenaltyMultiplier = fastestProfile.ClosurePenaltyMultiplier,
             PenalizedRouteIds = fastestRouteIds,
-            DiversityPenalty = RoutingConstants.ExplorerDiversityPenalty,
-            MaxTransfers = RoutingConstants.ExplorerMaxTransfers,
+            DiversityPenalty = config.ExplorerDiversityPenalty,
+            MaxTransfers = config.ExplorerMaxTransfers,
         };
 
         var adjacency = GraphBuilder.BuildCostedAdjacency(
             baseGraph.BaseEdges, baseGraph.RawBoardingCosts,
             baseGraph.AccessWalkDistances, baseGraph.EgressWalkDistances,
-            baseGraph.Nodes, explorerProfile, baseGraph.StopRestrictedNodes);
+            baseGraph.Nodes, explorerProfile, baseGraph.StopRestrictedNodes, config);
 
         var graph = new Graph { Nodes = baseGraph.Nodes, Edges = adjacency };
         var nodePath = AStarPathfinder.FindOptimalPath(
             graph, RoutingConstants.VirtualStartId, RoutingConstants.VirtualEndId, explorerProfile);
         if (nodePath is not { Count: >= 2 }) return null;
 
-        var legs = await AssembleLegsAsync(nodePath, graph);
+        var legs = await AssembleLegsAsync(nodePath, graph, config);
         if (legs == null) return null;
 
         var explorerResponse = AssembleResponse(legs);
 
         // Time cap: discard if significantly slower than fastest
-        if (explorerResponse.TotalDuration > fastestResponse.TotalDuration * RoutingConstants.ExplorerDurationCap)
+        if (explorerResponse.TotalDuration > fastestResponse.TotalDuration * config.ExplorerDurationCap)
             return null;
 
         return new RouteSuggestion { Label = SuggestionLabel.Explorer, Route = explorerResponse };
@@ -153,7 +157,8 @@ public sealed class NavigationService(GraphBuilder graphBuilder, LegAssembler le
     // Shared leg assembly from A* path
     // =====================================================================
 
-    private async Task<List<RouteLeg>?> AssembleLegsAsync(List<string> nodePath, Graph graph)
+    private async Task<List<RouteLeg>?> AssembleLegsAsync(
+        List<string> nodePath, Graph graph, RoutingConfig config)
     {
         var sections = LegAssembler.AnalyzeNodePath(nodePath, graph);
         if (sections.Count == 0) return null;
@@ -162,7 +167,7 @@ public sealed class NavigationService(GraphBuilder graphBuilder, LegAssembler le
         sections = MergeSameRouteSections(sections);
 
         // Filter short transit sections
-        sections = FilterShortTransitSections(sections);
+        sections = FilterShortTransitSections(sections, config);
         if (sections.Count == 0) return null;
 
         var legs = await legAssembler.BuildLegsFromSectionsAsync(sections);
@@ -221,7 +226,8 @@ public sealed class NavigationService(GraphBuilder graphBuilder, LegAssembler le
         return merged;
     }
 
-    private static List<PathSection> FilterShortTransitSections(List<PathSection> sections)
+    private static List<PathSection> FilterShortTransitSections(
+        List<PathSection> sections, RoutingConfig config)
     {
         return sections.Where(sec =>
         {
@@ -233,7 +239,7 @@ public sealed class NavigationService(GraphBuilder graphBuilder, LegAssembler le
                 var b = ts.Nodes[i + 1];
                 dist += GeoUtils.HaversineMeters(new LatLng(a.Lat, a.Lng), new LatLng(b.Lat, b.Lng));
             }
-            return dist >= RoutingConstants.MinTransitRideMeters;
+            return dist >= config.MinTransitRideMeters;
         }).ToList();
     }
 
