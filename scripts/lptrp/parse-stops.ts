@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import fsp from "node:fs/promises";
 
-import { PATHS } from "./paths";
+import { ensureOutputDir, PATHS } from "./paths";
 import type { Direction, ParsedStop, StopRouteRef } from "./types";
 
 type StopMap = Map<string, ParsedStop>;
@@ -211,6 +211,7 @@ async function main() {
   const content = await fsp.readFile(PATHS.sourceMd, "utf-8");
   const { stops, warnings } = parseLptrpStopsMarkdown(content);
 
+  await ensureOutputDir();
   await fsp.writeFile(PATHS.parsedStops, JSON.stringify(stops, null, 2) + "\n", "utf-8");
 
   const withSignage = stops.filter((s) => s.signage_no !== null).length;

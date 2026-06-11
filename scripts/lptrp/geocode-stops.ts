@@ -3,7 +3,7 @@ import "dotenv/config";
 import fs from "node:fs";
 import fsp from "node:fs/promises";
 
-import { PATHS } from "./paths";
+import { ensureOutputDir, PATHS } from "./paths";
 import type { GeocodeConfidence, GeocodedStop, ParsedStop } from "./types";
 
 const ILOILO_BOUNDS = {
@@ -139,6 +139,7 @@ async function main() {
     (s) => s.geocode_confidence === "failed" || s.geocode_confidence === "low",
   );
 
+  await ensureOutputDir();
   await fsp.writeFile(PATHS.geocodedStops, JSON.stringify(geocoded, null, 2) + "\n", "utf-8");
   await fsp.writeFile(PATHS.failedGeocodes, JSON.stringify(failed, null, 2) + "\n", "utf-8");
 
