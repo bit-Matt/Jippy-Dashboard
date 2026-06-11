@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import fsp from "node:fs/promises";
 
-import { PATHS } from "./paths";
+import { ensureOutputDir, PATHS } from "./paths";
 import type { GeocodeOverride, GeocodedStop } from "./types";
 
 function overrideKey(override: GeocodeOverride): string | null {
@@ -28,6 +28,7 @@ async function main() {
   if (fs.existsSync(PATHS.geocodeOverrides)) {
     overrides = JSON.parse(await fsp.readFile(PATHS.geocodeOverrides, "utf-8")) as GeocodeOverride[];
   } else {
+    await ensureOutputDir();
     await fsp.writeFile(PATHS.geocodeOverrides, "[]\n", "utf-8");
     console.log(`Created empty overrides template: ${PATHS.geocodeOverrides}`);
   }
@@ -77,6 +78,7 @@ async function main() {
     };
   });
 
+  await ensureOutputDir();
   await fsp.writeFile(
     PATHS.geocodedStopsFinal,
     JSON.stringify(final, null, 2) + "\n",
