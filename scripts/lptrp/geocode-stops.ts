@@ -24,11 +24,47 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-function buildGeocodeQuery(stop: ParsedStop): string {
-  const parts = [stop.location];
-  if (stop.barangay) parts.push(stop.barangay);
-  parts.push("Iloilo City", "Philippines");
-  return parts.join(", ");
+function expandBarangayName(value: string): string {
+  return value
+    .replace(/^Bo\.\s*/i, "Barrio ")
+    .replace(/^Brgy\.?\s*/i, "Barangay ");
+}
+
+function extractBarangayFromLocation(location: string): string | null {
+  const match = location.match(/\b(?:Bo\.|Barrio|Brgy\.?|Barangay)\s+([A-Za-z][A-Za-z0-9-]*)/i);
+  return match ? `Barrio ${match[1]}` : null;
+}
+
+function extractStreet(location: string): string | null {
+  const match = location.match(
+    /^([A-Za-z0-9.\s]+?\b(?:St\.?|Street|Ave\.?|Avenue|Road|Rd\.?|Highway|Hwy\.?|Bridge|Extension|Ext\.?))\b/i,
+  );
+  return match ? match[1].replace(/\s+/g, " ").trim() : null;
+}
+
+function buildGeocodeQueries(stop: ParsedStop): string[] {
+  const citySuffix = "Iloilo City, Philippines";
+  const barangay =
+    (stop.barangay ? expandBarangayName(stop.barangay) : null) ??
+    extractBarangayFromLocation(stop.location);
+  const street = extractStreet(stop.location);
+
+  const queries: string[] = [];
+
+  const fullParts = [stop.location, stop.barangay, citySuffix].filter(Boolean);
+  queries.push(fullParts.join(", "));
+
+  if (street && barangay) {
+    queries.push(`${street}, ${barangay}, ${citySuffix}`);
+  }
+  if (street) {
+    queries.push(`${street}, ${citySuffix}`);
+  }
+  if (barangay) {
+    queries.push(`${barangay}, ${citySuffix}`);
+  }
+
+  return [...new Set(queries)];
 }
 
 function isWithinBounds(lat: number, lng: number): boolean {
@@ -48,6 +84,7 @@ async function geocodeQuery(
   url.searchParams.set("q", query);
   url.searchParams.set("format", "json");
   url.searchParams.set("limit", "1");
+  url.searchParams.set("countrycodes", "ph");
 
   const response = await fetch(url.toString(), {
     headers: { "User-Agent": "Jippy-Dashboard-LPTRP-Geocoder/1.0" },
@@ -72,6 +109,7 @@ function toGeocodedStop(
   stop: ParsedStop,
   query: string,
   result: { lat: number; lng: number; displayName: string } | null,
+  exactQuery: string,
 ): GeocodedStop {
   if (!result) {
     return {
@@ -84,9 +122,12 @@ function toGeocodedStop(
     };
   }
 
-  const confidence: GeocodeConfidence = isWithinBounds(result.lat, result.lng)
-    ? "high"
-    : "low";
+  const withinBounds = isWithinBounds(result.lat, result.lng);
+  const confidence: GeocodeConfidence = !withinBounds
+    ? "low"
+    : query === exactQuery
+      ? "high"
+      : "low";
 
   return {
     ...stop,
@@ -96,6 +137,21 @@ function toGeocodedStop(
     geocode_query: query,
     geocode_display_name: result.displayName,
   };
+}
+
+async function geocodeWithFallback(
+  baseUrl: string,
+  queries: string[],
+  delayMs: number,
+): Promise<{ query: string; result: { lat: number; lng: number; displayName: string } } | null> {
+  for (let i = 0; i < queries.length; i++) {
+    const result = await geocodeQuery(baseUrl, queries[i]);
+    if (result) return { query: queries[i], result };
+    if (i < queries.length - 1 && delayMs > 0) {
+      await sleep(delayMs);
+    }
+  }
+  return null;
 }
 
 async function main() {
@@ -115,18 +171,30 @@ async function main() {
 
   for (let i = 0; i < stops.length; i++) {
     const stop = stops[i];
-    const query = buildGeocodeQuery(stop);
+    const queries = buildGeocodeQueries(stop);
+    const exactQuery = queries[0];
 
-    process.stdout.write(`[${i + 1}/${stops.length}] ${query.slice(0, 80)}... `);
+    process.stdout.write(`[${i + 1}/${stops.length}] ${exactQuery.slice(0, 80)}... `);
 
     try {
-      const result = await geocodeQuery(nominatimUrl, query);
-      const entry = toGeocodedStop(stop, query, result);
+      const match = await geocodeWithFallback(nominatimUrl, queries, delayMs);
+      const entry = toGeocodedStop(
+        stop,
+        match?.query ?? exactQuery,
+        match?.result ?? null,
+        exactQuery,
+      );
       geocoded.push(entry);
-      console.log(entry.geocode_confidence);
+      const suffix =
+        entry.geocode_confidence === "failed"
+          ? "failed"
+          : match && match.query !== exactQuery
+            ? `${entry.geocode_confidence} (fallback)`
+            : entry.geocode_confidence;
+      console.log(suffix);
     } catch (error) {
       console.log("error");
-      geocoded.push(toGeocodedStop(stop, query, null));
+      geocoded.push(toGeocodedStop(stop, exactQuery, null, exactQuery));
       console.error(error);
     }
 
