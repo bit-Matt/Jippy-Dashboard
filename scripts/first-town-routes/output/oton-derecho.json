@@ -1,0 +1,183 @@
+{
+  "ok": true,
+  "data": {
+    "routes": [
+      {
+        "routeNumber": "FT-OTON-DERECHO",
+        "routeName": "Oton Derecho",
+        "routeColor": "#2593d9",
+        "routeDetails": "Oton (Botong) to San Rafael, Iloilo City",
+        "availableFrom": "00:00",
+        "availableTo": "23:59",
+        "vehicleTypeId": "019d61b5-28b0-70a2-af78-cb86290477d0",
+        "points": {
+          "polylineGoingTo": "u|dkSaa`phF^KgiA}bEcJge@oUawAoZ_`BaJkk@_CkMgGuZwDuWq[svCeC_QyDgS_Ris@{E{TcCgT{@yN_Aub@sAia@[uH{@oH{Igd@mZ}aAaDiNkAsGgIwcAyF}k@cJww@_Fk[qDuXk@uHOmHRcc@~@}Wn@e_@S_OEe]{B_zAmE_mBMiUwAcXw@e]eCyb@qHgeC}AgVyAu_@m@u_@aEeeAQgQaA}_@Jui@e@_h@EuZp@}iArCyaAlByoAnA{VNeNM}KuAwCsCuAyE{A_t@yWoIkDuDoC\\uEd@mCfEuQhEyS@qGsBsA}U{KaXkLePyIwG{CaKiGsDwCoBeCkEeHcAeC_AyEj@kJhFwYfZetAzDuX`@sJAmIo@sZ{DkmAcAw`@sFiq@yAm[\\y^Mq_@g@sTeE_e@{@aQLij@mB{j@CoI~AmR~Hse@rMyq@rSoj@dDcL`A{GXkS{@kKoGc\\iK_n@yGkg@uFgo@oC{`Ay@el@~@sXxBcSbGm[jN{r@rb@anBdj@qdDb[kyCfIeh@zKci@zk@syCjUsfAzGsa@pJimA~DqW`I_a@xK}\\tK}VpA}CnE{MnAsHe@e_@Qmp@sA}yBOi`AMqLFoQmFozDxB{i@`C}`@~I_`A~@uKd@qKsAyRsC}VaCaTuCcQaFmRwMyb@qz@exBkVww@_]alAoQqb@eUug@iOc[qYke@iQqXaP{X}\\oj@{`AibBcTu\\i]{o@c]ys@}Tua@}c@wz@qYir@aGyNdd@gXlDmCpVwNxE}DrIwJkQc[}_AusByPi`@q}@{hBgPaZaAcCmCaBiASkADcBl@kAtAc@`AKnA\\pD\\xJbJ~`AdN|tAfN~}@hHrU|Lt[fWvl@bQf_@lEnJ}ErCqm@fZyl@rQcLjDiHtDgCr@kJHebAyDqAQ_Bq@oBsAaC{BsEwFsGoEy\\kRqO_IiQiIaRkG}_@cKe\\mGub@{E@iAg@qA}p@mw@gqAmfBuNySiHqK{Rg^ko@}j@sU}TbAwAl@cBRkBEmB]iBwAeCaC}AwCi@}CLoCbAsF{FaHsJcPaY{EiLiUgk@qLu_@aDaK[cDh^cC`VsClDc@hvBe^vEo@bvA_XrwBs_@doCsh@ns@qKxRqC`KzxANx@p@pAlNlcCnC~`@lDnh@\\xJbJ~`AdN|tAfN~}@hHrU|Lt[fWvl@pWvj@lDrId\\nw@|c@vz@|Tta@b]xs@h]zo@bTt\\z`AhbB|\\nj@`PzXhQpXpYje@hOb[dUtg@nQpb@~\\`lAjVvw@pz@dxB|P|j@zBhJtCbQtG~k@rAxRe@pK_AtK_J~_AaC|`@yBzi@lFnzDGnQLpLNh`ArA|yBPlp@d@d_@oArHwEjN_Nj[yK|\\aI~`@_EpWqJhmA{Gra@kUrfA{k@ryC{Kbi@gIdh@c[jyCej@pdDsb@`nBoKhi@_J~d@yBbS_ArXx@dl@nCz`AtFfo@xGjg@hK~m@nGb\\z@jKAbGWfKaAzGeDbLsSnj@sMxq@_Ire@_BlRBnIlBzj@Mhj@z@`QdE~d@f@rTLp_@]x^xAl[rFhq@bAv`@zDjmAn@rZ@lIa@rJ{DtXgZdtAiFvYk@jJ~@xEbAdCjEdHnBdCrDvC`KhGvGzCdPxI`XjL|UzKrBrAApGgDpPiF|Te@lC]tEtDnCnIjD~s@xWxEzArCtAtAvCL|KOdNoAzVmBxoAsCxaAq@|iADtZd@~g@Kti@`A|_@PfQ`EdeAl@t_@xAt_@|AfVpHfeCdCxb@v@d]vAbXLhUlE~lBzB~yADd]R~No@d_@_A|WSbc@NlHj@tHpDtX~Ej[bJvw@xF|k@fIvcAjArG`DhNlZ|aAzIfd@z@nHZtHrAha@~@tb@z@xNbCfTzEzT~Qhs@xDfSdC~Pp[rvCvDtWfGtZ~BjM`Jjk@nZ~_BnU`wAbJfe@ffA~zD",
+          "goingTo": [
+            {
+              "sequence": 0,
+              "address": "Iloilo R-1 Road, Cabanbanan, Oton, Iloilo, Western Visayas, 5020, Philippines",
+              "point": [
+                10.685403,
+                122.438177
+              ]
+            },
+            {
+              "sequence": 1,
+              "address": "Iloilo R-1 Road, Mary Immaculate Village, Poblacion West, Trapiche, Oton, Iloilo, Western Visayas, 5020, Philippines",
+              "point": [
+                10.689957,
+                122.454826
+              ]
+            },
+            {
+              "sequence": 2,
+              "address": "J.C. Zulueta Street, Mary Immaculate Village, Poblacion South, San Antonio, Oton, Iloilo, Western Visayas, 5020, Philippines",
+              "point": [
+                10.691219,
+                122.46969
+              ]
+            },
+            {
+              "sequence": 3,
+              "address": "Lopez Jaena Street, Poblacion East, San Antonio, Oton, Iloilo, Western Visayas, 5020, Philippines",
+              "point": [
+                10.692276,
+                122.479474
+              ]
+            },
+            {
+              "sequence": 4,
+              "address": "Osmeña Road, San Nicolas, Villa de Arevalo, San Antonio, Oton, Iloilo, Western Visayas, 5020, Philippines",
+              "point": [
+                10.693643,
+                122.487528
+              ]
+            },
+            {
+              "sequence": 5,
+              "address": "Osmeña Road, San Nicolas, Villa de Arevalo, San Antonio, Iloilo City, Iloilo, Western Visayas, 5020, Philippines",
+              "point": [
+                10.693583,
+                122.499314
+              ]
+            },
+            {
+              "sequence": 6,
+              "address": "J. V. Jocson Street, Gloryville Subdivision, Dulonan, Villa de Arevalo, Bonifacio, Iloilo City, Western Visayas, 5000, Philippines",
+              "point": [
+                10.688958,
+                122.52106
+              ]
+            },
+            {
+              "sequence": 7,
+              "address": "Avanceña Street, Tap-oc, North Fundidor, Molo, Navais, Iloilo City, Western Visayas, 5000, Philippines",
+              "point": [
+                10.693514,
+                122.537123
+              ]
+            },
+            {
+              "sequence": 8,
+              "address": "San Pedro Rotonda, Zigzag, East Timawa, Molo, Navais, Iloilo City, Western Visayas, 5000, Philippines",
+              "point": [
+                10.699155,
+                122.549485
+              ]
+            },
+            {
+              "sequence": 9,
+              "address": "R. Mapa Street, San Rafael, Mandurriao, Navais, Iloilo City, Western Visayas, 5000, Philippines",
+              "point": [
+                10.700731,
+                122.54251
+              ]
+            },
+            {
+              "sequence": 10,
+              "address": "Atria Park District, San Rafael, Mandurriao, Calubihan, Iloilo City, Western Visayas, 5000, Philippines",
+              "point": [
+                10.707932,
+                122.548868
+              ]
+            },
+            {
+              "sequence": 11,
+              "address": "Doctor Rizalina V. Bernardo Street, San Rafael, Mandurriao, Calubihan, Iloilo City, Western Visayas, 5000, Philippines",
+              "point": [
+                10.703298,
+                122.553175
+              ]
+            },
+            {
+              "sequence": 12,
+              "address": "Avanceña Street, Tap-oc, North Fundidor, Molo, Navais, Iloilo City, Western Visayas, 5000, Philippines",
+              "point": [
+                10.694906,
+                122.539187
+              ]
+            },
+            {
+              "sequence": 13,
+              "address": "Gloryville Subdivision, San Jose, Villa de Arevalo, Bonifacio, Iloilo City, Western Visayas, 5000, Philippines",
+              "point": [
+                10.688954,
+                122.521356
+              ]
+            },
+            {
+              "sequence": 14,
+              "address": "Osmeña Road, San Nicolas, Villa de Arevalo, San Antonio, Iloilo City, Iloilo, Western Visayas, 5020, Philippines",
+              "point": [
+                10.693583,
+                122.499314
+              ]
+            },
+            {
+              "sequence": 15,
+              "address": "Osmeña Road, San Nicolas, Villa de Arevalo, San Antonio, Oton, Iloilo, Western Visayas, 5020, Philippines",
+              "point": [
+                10.69365,
+                122.488049
+              ]
+            },
+            {
+              "sequence": 16,
+              "address": "Lopez Jaena Street, Poblacion East, San Antonio, Oton, Iloilo, Western Visayas, 5020, Philippines",
+              "point": [
+                10.692334,
+                122.479516
+              ]
+            },
+            {
+              "sequence": 17,
+              "address": "J.C. Zulueta Street, Mary Immaculate Village, Poblacion South, San Antonio, Oton, Iloilo, Western Visayas, 5020, Philippines",
+              "point": [
+                10.691316,
+                122.470813
+              ]
+            },
+            {
+              "sequence": 18,
+              "address": "Iloilo R-1 Road, Mary Immaculate Village, Poblacion West, Trapiche, Oton, Iloilo, Western Visayas, 5020, Philippines",
+              "point": [
+                10.689995,
+                122.454964
+              ]
+            },
+            {
+              "sequence": 19,
+              "address": "Iloilo R-1 Road, Cabanbanan, Oton, Iloilo, Western Visayas, 5020, Philippines",
+              "point": [
+                10.685435,
+                122.43831
+              ]
+            }
+          ],
+          "polylineGoingBack": "",
+          "goingBack": []
+        }
+      }
+    ]
+  }
+}

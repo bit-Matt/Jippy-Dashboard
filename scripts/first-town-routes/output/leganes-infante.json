@@ -1,0 +1,183 @@
+{
+  "ok": true,
+  "data": {
+    "routes": [
+      {
+        "routeNumber": "FT-LEGANES-INFANTE",
+        "routeName": "Leganes-Infante (SM Hi-way)",
+        "routeColor": "#2593d9",
+        "routeDetails": "From Leganes to Infante provincial jeep",
+        "availableFrom": "00:00",
+        "availableTo": "23:59",
+        "vehicleTypeId": "019d61b5-28b0-70a2-af78-cb86290477d0",
+        "points": {
+          "polylineGoingTo": "uqjqS{rfyhFRFbAkDl[~MnCfBre@fWlU`O`x@hb@hTjK|S|KnjCluA|m@xZ`n@~Xfb@`JjOlBfUp@rSHhqA_Fxg@}AfqAHn`@TjVnAdr@jI~PfCbR|DpXnJbGdB`MtF|SzKbsCzyAvcBd{@fvAvs@b^dStkAtr@jHnEbC~CnbAnj@lu@vc@~LtHrh@pYzC`@lDbCnmBphAvnAbr@z}@bh@`k@l]_AzA~@{Ax[vR|t@le@zg@h[~^`Udb@dXlh@~[`nAzs@xw@vc@zWdOb`@|TvtCv~A`}B~qAdh@lYlvB`nA`pA|u@~F`Ef`@nVpTpLxWrKjH~DjmAhl@vIrErRrIpeCl_AdEtAjaApVtpAxZxa@rKhR`E`QxHh{Al^~d@|KnInDpDbDlEnGzErMtSro@dD~LpErL`TnUnTpSnJdIhl@pk@bHfGfSuPxf@q_@rf@s\\rJ_F|GgEn@lCrA~B|A|Al]nW~IvGdHk@jFgAbGaDpIwGha@_c@xYoVjyAq`Axh@{[rz@gf@btAox@nH}D~QhPv^x]tWnUpwA|qAnXbXrl@ri@|MhOpTnSnLdMnPfOlB~C|CvGfEpNR~D?rKsEr]iZdhBsJxh@_`@uF_a@iFuZcCsY{AeNYon@~@kKf@X~GdKs@~GSvr@Opl@hDtJ|@ty@hMrpCpe@|f@zG|_@vCxHPxZT|WCzPc@h^cCn[wDhvBe^vEo@bvA_XrwBs_@doCsh@no@sJb`@yF`PqEbYwJxC{@nEs@v^wCp}EeXdV{ClVu@|r@kFjJy@dBwBrAeHmDaIi\\ua@gGuIqD{DeBPaAd@{A~AcB`JwFbPiHnMyNlSsDxEoEfDoBfA_GxAmg@`CiRpAywBzKeeA|GsHtAcWfI_UrFaBi@i^nFmg@tI_{ApXeu@jM_XhFaxCvg@sDz@qbDzj@kQjByi@tD_c@\\kk@qAoTeBoM_BmMuBfAmIaPsBol@uJuVoDvA{CbPgLvAsIAwB{@mBeBiAyFwA{D_AaBGeCv@mA~AoAbCcGt\\kf@uJcIaB|Kgn@~Gqa@zCyS|Gi`@rEs]?sKS_EgEqN}CwGmB_DoPgOoLeMqToS}MiOsl@si@oXcXqwA}qAuWoUw^y]kd@ka@ch@ye@sa@ma@{TvVyG`GePrQcRxRin@fv@_a@d]wdAt`AoUtUkIhGyoAr~@mDvBwAsHwC_LcEyGwEsFiZqGaf@_IsOkE_XkF_gA}Xef@cM{LaCyC}@i_@qI}MyCqlAwXmc@sKwe@_Kya@sKupAyZkaAqVeEuAqeCm_AsRsIwIsEkmAil@kZiQuXcQy[aQcNgFgXcPyv@yd@mvBanAeh@mYa}B_rAwtCw~Ac`@}T{WeOyw@wc@anA{s@mh@_\\eb@eX__@aU{g@i[}t@me@{gAeq@{}@ch@qw@_c@of@aYe}As}@mDcC{AsC_h@cZiQeJaPsJidBuaA_Ei@auAey@c^eSgvAws@wcBe{@c}BqlAqL}FmRkKh@cBi@bB_WqLcGeBqXoJcR}D_QgCer@kIkVoAo`@UgqAIyg@|AiqA~EsSIgUq@kOmBgb@aJan@_Y}m@yZgf@_WksAus@yc@uUiTkKax@ib@l@{ArG_KfUy]me@}]cSuNiZgTyIkGq[zh@aJfO~HfDwBlHOF",
+          "goingTo": [
+            {
+              "sequence": 0,
+              "address": "Rizal Street, San Vicente, Poblacion, Cagamutan Sur, Leganes, Iloilo, Western Visayas, 5003, Philippines",
+              "point": [
+                10.786603,
+                122.58899
+              ]
+            },
+            {
+              "sequence": 1,
+              "address": "Iloilo-Capiz Road, Poblacion, Buntatala, Leganes, Iloilo, Western Visayas, 5003, Philippines",
+              "point": [
+                10.774932,
+                122.584813
+              ]
+            },
+            {
+              "sequence": 2,
+              "address": "MacArthur Drive, Land Heigths Ville, Tagbac, Jaro, Balantang, Iloilo City, Western Visayas, 5000, Philippines",
+              "point": [
+                10.762016,
+                122.577835
+              ]
+            },
+            {
+              "sequence": 3,
+              "address": "MacArthur Drive, Ohong, Buhang, Jaro, Balantang, Iloilo City, Western Visayas, 5000, Philippines",
+              "point": [
+                10.749612,
+                122.569539
+              ]
+            },
+            {
+              "sequence": 4,
+              "address": "Cubay Road, Banker's Village, Tabuc Suba, Jaro, Cubay, Iloilo City, Western Visayas, 5000, Philippines",
+              "point": [
+                10.732553,
+                122.559928
+              ]
+            },
+            {
+              "sequence": 5,
+              "address": "Lopez Jaena Street, Democracia, Jaro, Arguelles, Iloilo City, Western Visayas, 5000, Philippines",
+              "point": [
+                10.725673,
+                122.556994
+              ]
+            },
+            {
+              "sequence": 6,
+              "address": "Cornerstone Pet Hospital, 69, Jalandoni Street, Luna, Bakhaw, Jaro, Calubihan, Iloilo City, Western Visayas, 5000, Philippines",
+              "point": [
+                10.717817,
+                122.559995
+              ]
+            },
+            {
+              "sequence": 7,
+              "address": "Benigno S. Aquino Jr. Avenue, Buhang Taft-North, Bakhaw, Mandurriao, Calubihan, Iloilo City, Western Visayas, 5000, Philippines",
+              "point": [
+                10.715787,
+                122.552845
+              ]
+            },
+            {
+              "sequence": 8,
+              "address": "Monkey Grounds Coffee, PH52+FJ9, Benigno S. Aquino Jr. Avenue, San Rafael, Mandurriao, Calubihan, Iloilo City, Western Visayas, 5000, Philippines",
+              "point": [
+                10.709095,
+                122.551638
+              ]
+            },
+            {
+              "sequence": 9,
+              "address": "Infante Street, Baybay Tanza, City Proper, Iloilo City, Western Visayas, 5000, Philippines",
+              "point": [
+                10.692934,
+                122.555292
+              ]
+            },
+            {
+              "sequence": 10,
+              "address": "Infante Avenue, Baybay Tanza, City Proper, Iloilo City, Western Visayas, 5000, Philippines",
+              "point": [
+                10.697642,
+                122.554748
+              ]
+            },
+            {
+              "sequence": 11,
+              "address": "Benigno S. Aquino Jr. Avenue, Bolilao, Mandurriao, Calubihan, Iloilo City, Western Visayas, 5000, Philippines",
+              "point": [
+                10.71159,
+                122.551846
+              ]
+            },
+            {
+              "sequence": 12,
+              "address": "East Service Road, Bolilao, Mandurriao, Calubihan, Iloilo City, Western Visayas, 5000, Philippines",
+              "point": [
+                10.714059,
+                122.552667
+              ]
+            },
+            {
+              "sequence": 13,
+              "address": "Cornerstone Pet Hospital, 69, Jalandoni Street, Luna, Bakhaw, Jaro, Calubihan, Iloilo City, Western Visayas, 5000, Philippines",
+              "point": [
+                10.717817,
+                122.559995
+              ]
+            },
+            {
+              "sequence": 14,
+              "address": "Washington Street, Benedicto, Jaro, Arguelles, Iloilo City, Western Visayas, 5000, Philippines",
+              "point": [
+                10.725856,
+                122.557719
+              ]
+            },
+            {
+              "sequence": 15,
+              "address": "MacArthur Drive, Quintin Salas, Jaro, Quintin Salas, Iloilo City, Western Visayas, 5000, Philippines",
+              "point": [
+                10.738354,
+                122.562293
+              ]
+            },
+            {
+              "sequence": 16,
+              "address": "MacArthur Drive, Jaro, Balantang, Iloilo City, Western Visayas, 5000, Philippines",
+              "point": [
+                10.754452,
+                122.572803
+              ]
+            },
+            {
+              "sequence": 17,
+              "address": "Hamungaya, Buntatala, Jaro, Iloilo City, Western Visayas, 5000, Philippines",
+              "point": [
+                10.771158,
+                122.583656
+              ]
+            },
+            {
+              "sequence": 18,
+              "address": "Iloilo-Capiz Road, Guihaman, Buntatala, Leganes, Iloilo, Western Visayas, 5003, Philippines",
+              "point": [
+                10.77973,
+                122.584921
+              ]
+            },
+            {
+              "sequence": 19,
+              "address": "Rizal Street, San Vicente, Poblacion, Cagamutan Sur, Leganes, Iloilo, Western Visayas, 5003, Philippines",
+              "point": [
+                10.786627,
+                122.588917
+              ]
+            }
+          ],
+          "polylineGoingBack": "",
+          "goingBack": []
+        }
+      }
+    ]
+  }
+}

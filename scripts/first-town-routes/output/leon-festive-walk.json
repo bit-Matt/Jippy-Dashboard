@@ -1,0 +1,183 @@
+{
+  "ok": true,
+  "data": {
+    "routes": [
+      {
+        "routeNumber": "FT-LEON-FESTIVE-WALK",
+        "routeName": "Leon Iloilo City, Festive Walk",
+        "routeColor": "#2593d9",
+        "routeDetails": "",
+        "availableFrom": "00:00",
+        "availableTo": "23:59",
+        "vehicleTypeId": "019d61b5-28b0-70a2-af78-cb86290477d0",
+        "points": {
+          "polylineGoingTo": "irbmSmeuvhFoOiLkMlQiLcIa^gTeW}Lt@jOnApb@rBlg@|NdcDzIbnCtKl_DThUt@v]jC~]iCrGeCtDqa@bd@uKlL{d@bt@{IhP}u@~|@gl@js@gRlVwKfMca@rf@}h@hu@mIfKwJdNw]xd@_c@ni@wn@xg@eJ~Gsh@rc@kh@|e@mOfOo}@pu@oX~Rsv@pk@chAvv@wtAfcAeaAxq@iVvQ_WbQyb@l[iMbIoz@hm@eOfLmb@|Xy_@jXoiB|nAguBrqAiQbJkCtBmj@~^us@~d@mp@rd@sTjNs{A`eAya@|YwSzMeh@lYe|CnhBqu@fd@cVdTm|@~}@i]l]w_ClfC_j@|l@yp@nv@c^n`@ck@hu@kz@`iAckAdbBqw@xgA_bBnoBgb@pe@yPdSyfAptAg~@~hAk^|e@ssAl{Ama@vc@aUnWkTdXmIzMwBdEkb@t`Akp@`}Ag\\zo@yEzKiGxKkWri@kr@zzA}FjO}Ot]}C`JmUrj@sPb]_LxVo^z`AcQ~`@ue@beA_aAxsBcdHptO{v@`bB}Zjs@uy@fkB}GhOi@fE`AhHjB|DfHhJtVfUtf@hd@~hAdgAt]fXdvAx`AzYhS`DrCp@`CT|BChGoXdxEmY~iFyNbyB[jUf@pa@~MxkEbGnxBjDni@r@p^|CfeAnKbyCJnUvBf{@zAdf@KnJ}`Bby@mi@dXg{Ahw@qq@z\\muEz`C{MpFy`@tMgjA`]aOzDuS|H_VvU{EbGgC|DgBzD[tDC`DPtD\\tBp@nBvBpEzFdD|zAhs@l`A~d@lqB`_Afe@hYxUxQzMtI~PtJtP|EfUzChOlA|c@vK~UjM`y@rm@xTvN`x@pk@ly@po@vw@`k@|WnVtHvHxIxO`EnQdHzk@jBxK`BbHhB`F|BrElBxC~h@pl@~UtXfLzNnDhFtJhQjOfZ|MxUxBjFxEnIlCfDrX~W`KxNpGfKlFbKrOvc@vQjf@hNrWh`@~n@lPbWrcB|xCpoAxxBpfAbpBhUj_@pMpRjLrMxoAtkAnEnF`EtGxBlEtDrOdF|ZzDn]~AxV?x]Udc@gCho@sDvJsF|DkjAzQux@~TgqB`m@kX`LkPzLcp@zu@yhAbtAyg@lb@oMdIyG`DuKjBcNDkJmAgJqC}PcLyCeAoFMuGh@aIrAoKfCuCdBqB|ByAlDy@lEcXbeBuBvSg@fLe@lZAdGThE~@vCxB|BfBbAns@dOdC~@`CtBfA|BXfCQzCsLt{@e_@hjCqz@dCweBtCuaA^}j@uAm_@oBgc@uCs{@uE{CtYmD|G{Hht@mEza@NxDnBR|L}iA|BaRCqHzCuYr{@tEfc@tCl_@nB|j@tAtaA_@veBuCpz@eCd_@ijCrLu{@P{CYgCgA}BaCuBeC_Aos@eOgBcAyB}B_AwCUiE@eGd@mZf@gLtBwSbXceBx@mExAmDpB}BtCeBnKgC`IsAtGi@nFLxCdA|PbLfJpCjJlAbNEtKkBxGaDnMeIxg@mb@xhActAbp@{u@jP{LjXaLfqBam@tx@_UjjA{QrF}DrDwJfCio@TcZ?yc@?aB_ByV{Do]eF}ZuDsOyBmEaEuGoEoFyoAukAkLsMqMqRiUk_@qfAcpBqoAyxBscB}xCmPcWi`@_o@iNsWwQkf@sOwc@mFcKqGgKaKyNsX_XmCgDyEoIyBkF}MyUkOgZuJiQoDiFgL{N_VuX_i@ql@mByC}BsEiBaFaBcHkByKeH{k@aEoQyIyOuHwH}WoVww@ak@my@qo@ax@qk@yTwNay@sm@_VkM}c@wKiOmAgU{CuP}E_QuJ{MuIyUyQge@iYmqBa_AuiAkj@uqA}m@kC}AoBgAwBqEq@oB]uBQuDBaDZuDfB{DfC}DzEcG~UwUtS}H`O{DfjAa]x`@uMzMqFluE{`Cpq@{\\f{Aiw@jkCirAJoJ{Aef@wBg{@KoUoKcyC}CgeAs@q^kDoi@cGoxB_NykEg@qa@ZkUxNcyB~V}tE`TwrDzEoy@BiGU}Bq@aCaDsC}z@al@cu@ah@u]gX_iAegAiNkMao@el@gHiJkB}DaAiHh@gEvVuj@xfAgdCzv@abBbdHqtO~`AysBte@ceAbQ_a@n^{`A~KyVrPc]lUsj@|CaJ|Ou]|FkOjr@{zAjWsi@hGyKxE{Kf\\{o@jp@a}Ajb@u`AvBeElI{MjTeX`UoWla@wc@rsAm{Aj^}e@f~@_iAxfAqtAxPeSfb@qe@~aBooBpw@ygA`CdB{ArBzAsBaCeBbkAebBjz@aiAbk@iu@b^o`@xp@ov@~i@}l@v_CmfCh]m]l|@_~@bVeTpu@gd@d|CohBdh@mYvS{Mxa@}Yr{AaeArTkNlp@sd@ts@_e@lj@__@jCuBhQcJfuBsqAniB}nAx_@kXlb@}XdOgLnz@im@hMcIxb@m[~VcQhVwQdaAyq@vtAgcAbhAwv@~rA_bArz@cs@lOgOjh@}e@rh@sc@dJ_Hvn@yg@~b@oi@v]yd@vJeNlIgK|h@iu@ba@sf@vKgMfRmVfl@ks@bf@ck@xN{P~KkFlHeBfJoA|i@aF~WeC`KuB~HoCtLsHbKkJbMiM|q@oo@fVcSfd@kZhaAak@dXgNne@oYpy@qd@ji@cY`d@eXduBihAzQiIbKsCxNwCji@eKuIcG_ZeOiZmK{VkHkMmCmDu@ue@kHi`@mFaWqHobAe\\gcAaa@iYuLea@yQm[{O}f@iOsZuE_LyB_YuFeV{GeTaJwLoH}YmS",
+          "goingTo": [
+            {
+              "sequence": 0,
+              "address": "Waffle Time, Service Road, Iloilo Business Park, Bakhaw, Mandurriao, Calubihan, Iloilo City, Western Visayas, 5000, Philippines",
+              "point": [
+                10.716981,
+                122.547303
+              ]
+            },
+            {
+              "sequence": 1,
+              "address": "Guzman Street, Ana Ros Village Subdivision, Monterosa Village, Mandurriao, Hibao-an Sur, Iloilo City, Western Visayas, 5000, Philippines",
+              "point": [
+                10.724898,
+                122.529161
+              ]
+            },
+            {
+              "sequence": 2,
+              "address": "Iloilo R-2 Road, Pandac, Jibao-an, Pavia, Iloilo, Western Visayas, 5001, Philippines",
+              "point": [
+                10.746093,
+                122.512845
+              ]
+            },
+            {
+              "sequence": 3,
+              "address": "Iloilo R-2 Road, San Manuel Subdivision, Cabolo-an Norte, San Miguel, Iloilo, Western Visayas, 5020, Philippines",
+              "point": [
+                10.76952,
+                122.486049
+              ]
+            },
+            {
+              "sequence": 4,
+              "address": "Iloilo R-2 Road, San Miguel Town Proper, Onas, Santa Clara, San Miguel, Iloilo, Western Visayas, 5025, Philippines",
+              "point": [
+                10.776815,
+                122.456321
+              ]
+            },
+            {
+              "sequence": 5,
+              "address": "Bancal Bus Stop, Bancal-Leon Road, Bancal, Iloilo, Western Visayas, 5025, Philippines",
+              "point": [
+                10.787765,
+                122.43083
+              ]
+            },
+            {
+              "sequence": 6,
+              "address": "Bancal-Leon Road, Santa Clara, Agboy Norte, Iloilo, Western Visayas, Philippines",
+              "point": [
+                10.774595,
+                122.420646
+              ]
+            },
+            {
+              "sequence": 7,
+              "address": "Bancal-Leon Road, Poblacion, Sipitan, Pandan, Iloilo, Western Visayas, 5026, Philippines",
+              "point": [
+                10.763295,
+                122.404643
+              ]
+            },
+            {
+              "sequence": 8,
+              "address": "Bancal-Leon Road, Siol Sur, Anonang, Iloilo, Western Visayas, 5026, Philippines",
+              "point": [
+                10.772886,
+                122.396388
+              ]
+            },
+            {
+              "sequence": 9,
+              "address": "F. Cabarles Street, Calicaran's, Poblacion, Leon, Iloilo, Western Visayas, 5026, Philippines",
+              "point": [
+                10.77988,
+                122.387466
+              ]
+            },
+            {
+              "sequence": 10,
+              "address": "Bancal-Leon Road, Siol Sur, Anonang, Iloilo, Western Visayas, 5026, Philippines",
+              "point": [
+                10.772886,
+                122.396388
+              ]
+            },
+            {
+              "sequence": 11,
+              "address": "Bancal-Leon Road, Poblacion, Sipitan, Pandan, Iloilo, Western Visayas, 5026, Philippines",
+              "point": [
+                10.763295,
+                122.404643
+              ]
+            },
+            {
+              "sequence": 12,
+              "address": "Bancal-Leon Road, Santa Clara, Agboy Norte, Iloilo, Western Visayas, Philippines",
+              "point": [
+                10.77454,
+                122.420569
+              ]
+            },
+            {
+              "sequence": 13,
+              "address": "Bancal Bus Stop, Bancal-Leon Road, Bancal, Iloilo, Western Visayas, 5025, Philippines",
+              "point": [
+                10.787741,
+                122.43068
+              ]
+            },
+            {
+              "sequence": 14,
+              "address": "Iloilo R-2 Road, San Miguel Town Proper, Onas, Santa Clara, San Miguel, Iloilo, Western Visayas, 5025, Philippines",
+              "point": [
+                10.776854,
+                122.455984
+              ]
+            },
+            {
+              "sequence": 15,
+              "address": "Cabolo-an Norte, San Jose, Iloilo, Western Visayas, 5020, Philippines",
+              "point": [
+                10.770342,
+                122.484579
+              ]
+            },
+            {
+              "sequence": 16,
+              "address": "Iloilo R-2 Road, Pandac, Jibao-an, Pavia, Iloilo, Western Visayas, 5001, Philippines",
+              "point": [
+                10.751319,
+                122.508727
+              ]
+            },
+            {
+              "sequence": 17,
+              "address": "Guzman Street, Ana Ros Village Subdivision, Monterosa Village, Mandurriao, Hibao-an Sur, Iloilo City, Western Visayas, 5000, Philippines",
+              "point": [
+                10.726405,
+                122.527808
+              ]
+            },
+            {
+              "sequence": 18,
+              "address": "R. Mapa Street, Niceville Subdivision, Jeferson Ville Subdivision, Mandurriao, Pale Benidicto Rizal, Iloilo City, Western Visayas, 5000, Philippines",
+              "point": [
+                10.713514,
+                122.539044
+              ]
+            },
+            {
+              "sequence": 19,
+              "address": "Megaworld Boulevard, Iloilo Business Park, San Rafael, Mandurriao, Calubihan, Iloilo City, Western Visayas, 5000, Philippines",
+              "point": [
+                10.717309,
+                122.546983
+              ]
+            }
+          ],
+          "polylineGoingBack": "",
+          "goingBack": []
+        }
+      }
+    ]
+  }
+}

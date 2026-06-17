@@ -1,0 +1,183 @@
+{
+  "ok": true,
+  "data": {
+    "routes": [
+      {
+        "routeNumber": "FT-LEGANES-LAPAZ",
+        "routeName": "Leganes-Lapaz",
+        "routeColor": "#2593d9",
+        "routeDetails": "From Leganes to La Paz plaza",
+        "availableFrom": "00:00",
+        "availableTo": "23:59",
+        "vehicleTypeId": "019d61b5-28b0-70a2-af78-cb86290477d0",
+        "points": {
+          "polylineGoingTo": "urjqS_pfyhFNDfBeGl[~MnCfBre@fWlU`O`x@hb@hTjK|S|KnjCluA|m@xZ`n@~Xfb@`JjOlBfUp@rSHhqA_Fxg@}AfqAHn`@TjVnAdr@jI~PfCbR|DpXnJbGdBrQlIncD~cBvcBd{@fvAvs@b^dStkAtr@jHnEbC~CnbAnj@lu@vc@zLrHvh@rYzC`@lDbCnmBphAvnAbr@z}@bh@hg@xZp_@jU|t@le@zg@h[~^`Udb@dXlh@~[`nAzs@xw@vc@zWdOb`@|TvtCv~A`}B~qAdh@lYlvB`nAry@tf@lUfNnM|IvYrQpTpLxWrKjH~DjmAhl@vIrErRrIfd@bQnfB~o@xhBhd@fi@`Mxa@rKhR`E`QxHpbBz`@v]nInInDpDbDlEnGzErMtSro@dD~LpErL`TnUnTpSnJdIzk@bk@pHtGfSuPxf@q_@rf@s\\rJ_F|GgEn@lCrA~B|A|Ah]jWbJzGdHk@jFgAbGaDpIwGha@_c@xYoVqPqOu]yYnUuUxL_L|v@us@~`@e]hn@gv@rYsZtHyIxGaGzTwVnSyRdY}Zj`@oa@pUoW~}@_`AtPuN|}@cr@~PgN`HiGd[kSU[TZtTiRdLmHjf@q\\lc@_[vK{Ilp@eg@dg@}]zp@w`@pImEx[mRsNiSgU_\\kT{[kKiNmt@jg@oa@~V`h@vm@l[h_@`EbEgDpBeg@|]a@e@`@d@mp@dg@wKzImc@~Zkf@p\\eLlHuThRe[jSaHhG_QfN}}@br@uPtN_~@~_AqUnWk`@na@eY|ZoSxR{TvVyG`GuHxIsYrZin@fv@_a@d]wdAt`AoUtUiJ`H{nAz}@mDvBgDmOgAeEcEyGwEsFiZqGaf@_IsOkE_XkFenBag@{LaCyC}@i_@qI}MyCcz@sR{u@wQwe@_Kya@sKupAyZkaAqVeEuAqeCm_AsRsIwIsEkmAil@kZiQuXcQy[aQcNgFo^kTqp@q`@mvBanAeh@mYa}B_rAwtCw~Ac`@}T{WeOyw@wc@anA{s@mh@_\\eb@eX__@aU{g@i[}t@me@cg@sZw_@qU{}@ch@wnAcr@omBqhAmDcC{AsC_h@cZiQeJaPsJidBuaA_Ei@auAey@c^eSgvAws@wcBe{@qfD{eBqNqGcGeBqXoJcR}D_QgCer@kIkVoAo`@UgqAIyg@|AiqA~EsSIgUq@kOmBgb@aJan@_Y}m@yZgf@_WksAus@yc@uUiTkKax@ib@l@{AlDqFlXgb@eb@i[kViQq^qWqEaDi]lk@iHtL~HfD{BnH",
+          "goingTo": [
+            {
+              "sequence": 0,
+              "address": "Rizal Street, San Vicente, Poblacion, Cagamutan Sur, Leganes, Iloilo, Western Visayas, 5003, Philippines",
+              "point": [
+                10.786619,
+                122.588944
+              ]
+            },
+            {
+              "sequence": 1,
+              "address": "Iloilo-Capiz Road, Guihaman, Buntatala, Leganes, Iloilo, Western Visayas, 5003, Philippines",
+              "point": [
+                10.778904,
+                122.584689
+              ]
+            },
+            {
+              "sequence": 2,
+              "address": "MacArthur Drive, Land Heights III Subdivision Phase I, Buntatala, Jaro, Balantang, Iloilo City, Western Visayas, 5000, Philippines",
+              "point": [
+                10.767528,
+                122.581452
+              ]
+            },
+            {
+              "sequence": 3,
+              "address": "MacArthur Drive, Tagbac, Jaro, Balantang, Iloilo City, Western Visayas, 5000, Philippines",
+              "point": [
+                10.757135,
+                122.574674
+              ]
+            },
+            {
+              "sequence": 4,
+              "address": "M. V. Hechanova, Jaro, Quintin Salas, Iloilo City, Western Visayas, 5000, Philippines",
+              "point": [
+                10.74454,
+                122.566256
+              ]
+            },
+            {
+              "sequence": 5,
+              "address": "Villa Consolacion Subdivision, Tabuc Suba, Jaro, Cubay, Iloilo City, Western Visayas, 5000, Philippines",
+              "point": [
+                10.734095,
+                122.560452
+              ]
+            },
+            {
+              "sequence": 6,
+              "address": "Simeon Ledesma Street, Democracia, Jaro, Arguelles, Iloilo City, Western Visayas, 5000, Philippines",
+              "point": [
+                10.728509,
+                122.556612
+              ]
+            },
+            {
+              "sequence": 7,
+              "address": "Plaza Rizal Street, Modern Homes, Cuartero, Jaro, Arguelles, Iloilo City, Western Visayas, 5000, Philippines",
+              "point": [
+                10.724607,
+                122.556402
+              ]
+            },
+            {
+              "sequence": 8,
+              "address": "Comision Civil Street, Jereos, San Pedro, Jaro, Calubihan, Iloilo City, Western Visayas, 5000, Philippines",
+              "point": [
+                10.720626,
+                122.561701
+              ]
+            },
+            {
+              "sequence": 9,
+              "address": "Burgos Street, Luna, Railway, La Paz, Tabuc Suba, Iloilo City, Western Visayas, 5000, Philippines",
+              "point": [
+                10.715311,
+                122.56673
+              ]
+            },
+            {
+              "sequence": 10,
+              "address": "Jereos Street, Luna, Lopez Jaena Norte, La Paz, Tabuc Suba, Iloilo City, Western Visayas, 5000, Philippines",
+              "point": [
+                10.712475,
+                122.571227
+              ]
+            },
+            {
+              "sequence": 11,
+              "address": "Burgos Street, Luna, Railway, La Paz, Tabuc Suba, Iloilo City, Western Visayas, 5000, Philippines",
+              "point": [
+                10.715311,
+                122.56673
+              ]
+            },
+            {
+              "sequence": 12,
+              "address": "Comision Civil Street, Jereos, San Pedro, Jaro, Calubihan, Iloilo City, Western Visayas, 5000, Philippines",
+              "point": [
+                10.721207,
+                122.561086
+              ]
+            },
+            {
+              "sequence": 13,
+              "address": "Old Railroad, Democracia, Jaro, Arguelles, Iloilo City, Western Visayas, 5000, Philippines",
+              "point": [
+                10.727184,
+                122.558118
+              ]
+            },
+            {
+              "sequence": 14,
+              "address": "MacArthur Drive, Quintin Salas, Jaro, Quintin Salas, Iloilo City, Western Visayas, 5000, Philippines",
+              "point": [
+                10.738354,
+                122.562293
+              ]
+            },
+            {
+              "sequence": 15,
+              "address": "MacArthur Drive, Ohong, Buhang, Jaro, Balantang, Iloilo City, Western Visayas, 5000, Philippines",
+              "point": [
+                10.75054,
+                122.570149
+              ]
+            },
+            {
+              "sequence": 16,
+              "address": "MacArthur Drive, San Jose Community II Subdivision, Tagbac, Jaro, Balantang, Iloilo City, Western Visayas, 5000, Philippines",
+              "point": [
+                10.761318,
+                122.577467
+              ]
+            },
+            {
+              "sequence": 17,
+              "address": "Iloilo-Capiz Road, Hamungaya, Buntatala, Jaro, Iloilo City, Western Visayas, 5000, Philippines",
+              "point": [
+                10.772915,
+                122.584528
+              ]
+            },
+            {
+              "sequence": 18,
+              "address": "Iloilo-Capiz Road, Guihaman, Buntatala, Leganes, Iloilo, Western Visayas, 5003, Philippines",
+              "point": [
+                10.783212,
+                122.587009
+              ]
+            },
+            {
+              "sequence": 19,
+              "address": "Rizal Street, San Vicente, Poblacion, Cagamutan Sur, Leganes, Iloilo, Western Visayas, 5003, Philippines",
+              "point": [
+                10.786621,
+                122.58892
+              ]
+            }
+          ],
+          "polylineGoingBack": "",
+          "goingBack": []
+        }
+      }
+    ]
+  }
+}
