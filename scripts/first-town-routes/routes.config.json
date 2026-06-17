@@ -1,0 +1,22 @@
+{
+  "leganes-lapaz": {
+    "sourceFile": "MapMyRoute.gpx (Leganes-Lapaz).xml",
+    "routeNumber": "FT-LEGANES-LAPAZ",
+    "routeColor": "#2593d9"
+  },
+  "leganes-infante": {
+    "sourceFile": "MapMyRoute.gpx (Leganes-Infante).xml",
+    "routeNumber": "FT-LEGANES-INFANTE",
+    "routeColor": "#2593d9"
+  },
+  "oton-derecho": {
+    "sourceFile": "MapMyRoute.gpx (Oton Derecho).xml",
+    "routeNumber": "FT-OTON-DERECHO",
+    "routeColor": "#2593d9"
+  },
+  "leon-festive-walk": {
+    "sourceFile": "MapMyRoute.gpx (1).xml",
+    "routeNumber": "FT-LEON-FESTIVE-WALK",
+    "routeColor": "#2593d9"
+  }
+}
