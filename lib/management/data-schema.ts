@@ -113,7 +113,6 @@ export const StopExportSchema = z.object({
   polyline: z.string(),
   isPublic: z.boolean(),
   routeIds: z.array(z.uuid()),
-  vehicleTypeIds: z.array(z.uuid()),
   points: z.array(ClosurePointSchema),
 });
 

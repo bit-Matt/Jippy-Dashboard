@@ -12,6 +12,7 @@ import "leaflet/dist/leaflet.css";
 import "@geoman-io/leaflet-geoman-free/dist/leaflet-geoman.css";
 
 import type { StopResponse, StopResponseList } from "@/contracts/responses";
+import { getStopLineCoordinates } from "@/lib/stops/display";
 import { getPositronStyleUrl } from "@/lib/map/style-url";
 import { useStopDashboard } from "@/contexts/StopDashboardContext";
 
@@ -296,9 +297,7 @@ const StopLinesLayer = ({
   return (
     <>
       {stops.map((stop) => {
-        const sortedPoints = [...stop.points]
-          .sort((a, b) => a.sequence - b.sequence)
-          .map((point) => point.point);
+        const sortedPoints = getStopLineCoordinates(stop);
 
         if (sortedPoints.length < 2) return null;
 

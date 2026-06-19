@@ -1,6 +1,7 @@
 "use client";
 
 import type { StopResponseList } from "@/contracts/responses";
+import { formatStopDisallowedDirection, formatStopRestrictionType } from "@/lib/stops/display";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -61,7 +62,7 @@ export default function StopListCard({
                         </Badge>
                       </div>
                       <p className="text-muted-foreground text-xs">
-                        Restriction: {stop.restrictionType === "universal" ? "Universal" : "Specific"}
+                        {formatStopRestrictionType(stop.restrictionType)} · {formatStopDisallowedDirection(stop.disallowedDirection)}
                       </p>
                     </button>
                   );

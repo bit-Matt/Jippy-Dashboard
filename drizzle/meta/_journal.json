@@ -64,6 +64,27 @@
       "when": 1776618177892,
       "tag": "0008_salty_tinkerer",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1781852960579,
+      "tag": "0009_sloppy_millenium_guard",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1781853074166,
+      "tag": "0010_open_rage",
+      "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1781853404476,
+      "tag": "0011_complete_thor_girl",
+      "breakpoints": true
     }
   ]
 }

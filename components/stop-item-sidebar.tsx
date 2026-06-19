@@ -3,6 +3,7 @@
 import { X } from "lucide-react";
 
 import type { StopResponse } from "@/contracts/responses";
+import { formatStopDisallowedDirection, formatStopRestrictionType } from "@/lib/stops/display";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -13,7 +14,6 @@ interface StopItemSidebarProps {
   stop: StopResponse;
   userRole: string | null;
   routeNameLookup: Record<string, string>;
-  vehicleTypeNameLookup: Record<string, string>;
   isPublishing: boolean;
   isDeletingStop: boolean;
   onClose: () => void;
@@ -30,7 +30,6 @@ export default function StopItemSidebar({
   stop,
   userRole,
   routeNameLookup,
-  vehicleTypeNameLookup,
   isPublishing,
   isDeletingStop,
   onClose,
@@ -41,7 +40,6 @@ export default function StopItemSidebar({
   const isAdministrator = userRole === "administrator_user";
   const isPublished = stop.isPublic;
   const resolvedRoutes = asDisplayList(stop.routeIds, routeNameLookup);
-  const resolvedVehicleTypes = asDisplayList(stop.vehicleTypeIds, vehicleTypeNameLookup);
 
   return (
     <Card>
@@ -70,7 +68,14 @@ export default function StopItemSidebar({
         <div className="space-y-1 rounded-md border p-3">
           <p className="text-xs text-muted-foreground">Restriction Type</p>
           <p className="text-sm font-medium">
-            {stop.restrictionType === "universal" ? "Universal restriction" : "Disallowed restriction"}
+            {formatStopRestrictionType(stop.restrictionType)}
+          </p>
+        </div>
+
+        <div className="space-y-1 rounded-md border p-3">
+          <p className="text-xs text-muted-foreground">Disallowed Direction</p>
+          <p className="text-sm font-medium">
+            {formatStopDisallowedDirection(stop.disallowedDirection)}
           </p>
         </div>
 
@@ -84,18 +89,6 @@ export default function StopItemSidebar({
                 <ul className="list-disc space-y-1 pl-5 text-sm">
                   {resolvedRoutes.map((routeName) => (
                     <li key={routeName}>{routeName}</li>
-                  ))}
-                </ul>
-              )}
-            </div>
-            <div className="space-y-1">
-              <p className="text-xs text-muted-foreground">Disallowed Vehicle Types</p>
-              {resolvedVehicleTypes.length === 0 ? (
-                <p className="text-sm">No vehicle type restrictions configured.</p>
-              ) : (
-                <ul className="list-disc space-y-1 pl-5 text-sm">
-                  {resolvedVehicleTypes.map((vehicleTypeName) => (
-                    <li key={vehicleTypeName}>{vehicleTypeName}</li>
                   ))}
                 </ul>
               )}

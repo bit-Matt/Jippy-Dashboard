@@ -102,22 +102,6 @@ export async function POST(req: NextRequest) {
           return { ok: true };
         },
       },
-      vehicleTypeIds: {
-        type: "object",
-        formatterFn: async (values) => {
-          if (!Array.isArray(values)) {
-            return { ok: false, error: "vehicleTypeIds must be an array." };
-          }
-
-          for (const id of values) {
-            if (!utils.isUuid(id)) {
-              return { ok: false, error: "Invalid vehicle type ID." };
-            }
-          }
-
-          return { ok: true };
-        },
-      },
       disallowedDirection: {
         type: "string",
         formatterFn: async (value) => {
@@ -137,14 +121,13 @@ export async function POST(req: NextRequest) {
       .build();
   }
 
-  // Business rule: if SPECIFIC, must have at least one routeId or vehicleTypeId
+  // Business rule: if SPECIFIC, must have at least one routeId
   if (data.restrictionType === "specific") {
     const hasRoutes = Array.isArray(data.routeIds) && data.routeIds.length > 0;
-    const hasVehicleTypes = Array.isArray(data.vehicleTypeIds) && data.vehicleTypeIds.length > 0;
 
-    if (!hasRoutes && !hasVehicleTypes) {
+    if (!hasRoutes) {
       return ApiResponseBuilder.createError(StatusCodes.Status400BadRequest, [{
-        message: "When restrictionType is 'specific', at least one routeId or vehicleTypeId must be provided.",
+        message: "When restrictionType is 'specific', at least one routeId must be provided.",
       }]).build();
     }
   }
@@ -181,5 +164,4 @@ type RequestBody = {
     point: [number, number];
   }>;
   routeIds?: string[];
-  vehicleTypeIds?: string[];
 }

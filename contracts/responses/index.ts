@@ -144,7 +144,6 @@ export interface StopResponse {
   isPublic: boolean;
   points: StopPointResponse[];
   routeIds: string[];
-  vehicleTypeIds: string[];
 }
 
 export type StopResponseList = StopResponse[];

@@ -1,8 +1,27 @@
 import {and, eq, gt, or, sql} from "drizzle-orm";
 
 import {db} from "@/lib/db";
-import {roadClosurePoints, roadClosures} from "@/lib/db/schema";
+import type * as GeoJSON from "@/lib/db/postgis-extension/geojsonTypes";
+import {roadClosures} from "@/lib/db/schema";
 import {ErrorCodes, Failure, Result, Success} from "@/lib/one-of/types";
+
+export function polygonToPointObjects(polygon: GeoJSON.Polygon | null, closureId: string): PointObject[] {
+  if (!polygon?.coordinates?.[0]) return [];
+  const ring = polygon.coordinates[0];
+  const coords = ring.length > 1 ? ring.slice(0, -1) : ring;
+  return coords.map((pos, i) => ({
+    id: `${closureId}-${i + 1}`,
+    sequence: i + 1,
+    point: [pos[1], pos[0]] as [number, number],
+  }));
+}
+
+export function pointsToPolygon(points: Array<Omit<PointObject, "id">>): GeoJSON.Polygon {
+  const sorted = [...points].sort((a, b) => a.sequence - b.sequence);
+  const coords = sorted.map(p => [p.point[1], p.point[0]]);
+  if (coords.length > 0) coords.push(coords[0]);
+  return { type: "Polygon", coordinates: [coords] };
+}
 
 /**
  * Fetches all road closures.
@@ -11,25 +30,8 @@ import {ErrorCodes, Failure, Result, Success} from "@/lib/one-of/types";
  */
 export async function getAllClosures(forPublic: boolean = true): Promise<Result<ClosureBaseObject[] | ClosureObject[]>> {
   try {
-    const pointsAggregation = sql<PointObject[]>`
-      COALESCE(
-        json_agg(
-          json_build_object(
-            'id', ${roadClosurePoints.id},
-            'sequence', ${roadClosurePoints.sequenceNumber},
-            'point', json_build_array(
-              ST_Y(${roadClosurePoints.point}),
-              ST_X(${roadClosurePoints.point})
-            )
-          )
-          ORDER BY ${roadClosurePoints.sequenceNumber} ASC
-        ) FILTER (WHERE ${roadClosurePoints.id} IS NOT NULL),
-        '[]'::json
-      )
-    `;
-
     if (forPublic) {
-      const result = await db
+      const rows = await db
         .select({
           id: roadClosures.id,
           closureName: roadClosures.name,
@@ -37,10 +39,9 @@ export async function getAllClosures(forPublic: boolean = true): Promise<Result<
           shape: roadClosures.shape,
           closureType: roadClosures.closureType,
           endDate: roadClosures.endDate,
-          points: pointsAggregation,
+          polygon: roadClosures.polygon,
         })
         .from(roadClosures)
-        .leftJoin(roadClosurePoints, eq(roadClosurePoints.roadClosureId, roadClosures.id))
         .where(and(
           eq(roadClosures.isPublic, true),
           or(
@@ -50,20 +51,22 @@ export async function getAllClosures(forPublic: boolean = true): Promise<Result<
               gt(roadClosures.endDate, sql`NOW()`),
             ),
           ),
-        ))
-        .groupBy(
-          roadClosures.id,
-          roadClosures.name,
-          roadClosures.description,
-          roadClosures.shape,
-          roadClosures.closureType,
-          roadClosures.endDate,
-        );
+        ));
+
+      const result = rows.map(row => ({
+        id: row.id,
+        closureName: row.closureName,
+        closureDescription: row.closureDescription,
+        shape: row.shape,
+        closureType: row.closureType,
+        endDate: row.endDate,
+        points: polygonToPointObjects(row.polygon, row.id),
+      }));
 
       return new Success(result satisfies ClosureBaseObject[]);
     }
 
-    const result = await db
+    const rows = await db
       .select({
         id: roadClosures.id,
         closureName: roadClosures.name,
@@ -71,20 +74,21 @@ export async function getAllClosures(forPublic: boolean = true): Promise<Result<
         shape: roadClosures.shape,
         closureType: roadClosures.closureType,
         endDate: roadClosures.endDate,
-        points: pointsAggregation,
         isPublic: roadClosures.isPublic,
+        polygon: roadClosures.polygon,
       })
-      .from(roadClosures)
-      .leftJoin(roadClosurePoints, eq(roadClosurePoints.roadClosureId, roadClosures.id))
-      .groupBy(
-        roadClosures.id,
-        roadClosures.name,
-        roadClosures.description,
-        roadClosures.shape,
-        roadClosures.closureType,
-        roadClosures.endDate,
-        roadClosures.isPublic,
-      );
+      .from(roadClosures);
+
+    const result = rows.map(row => ({
+      id: row.id,
+      closureName: row.closureName,
+      closureDescription: row.closureDescription,
+      shape: row.shape,
+      closureType: row.closureType,
+      endDate: row.endDate,
+      isPublic: row.isPublic,
+      points: polygonToPointObjects(row.polygon, row.id),
+    }));
 
     return new Success(result satisfies ClosureObject[]);
   } catch (error) {
@@ -109,6 +113,7 @@ export async function createClosure(payload: ClosureAddParameters, ownerId: stri
           shape: payload.shape,
           closureType: payload.closureType,
           endDate: payload.endDate,
+          polygon: pointsToPolygon(payload.points),
           isPublic: false,
           ownerId,
         })
@@ -126,19 +131,6 @@ export async function createClosure(payload: ClosureAddParameters, ownerId: stri
         return tx.rollback();
       }
 
-      const pointRows = await tx
-        .insert(roadClosurePoints)
-        .values(payload.points.map((point) => ({
-          roadClosureId: newClosure.id,
-          sequenceNumber: point.sequence,
-          point: [point.point[1], point.point[0]] as [number, number],
-        })))
-        .returning({
-          id: roadClosurePoints.id,
-          sequence: roadClosurePoints.sequenceNumber,
-          point: roadClosurePoints.point,
-        });
-
       return {
         id: newClosure.id,
         closureName: newClosure.name,
@@ -147,11 +139,7 @@ export async function createClosure(payload: ClosureAddParameters, ownerId: stri
         closureType: newClosure.closureType,
         endDate: newClosure.endDate,
         isPublic: newClosure.isPublic,
-        points: pointRows.map((row) => ({
-          id: row.id,
-          sequence: row.sequence,
-          point: [row.point[1], row.point[0]] as [number, number],
-        })),
+        points: polygonToPointObjects(pointsToPolygon(payload.points), newClosure.id),
       } satisfies ClosureObject;
     });
 
@@ -225,6 +213,9 @@ export async function updateClosure(closureId: string, params: ClosureUpdatePara
         ...(params.shape !== undefined && { shape: params.shape }),
         ...(params.closureType !== undefined && { closureType: params.closureType }),
         ...(params.endDate !== undefined && { endDate: params.endDate }),
+        ...(Array.isArray(params.points) && {
+          polygon: params.points.length === 0 ? null : pointsToPolygon(params.points),
+        }),
       };
 
       let updatedRoadClosure: {
@@ -235,6 +226,7 @@ export async function updateClosure(closureId: string, params: ClosureUpdatePara
         closureType: "indefinite" | "scheduled";
         endDate: Date | null;
         isPublic: boolean;
+        polygon: GeoJSON.Polygon | null;
       };
 
       if (Object.keys(closurePatch).length > 0) {
@@ -250,6 +242,7 @@ export async function updateClosure(closureId: string, params: ClosureUpdatePara
             closureType: roadClosures.closureType,
             endDate: roadClosures.endDate,
             isPublic: roadClosures.isPublic,
+            polygon: roadClosures.polygon,
           });
 
         if (!updatedClosure) {
@@ -267,6 +260,7 @@ export async function updateClosure(closureId: string, params: ClosureUpdatePara
             closureType: roadClosures.closureType,
             endDate: roadClosures.endDate,
             isPublic: roadClosures.isPublic,
+            polygon: roadClosures.polygon,
           })
           .from(roadClosures)
           .where(eq(roadClosures.id, closure.id))
@@ -279,48 +273,7 @@ export async function updateClosure(closureId: string, params: ClosureUpdatePara
         updatedRoadClosure = existingClosure;
       }
 
-      let points: PointObject[];
-      if (Array.isArray(params.points)) {
-        await tx.delete(roadClosurePoints).where(eq(roadClosurePoints.roadClosureId, updatedRoadClosure.id));
-
-        if (params.points.length === 0) {
-          points = [];
-        } else {
-          const pointRows = await tx
-            .insert(roadClosurePoints)
-            .values(params.points.map((point) => ({
-              roadClosureId: updatedRoadClosure.id,
-              sequenceNumber: point.sequence,
-              point: [point.point[1], point.point[0]] as [number, number],
-            })))
-            .returning({
-              id: roadClosurePoints.id,
-              sequence: roadClosurePoints.sequenceNumber,
-              point: roadClosurePoints.point,
-            });
-
-          points = pointRows.map((row) => ({
-            id: row.id,
-            sequence: row.sequence,
-            point: [row.point[1], row.point[0]] as [number, number],
-          }));
-        }
-      } else {
-        const existingPoints = await tx
-          .select({
-            id: roadClosurePoints.id,
-            sequence: roadClosurePoints.sequenceNumber,
-            point: roadClosurePoints.point,
-          })
-          .from(roadClosurePoints)
-          .where(eq(roadClosurePoints.roadClosureId, updatedRoadClosure.id));
-
-        points = existingPoints.map((row) => ({
-          id: row.id,
-          sequence: row.sequence,
-          point: [row.point[1], row.point[0]] as [number, number],
-        }));
-      }
+      const points = polygonToPointObjects(updatedRoadClosure.polygon, updatedRoadClosure.id);
 
       return {
         id: updatedRoadClosure.id,

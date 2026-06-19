@@ -13,6 +13,7 @@ import { Label } from "@/components/ui/label";
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
 import { useStopDashboard } from "@/contexts/StopDashboardContext";
 import type { StopRestrictionType, StopDisallowedDirection } from "@/contracts/responses";
+import { formatStopDisallowedDirection, formatStopRestrictionType } from "@/lib/stops/display";
 
 const stopDraftSchema = z.object({
   name: z.string().trim().min(1, "Stop name is required."),
@@ -25,12 +26,11 @@ const stopDraftSchema = z.object({
     }),
   ).min(2, "At least 2 points are required."),
   routeIds: z.array(z.string().uuid()),
-  vehicleTypeIds: z.array(z.string().uuid()),
 }).superRefine((value, context) => {
-  if (value.restrictionType === "specific" && value.routeIds.length === 0 && value.vehicleTypeIds.length === 0) {
+  if (value.restrictionType === "specific" && value.routeIds.length === 0) {
     context.addIssue({
       code: "custom",
-      message: "For disallowed restrictions, select at least one route or one vehicle type.",
+      message: "For disallowed restrictions, select at least one route.",
       path: ["restrictionType"],
     });
   }
@@ -43,14 +43,8 @@ interface RouteOption {
   label: string;
 }
 
-interface VehicleTypeOption {
-  id: string;
-  label: string;
-}
-
 interface StopEditorProps {
   routeOptions: RouteOption[];
-  vehicleTypeOptions: VehicleTypeOption[];
   isSaving: boolean;
   onSave: (payload: StopDraftSubmitPayload) => Promise<void>;
 }
@@ -62,19 +56,18 @@ interface EditorErrors {
 }
 
 const restrictionTypeOptions: Array<{ value: StopRestrictionType; label: string }> = [
-  { value: "universal", label: "Universal" },
-  { value: "specific", label: "Specific Routes/Vehicle Types" },
+  { value: "universal", label: formatStopRestrictionType("universal") },
+  { value: "specific", label: formatStopRestrictionType("specific") },
 ];
 
 const disallowedDirectionOptions: Array<{ value: StopDisallowedDirection; label: string }> = [
-  { value: "both", label: "Both Directions" },
-  { value: "direction_to", label: "Direction To" },
-  { value: "direction_back", label: "Direction Back" },
+  { value: "both", label: formatStopDisallowedDirection("both") },
+  { value: "direction_to", label: formatStopDisallowedDirection("direction_to") },
+  { value: "direction_back", label: formatStopDisallowedDirection("direction_back") },
 ];
 
 export default function StopEditor({
   routeOptions,
-  vehicleTypeOptions,
   isSaving,
   onSave,
 }: StopEditorProps) {
@@ -89,14 +82,12 @@ export default function StopEditor({
     updateDraftRestrictionType,
     updateDraftDisallowedDirection,
     updateDraftRouteIds,
-    updateDraftVehicleTypeIds,
     updateDraftPoints,
   } = useStopDashboard();
 
   const [errors, setErrors] = useState<EditorErrors>({});
 
   const routeIds = useMemo(() => new Set(draft?.routeIds ?? []), [draft?.routeIds]);
-  const vehicleTypeIds = useMemo(() => new Set(draft?.vehicleTypeIds ?? []), [draft?.vehicleTypeIds]);
 
   if (!draft || !editorMode) {
     return null;
@@ -110,14 +101,6 @@ export default function StopEditor({
     updateDraftRouteIds(next);
   };
 
-  const handleToggleVehicleType = (vehicleTypeId: string, checked: boolean) => {
-    const next = checked
-      ? [...draft.vehicleTypeIds, vehicleTypeId]
-      : draft.vehicleTypeIds.filter((id) => id !== vehicleTypeId);
-
-    updateDraftVehicleTypeIds(next);
-  };
-
   const handleSave = async () => {
     const parsed = stopDraftSchema.safeParse({
       name: draft.name,
@@ -128,7 +111,6 @@ export default function StopEditor({
         point: point.point,
       })),
       routeIds: draft.routeIds,
-      vehicleTypeIds: draft.vehicleTypeIds,
     });
 
     if (!parsed.success) {
@@ -264,51 +246,30 @@ export default function StopEditor({
               </Button>
             </div>
             <p className="text-xs text-muted-foreground">
-              Draw or edit the restricted road segment directly on the map. At least 2 points are required.
+              Draw or edit the stop restriction line on the map. At least 2 points are required.
             </p>
             {errors.points ? <p className="text-xs text-destructive">{errors.points}</p> : null}
           </div>
 
           {draft.restrictionType === "specific" ? (
-            <>
-              <div className="space-y-2">
-                <Label>Disallowed Routes</Label>
-                <div className="max-h-40 space-y-2 overflow-y-auto rounded-md border p-2">
-                  {routeOptions.length === 0 ? (
-                    <p className="text-muted-foreground text-sm">No routes available</p>
-                  ) : (
-                    routeOptions.map((route) => (
-                      <label key={route.id} className="flex items-center gap-2 text-sm">
-                        <Checkbox
-                          checked={routeIds.has(route.id)}
-                          onCheckedChange={(value) => handleToggleRoute(route.id, Boolean(value))}
-                        />
-                        <span>{route.label}</span>
-                      </label>
-                    ))
-                  )}
-                </div>
+            <div className="space-y-2">
+              <Label>Disallowed Routes</Label>
+              <div className="max-h-40 space-y-2 overflow-y-auto rounded-md border p-2">
+                {routeOptions.length === 0 ? (
+                  <p className="text-muted-foreground text-sm">No routes available</p>
+                ) : (
+                  routeOptions.map((route) => (
+                    <label key={route.id} className="flex items-center gap-2 text-sm">
+                      <Checkbox
+                        checked={routeIds.has(route.id)}
+                        onCheckedChange={(value) => handleToggleRoute(route.id, Boolean(value))}
+                      />
+                      <span>{route.label}</span>
+                    </label>
+                  ))
+                )}
               </div>
-
-              <div className="space-y-2">
-                <Label>Disallowed Vehicle Types</Label>
-                <div className="max-h-40 space-y-2 overflow-y-auto rounded-md border p-2">
-                  {vehicleTypeOptions.length === 0 ? (
-                    <p className="text-muted-foreground text-sm">No vehicle types available</p>
-                  ) : (
-                    vehicleTypeOptions.map((vehicleType) => (
-                      <label key={vehicleType.id} className="flex items-center gap-2 text-sm">
-                        <Checkbox
-                          checked={vehicleTypeIds.has(vehicleType.id)}
-                          onCheckedChange={(value) => handleToggleVehicleType(vehicleType.id, Boolean(value))}
-                        />
-                        <span>{vehicleType.label}</span>
-                      </label>
-                    ))
-                  )}
-                </div>
-              </div>
-            </>
+            </div>
           ) : null}
         </CardContent>
       </Card>

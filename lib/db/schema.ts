@@ -2,6 +2,8 @@ import { relations } from "drizzle-orm";
 import { pgEnum, pgTable, text, timestamp, boolean, index, integer, geometry, uuid } from "drizzle-orm/pg-core";
 import { v7 as uuidv7 } from "uuid";
 
+import { lineString, polygon } from "@/lib/db/postgis-extension/models";
+
 // TODO: Update enums as strings instead. We need to remove this stuff.
 export const roles = pgEnum("role", ["administrator_user", "regular_user"]);
 export const snapshotState = pgEnum("snapshot_state", ["ready", "wip", "for_approval"]);
@@ -399,6 +401,7 @@ export const roadClosures = pgTable("road_closure", {
   name: text("name").notNull(),
   description: text("description").notNull(),
   shape: text("shape").notNull(),
+  polygon: polygon("polygon", { srid: 4326 }),
   closureType: closureTypeEnum("closure_type").default("indefinite").notNull(),
   endDate: timestamp("end_date"),
 
@@ -413,30 +416,7 @@ export const roadClosures = pgTable("road_closure", {
     .notNull(),
 });
 
-export const roadClosurePoints = pgTable("road_closure_points", {
-  id: uuid("id")
-    .primaryKey()
-    .$default(() => uuidv7()),
-
-  // Data
-  sequenceNumber: integer("sequence_number").notNull(),
-  point: geometry("point", { type: "point", mode: "tuple", srid: 4326 }).notNull(),
-
-  // Metadata
-  roadClosureId: uuid("road_closure_id")
-    .notNull()
-    .references(() => roadClosures.id, { onDelete: "cascade" }),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-  updatedAt: timestamp("updated_at")
-    .defaultNow()
-    .$onUpdate(() => new Date())
-    .notNull(),
-}, (t) => [
-  index("spatial_index_road_closure_region").using("gist", t.point),
-  index("road_closure_region_ref_idx").on(t.roadClosureId),
-]);
-
-export const stops = pgTable("stops", {
+export const restrictedBordingZone = pgTable("restricted_boarding_zone", {
   id: uuid("id")
     .primaryKey()
     .$default(() => uuidv7()),
@@ -444,7 +424,10 @@ export const stops = pgTable("stops", {
   name: text("name").notNull(),
   restrictionType: restrictionType("restriction_type").notNull(),
   disallowedDirection: disallowedDirectionEnum("disallowed_direction").notNull().default("both"),
+
+  // Rendered polyline
   polyline: text("polyline").notNull().default(""),
+  points: lineString("points", { srid: 4326 }),
 
   // Metadata
   isPublic: boolean("is_public").default(false).notNull(),
@@ -457,61 +440,21 @@ export const stops = pgTable("stops", {
     .notNull(),
 });
 
-export const stopPoints = pgTable("stop_points", {
+export const routeRestrictedInBoardingZone = pgTable("routes_restricted_in_boarding_zone", {
   id: uuid("id")
     .primaryKey()
     .$default(() => uuidv7()),
 
-  // Data
-  sequenceNumber: integer("sequence_number").notNull(),
-  point: geometry("point", { type: "point", mode: "tuple", srid: 4326 }).notNull(),
-
-  // Metadata
-  stopId: uuid("stop_id")
+  restrictionZoneId: uuid("restriction_zone_id")
     .notNull()
-    .references(() => stops.id, { onDelete: "cascade" }),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-  updatedAt: timestamp("updated_at")
-    .defaultNow()
-    .$onUpdate(() => new Date())
-    .notNull(),
-}, (t) => [
-  index("spatial_index_stop_points").using("gist", t.point),
-  index("stop_points_ref_idx").on(t.stopId, t.sequenceNumber),
-]);
-
-export const stopRoutes = pgTable("stop_routes", {
-  id: uuid("id")
-    .primaryKey()
-    .$default(() => uuidv7()),
-
-  stopId: uuid("stop_id")
-    .notNull()
-    .references(() => stops.id, { onDelete: "cascade" }),
+    .references(() => restrictedBordingZone.id, { onDelete: "cascade" }),
   routeId: uuid("route_id")
     .notNull()
     .references(() => routes.id, { onDelete: "cascade" }),
 
   createdAt: timestamp("created_at").defaultNow().notNull(),
 }, (t) => [
-  index("stop_routes_ref_idx").on(t.stopId),
-]);
-
-export const stopVehicleTypes = pgTable("stop_vehicle_types", {
-  id: uuid("id")
-    .primaryKey()
-    .$default(() => uuidv7()),
-
-  stopId: uuid("stop_id")
-    .notNull()
-    .references(() => stops.id, { onDelete: "cascade" }),
-  vehicleTypeId: uuid("vehicle_type_id")
-    .notNull()
-    .references(() => vehicleTypes.id, { onDelete: "cascade" }),
-
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-}, (t) => [
-  index("stop_vehicle_types_ref_idx").on(t.stopId),
+  index("stop_routes_ref_idx").on(t.restrictionZoneId),
 ]);
 
 export const feedback = pgTable(

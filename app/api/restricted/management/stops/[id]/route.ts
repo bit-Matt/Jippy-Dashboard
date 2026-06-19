@@ -35,7 +35,6 @@ export async function PATCH(
     || data.points !== undefined
     || data.restrictionType !== undefined
     || data.routeIds !== undefined
-    || data.vehicleTypeIds !== undefined
     || data.disallowedDirection !== undefined;
   if (!hasAnyPatchField) {
     return ApiResponseBuilder.createError(StatusCodes.Status400BadRequest, [{ message: "No update fields provided." }])
@@ -88,22 +87,6 @@ export async function PATCH(
           for (const routeId of values) {
             if (!utils.isUuid(routeId)) {
               return { ok: false, error: "Invalid route ID." };
-            }
-          }
-
-          return { ok: true };
-        },
-      },
-      vehicleTypeIds: {
-        type: "object",
-        formatterFn: async (values) => {
-          if (!Array.isArray(values)) {
-            return { ok: false, error: "vehicleTypeIds must be an array." };
-          }
-
-          for (const vehicleTypeId of values) {
-            if (!utils.isUuid(vehicleTypeId)) {
-              return { ok: false, error: "Invalid vehicle type ID." };
             }
           }
 
@@ -217,5 +200,4 @@ type PatchRequestBody = {
     point: [number, number];
   }>;
   routeIds?: string[];
-  vehicleTypeIds?: string[];
 }

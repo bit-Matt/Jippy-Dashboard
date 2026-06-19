@@ -3,6 +3,7 @@
 import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from "react";
 
 import type { StopResponse, StopRestrictionType, StopDisallowedDirection } from "@/contracts/responses";
+import { getStopLineCoordinates } from "@/lib/stops/display";
 
 export type StopEditorMode = "creating" | "editing";
 export type ActiveStopTool = "none" | "draw-line" | "edit-line";
@@ -21,7 +22,6 @@ interface StopDraft {
   disallowedDirection: StopDisallowedDirection;
   points: StopDraftPoint[];
   routeIds: string[];
-  vehicleTypeIds: string[];
 }
 
 interface StopDashboardState {
@@ -46,7 +46,6 @@ interface StopDashboardContextValue extends StopDashboardState {
   updateDraftRestrictionType: (restrictionType: StopRestrictionType) => void;
   updateDraftDisallowedDirection: (disallowedDirection: StopDisallowedDirection) => void;
   updateDraftRouteIds: (routeIds: string[]) => void;
-  updateDraftVehicleTypeIds: (vehicleTypeIds: string[]) => void;
   updateDraftPoints: (points: Array<[number, number]>) => void;
   setActiveStopTool: (tool: ActiveStopTool) => void;
   finishStopToolEditing: () => void;
@@ -69,7 +68,6 @@ const buildDraftFromStop = (stop: StopResponse): StopDraft => ({
       point: point.point,
     })),
   routeIds: [...stop.routeIds],
-  vehicleTypeIds: [...stop.vehicleTypeIds],
 });
 
 const buildFocusWaypoints = (stop: StopResponse | null): Array<[number, number]> | undefined => {
@@ -77,11 +75,7 @@ const buildFocusWaypoints = (stop: StopResponse | null): Array<[number, number]>
     return undefined;
   }
 
-  const points = [...stop.points]
-    .sort((a, b) => a.sequence - b.sequence)
-    .map((point) => point.point)
-    .filter(([lat, lng]) => Number.isFinite(lat) && Number.isFinite(lng));
-
+  const points = getStopLineCoordinates(stop);
   return points.length > 0 ? points : undefined;
 };
 
@@ -91,7 +85,6 @@ const buildEmptyDraft = (): StopDraft => ({
   disallowedDirection: "both",
   points: [],
   routeIds: [],
-  vehicleTypeIds: [],
 });
 
 export function StopDashboardProvider({ children }: { children: ReactNode }) {
@@ -225,7 +218,6 @@ export function StopDashboardProvider({ children }: { children: ReactNode }) {
           ...previousState.draft,
           restrictionType,
           routeIds: restrictionType === "specific" ? previousState.draft.routeIds : [],
-          vehicleTypeIds: restrictionType === "specific" ? previousState.draft.vehicleTypeIds : [],
         },
       };
     });
@@ -258,22 +250,6 @@ export function StopDashboardProvider({ children }: { children: ReactNode }) {
         draft: {
           ...previousState.draft,
           routeIds,
-        },
-      };
-    });
-  }, []);
-
-  const updateDraftVehicleTypeIds = useCallback((vehicleTypeIds: string[]) => {
-    setState((previousState) => {
-      if (!previousState.draft) {
-        return previousState;
-      }
-
-      return {
-        ...previousState,
-        draft: {
-          ...previousState.draft,
-          vehicleTypeIds,
         },
       };
     });
@@ -385,7 +361,6 @@ export function StopDashboardProvider({ children }: { children: ReactNode }) {
     updateDraftRestrictionType,
     updateDraftDisallowedDirection,
     updateDraftRouteIds,
-    updateDraftVehicleTypeIds,
     updateDraftPoints,
     setActiveStopTool,
     finishStopToolEditing,
@@ -403,7 +378,6 @@ export function StopDashboardProvider({ children }: { children: ReactNode }) {
     updateDraftRestrictionType,
     updateDraftDisallowedDirection,
     updateDraftRouteIds,
-    updateDraftVehicleTypeIds,
     updateDraftPoints,
     setActiveStopTool,
     finishStopToolEditing,

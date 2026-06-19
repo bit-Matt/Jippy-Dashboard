@@ -8,18 +8,17 @@ import {
   regionSequences,
   regionSnapshots,
   regionStations,
-  roadClosurePoints,
   roadClosures,
   routeSequences,
   routeSnapshots,
   routes,
-  stopPoints,
-  stopRoutes,
-  stops,
-  stopVehicleTypes,
+  restrictedBordingZone,
+  routeRestrictedInBoardingZone,
   vehicleTypes,
 } from "@/lib/db/schema";
 import type { ExportPayload, ImportPayload } from "@/lib/management/data-schema";
+import { polygonToPointObjects, pointsToPolygon } from "@/lib/management/closure-manager";
+import { lineStringToStopPoints, pointsToLineString } from "@/lib/management/stop-manager";
 import { ErrorCodes, Failure, Result, Success } from "@/lib/one-of/types";
 
 type LatLng = [number, number];
@@ -350,78 +349,37 @@ export async function exportAllData(): Promise<Result<ExportPayload>> {
         closureType: roadClosures.closureType,
         endDate: roadClosures.endDate,
         isPublic: roadClosures.isPublic,
-        points: sql<{ sequence: number; point: LatLng }[]>`
-          COALESCE(
-            json_agg(
-              json_build_object(
-                'sequence', ${roadClosurePoints.sequenceNumber},
-                'point', json_build_array(
-                  ST_Y(${roadClosurePoints.point}),
-                  ST_X(${roadClosurePoints.point})
-                )
-              ) ORDER BY ${roadClosurePoints.sequenceNumber} ASC
-            ) FILTER (WHERE ${roadClosurePoints.id} IS NOT NULL),
-            '[]'::json
-          )
-        `,
-      })
-        .from(roadClosures)
-        .leftJoin(roadClosurePoints, eq(roadClosurePoints.roadClosureId, roadClosures.id))
-        .groupBy(
-          roadClosures.id,
-          roadClosures.name,
-          roadClosures.description,
-          roadClosures.shape,
-          roadClosures.closureType,
-          roadClosures.endDate,
-          roadClosures.isPublic,
-        ),
+        polygon: roadClosures.polygon,
+      }).from(roadClosures),
 
       db.select({
-        id: stops.id,
-        name: stops.name,
-        restrictionType: stops.restrictionType,
-        disallowedDirection: stops.disallowedDirection,
-        polyline: stops.polyline,
-        isPublic: stops.isPublic,
+        id: restrictedBordingZone.id,
+        name: restrictedBordingZone.name,
+        restrictionType: restrictedBordingZone.restrictionType,
+        disallowedDirection: restrictedBordingZone.disallowedDirection,
+        polyline: restrictedBordingZone.polyline,
+        isPublic: restrictedBordingZone.isPublic,
+        pointsGeometry: restrictedBordingZone.points,
         routeIds: sql<string[]>`
           COALESCE(
-            json_agg(DISTINCT ${stopRoutes.routeId}) FILTER (WHERE ${stopRoutes.routeId} IS NOT NULL),
-            '[]'::json
-          )
-        `,
-        vehicleTypeIds: sql<string[]>`
-          COALESCE(
-            json_agg(DISTINCT ${stopVehicleTypes.vehicleTypeId}) FILTER (WHERE ${stopVehicleTypes.vehicleTypeId} IS NOT NULL),
-            '[]'::json
-          )
-        `,
-        points: sql<{ sequence: number; point: LatLng }[]>`
-          COALESCE(
-            json_agg(
-              DISTINCT jsonb_build_object(
-                'sequence', ${stopPoints.sequenceNumber},
-                'point', json_build_array(
-                  ST_Y(${stopPoints.point}),
-                  ST_X(${stopPoints.point})
-                )
-              )
-            ) FILTER (WHERE ${stopPoints.id} IS NOT NULL),
+            json_agg(DISTINCT ${routeRestrictedInBoardingZone.routeId}) FILTER (WHERE ${routeRestrictedInBoardingZone.routeId} IS NOT NULL),
             '[]'::json
           )
         `,
       })
-        .from(stops)
-        .leftJoin(stopPoints, eq(stopPoints.stopId, stops.id))
-        .leftJoin(stopRoutes, eq(stopRoutes.stopId, stops.id))
-        .leftJoin(stopVehicleTypes, eq(stopVehicleTypes.stopId, stops.id))
+        .from(restrictedBordingZone)
+        .leftJoin(
+          routeRestrictedInBoardingZone,
+          eq(routeRestrictedInBoardingZone.restrictionZoneId, restrictedBordingZone.id),
+        )
         .groupBy(
-          stops.id,
-          stops.name,
-          stops.restrictionType,
-          stops.disallowedDirection,
-          stops.polyline,
-          stops.isPublic,
+          restrictedBordingZone.id,
+          restrictedBordingZone.name,
+          restrictedBordingZone.restrictionType,
+          restrictedBordingZone.disallowedDirection,
+          restrictedBordingZone.polyline,
+          restrictedBordingZone.isPublic,
+          restrictedBordingZone.points,
         ),
     ]);
 
@@ -444,16 +402,31 @@ export async function exportAllData(): Promise<Result<ExportPayload>> {
         ...regionRow,
         snapshots: regionSnapshotsByRegionId.get(regionRow.id) ?? [],
       })),
-      closures: closureRows.map(closure => ({
-        ...closure,
+      closures: closureRows.map(({ polygon, ...closure }) => ({
+        id: closure.id,
+        name: closure.name,
+        description: closure.description,
+        shape: closure.shape,
+        closureType: closure.closureType,
         endDate: closure.endDate ? closure.endDate.toISOString() : null,
-        points: closure.points ?? [],
+        isPublic: closure.isPublic,
+        points: polygonToPointObjects(polygon, closure.id).map(({ sequence, point }) => ({
+          sequence,
+          point,
+        })),
       })),
       stops: stopRows.map(stop => ({
-        ...stop,
+        id: stop.id,
+        name: stop.name,
+        restrictionType: stop.restrictionType,
+        disallowedDirection: stop.disallowedDirection,
+        polyline: stop.polyline,
+        isPublic: stop.isPublic,
         routeIds: stop.routeIds ?? [],
-        vehicleTypeIds: stop.vehicleTypeIds ?? [],
-        points: stop.points ?? [],
+        points: lineStringToStopPoints(stop.pointsGeometry, stop.id).map(({ sequence, point }) => ({
+          sequence,
+          point,
+        })),
       })),
       orphanedSnapshots: {
         routes: orphanedRouteSnapshots,
@@ -657,69 +630,38 @@ export async function importData(payload: ImportPayload, ownerId: string): Promi
             closureType: closure.closureType,
             endDate: closure.endDate ? new Date(closure.endDate) : null,
             isPublic: closure.isPublic,
+            polygon: closure.points.length > 0 ? pointsToPolygon(closure.points) : null,
           })
           .returning({ id: roadClosures.id });
 
         if (!created) throw new Error("Failed to create closure.");
-
-        if (closure.points.length > 0) {
-          await tx.insert(roadClosurePoints).values(
-            closure.points.map(point => ({
-              roadClosureId: created.id,
-              sequenceNumber: point.sequence,
-              point: toDbPoint(point.point),
-            })),
-          );
-        }
       }
 
       for (const stop of payload.stops) {
         const [created] = await tx
-          .insert(stops)
+          .insert(restrictedBordingZone)
           .values({
             ownerId,
             name: stop.name,
             restrictionType: stop.restrictionType,
             disallowedDirection: stop.disallowedDirection,
             polyline: stop.polyline,
+            points: stop.points.length > 0 ? pointsToLineString(stop.points) : null,
             isPublic: stop.isPublic,
           })
-          .returning({ id: stops.id });
+          .returning({ id: restrictedBordingZone.id });
 
         if (!created) throw new Error("Failed to create stop.");
-
-        if (stop.points.length > 0) {
-          await tx.insert(stopPoints).values(
-            stop.points.map(point => ({
-              stopId: created.id,
-              sequenceNumber: point.sequence,
-              point: toDbPoint(point.point),
-            })),
-          );
-        }
 
         const remappedRouteIds = stop.routeIds
           .map(routeId => routeRemapper.get(routeId))
           .filter((routeId): routeId is string => Boolean(routeId));
 
         if (remappedRouteIds.length > 0) {
-          await tx.insert(stopRoutes).values(
+          await tx.insert(routeRestrictedInBoardingZone).values(
             remappedRouteIds.map(routeId => ({
-              stopId: created.id,
+              restrictionZoneId: created.id,
               routeId,
-            })),
-          );
-        }
-
-        const remappedVehicleTypeIds = stop.vehicleTypeIds
-          .map(vehicleTypeId => vehicleTypeRemapper.get(vehicleTypeId))
-          .filter((vehicleTypeId): vehicleTypeId is string => Boolean(vehicleTypeId));
-
-        if (remappedVehicleTypeIds.length > 0) {
-          await tx.insert(stopVehicleTypes).values(
-            remappedVehicleTypeIds.map(vehicleTypeId => ({
-              stopId: created.id,
-              vehicleTypeId,
             })),
           );
         }

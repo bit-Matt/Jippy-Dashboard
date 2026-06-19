@@ -16,12 +16,6 @@ import { $fetch } from "@/lib/http/client";
 
 import StopMapComponent from "./MapComponent";
 
-interface VehicleTypeOption {
-  id: string;
-  name: string;
-  requiresRoute: boolean;
-}
-
 interface MeResponse {
   data: {
     ok: boolean;
@@ -39,7 +33,6 @@ interface RouteLookupResponse {
 function StopsDashboardContent() {
   const [stops, setStops] = useState<StopResponseList>([]);
   const [routeOptions, setRouteOptions] = useState<Array<{ id: string; label: string }>>([]);
-  const [vehicleTypeOptions, setVehicleTypeOptions] = useState<Array<{ id: string; label: string }>>([]);
   const [isFetchingStops, setIsFetchingStops] = useState(true);
   const [isSavingStop, setIsSavingStop] = useState(false);
   const [isDeletingStop, setIsDeletingStop] = useState(false);
@@ -71,13 +64,6 @@ function StopsDashboardContent() {
       return lookup;
     }, {});
   }, [routeOptions]);
-
-  const vehicleTypeNameLookup = useMemo(() => {
-    return vehicleTypeOptions.reduce<Record<string, string>>((lookup, vehicleType) => {
-      lookup[vehicleType.id] = vehicleType.label;
-      return lookup;
-    }, {});
-  }, [vehicleTypeOptions]);
 
   const mapStops = useMemo(() => {
     if (selectedStop) {
@@ -129,24 +115,6 @@ function StopsDashboardContent() {
     setRouteOptions(mappedOptions);
   }, []);
 
-  const fetchVehicleTypeLookup = useCallback(async () => {
-    const { data, error } = await $fetch<IApiResponse<VehicleTypeOption[]>>("/api/restricted/management/vehicle", {
-      method: "GET",
-    });
-
-    if (error) {
-      console.error("Failed to fetch vehicle type lookup:", error);
-      return;
-    }
-
-    const mappedOptions = data.data.map((vehicleType) => ({
-      id: vehicleType.id,
-      label: vehicleType.name,
-    }));
-
-    setVehicleTypeOptions(mappedOptions);
-  }, []);
-
   useEffect(() => {
     selectedStopIdRef.current = selectedStopId;
   }, [selectedStopId]);
@@ -156,14 +124,13 @@ function StopsDashboardContent() {
       void Promise.all([
         fetchStops(),
         fetchRouteLookup(),
-        fetchVehicleTypeLookup(),
       ]);
     }, 0);
 
     return () => {
       window.clearTimeout(timerId);
     };
-  }, [fetchStops, fetchRouteLookup, fetchVehicleTypeLookup]);
+  }, [fetchStops, fetchRouteLookup]);
 
   const handleSelectStop = (stopId: string) => {
     const stop = stops.find((item) => item.id === stopId);
@@ -187,7 +154,6 @@ function StopsDashboardContent() {
             disallowedDirection: payload.disallowedDirection,
             points: payload.points,
             routeIds: payload.routeIds,
-            vehicleTypeIds: payload.vehicleTypeIds,
           },
         });
 
@@ -214,7 +180,6 @@ function StopsDashboardContent() {
           disallowedDirection: payload.disallowedDirection,
           points: payload.points,
           routeIds: payload.routeIds,
-          vehicleTypeIds: payload.vehicleTypeIds,
         },
       });
 
@@ -311,7 +276,6 @@ function StopsDashboardContent() {
                 stop={selectedStop}
                 userRole={userRole}
                 routeNameLookup={routeNameLookup}
-                vehicleTypeNameLookup={vehicleTypeNameLookup}
                 isPublishing={isPublishing}
                 isDeletingStop={isDeletingStop}
                 onClose={clearSelection}
@@ -325,7 +289,6 @@ function StopsDashboardContent() {
           {panelMode === "editor" ? (
             <StopEditor
               routeOptions={routeOptions}
-              vehicleTypeOptions={vehicleTypeOptions}
               isSaving={isSavingStop}
               onSave={handleSaveStop}
             />
