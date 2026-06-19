@@ -17,28 +17,39 @@ import { useRouteEditor } from "@/contexts/RouteEditorContext";
 import { getPositronStyleUrl } from "@/lib/map/style-url";
 import { decodePolyline } from "@/lib/routing/polyline";
 
+const buildFocusSignature = (
+  focusKey: string | number,
+  focusedWaypoints: Array<[number, number]>,
+): string => {
+  const first = focusedWaypoints[0];
+  const last = focusedWaypoints[focusedWaypoints.length - 1];
+  return `${focusKey}:${focusedWaypoints.length}:${first[0]},${first[1]}:${last[0]},${last[1]}`;
+};
+
 const FocusRouteView = ({ focusKey, focusedWaypoints }: FocusRouteViewProps) => {
   const map = useMap();
-  const lastFocusedKeyRef = useRef<string | number | null>(null);
+  const lastFocusSignatureRef = useRef<string | null>(null);
 
   useEffect(() => {
     if (focusKey === null || focusKey === undefined) {
-      lastFocusedKeyRef.current = null;
+      lastFocusSignatureRef.current = null;
       return;
     }
 
     if (!map || !focusedWaypoints?.length) return;
-    if (lastFocusedKeyRef.current === focusKey) return;
+
+    const signature = buildFocusSignature(focusKey, focusedWaypoints);
+    if (lastFocusSignatureRef.current === signature) return;
 
     if (focusedWaypoints.length === 1) {
       map.setView(focusedWaypoints[0], 16, { animate: true });
-      lastFocusedKeyRef.current = focusKey;
+      lastFocusSignatureRef.current = signature;
       return;
     }
 
     const bounds = L.latLngBounds(focusedWaypoints.map(([lat, lng]) => L.latLng(lat, lng)));
     map.fitBounds(bounds, { padding: [40, 40], animate: true, maxZoom: 16 });
-    lastFocusedKeyRef.current = focusKey;
+    lastFocusSignatureRef.current = signature;
   }, [map, focusKey, focusedWaypoints]);
 
   return null;

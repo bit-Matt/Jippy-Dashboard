@@ -113,14 +113,41 @@ const routeLineIntersectsPolygon = (
   return false;
 };
 
+const buildFocusWaypoints = (polylines: { to?: string | null; back?: string | null }): Array<[number, number]> => {
+  const waypoints: Array<[number, number]> = [];
+
+  if (polylines.to) {
+    waypoints.push(...decodePolyline(polylines.to));
+  }
+
+  if (polylines.back) {
+    waypoints.push(...decodePolyline(polylines.back));
+  }
+
+  return waypoints;
+};
+
+const focusRouteOnMap = (
+  id: string,
+  polylines: { to?: string | null; back?: string | null },
+  setRouteFocusKey: (key: string) => void,
+  setFocusWaypoints: (waypoints: Array<[number, number]> | undefined) => void,
+) => {
+  const waypoints = buildFocusWaypoints(polylines);
+  setFocusWaypoints(waypoints.length > 0 ? waypoints : undefined);
+  setRouteFocusKey(`${id}-${Date.now()}`);
+};
+
 function RouteDashboardContent() {
   const [isFetchingRoutes, setIsFetchingRoutes] = useState(true);
   const [areRouteLayersReady, setAreRouteLayersReady] = useState(false);
   const [routes, setRoutes] = useState<RouteListItemResponseList>([]);
   const [closures, setClosures] = useState<ClosureResponseList>([]);
   const [selectedRoute, setSelectedRoute] = useState<RouteResponse | null>(null);
+  const [pendingSelectedRouteId, setPendingSelectedRouteId] = useState<string | null>(null);
   const [editingRoute, setEditingRoute] = useState<RouteResponse | null>(null);
   const [routeFocusKey, setRouteFocusKey] = useState<string | number | null>(null);
+  const [focusWaypoints, setFocusWaypoints] = useState<Array<[number, number]> | undefined>(undefined);
   const [showClosuresOnMap, setShowClosuresOnMap] = useState(true);
   const [isSnapshotLoading, setIsSnapshotLoading] = useState(false);
   const [isSnapshotActing, setIsSnapshotActing] = useState(false);
@@ -275,7 +302,6 @@ function RouteDashboardContent() {
   const fetchRoutes = useCallback(async () => {
     setIsFetchingRoutes(true);
     setAreRouteLayersReady(false);
-    setRoutes([]);
 
     const { data, error } = await $fetch<IApiResponse<RouteManagementResponse>>("/api/restricted/management/route", {
       method: "GET",
@@ -298,6 +324,7 @@ function RouteDashboardContent() {
       const refreshedRoute = nextRoutes.find((route) => route.id === selectedRouteRef.current?.id) ?? null;
       if (!refreshedRoute) {
         setSelectedRoute(null);
+        setPendingSelectedRouteId(null);
         setEditingRoute(null);
         setEditingSnapshotId(null);
         setRouteSnapshots([]);
@@ -350,6 +377,7 @@ function RouteDashboardContent() {
       setEditingSnapshotId(null);
       setSnapshotCreateParentRouteId(null);
       setRouteFocusKey(null);
+      setFocusWaypoints(undefined);
       return;
     }
 
@@ -358,11 +386,13 @@ function RouteDashboardContent() {
     setEditingSnapshotId(null);
     setSnapshotCreateParentRouteId(null);
     setRouteFocusKey(null);
+    setFocusWaypoints(undefined);
     startCreating();
   };
 
   const handleSelectRoute = async (route: RouteListItemResponse) => {
-    setRouteFocusKey(`${route.id}-${Date.now()}`);
+    setPendingSelectedRouteId(route.id);
+    focusRouteOnMap(route.id, route.polylines, setRouteFocusKey, setFocusWaypoints);
     setEditingRoute(null);
     setEditingSnapshotId(null);
     setSnapshotCreateParentRouteId(null);
@@ -371,17 +401,23 @@ function RouteDashboardContent() {
     const fullRoute = await fetchRouteById(route.id);
     if (fullRoute) {
       setSelectedRoute(fullRoute);
+      setPendingSelectedRouteId(null);
+      focusRouteOnMap(fullRoute.id, fullRoute.polylines, setRouteFocusKey, setFocusWaypoints);
       void loadRouteSnapshots(route, fullRoute.activeSnapshotId);
+    } else {
+      setPendingSelectedRouteId(null);
     }
   };
 
   const handleClearSelectedRoute = () => {
     setSelectedRoute(null);
+    setPendingSelectedRouteId(null);
     setEditingRoute(null);
     setEditingSnapshotId(null);
     setSelectedRouteSnapshotId(null);
     setSnapshotCreateParentRouteId(null);
     setRouteFocusKey(null);
+    setFocusWaypoints(undefined);
     stopCreating();
   };
 
@@ -436,6 +472,7 @@ function RouteDashboardContent() {
     setActiveRouteSnapshotId(null);
     stopCreating();
     setRouteFocusKey(null);
+    setFocusWaypoints(undefined);
 
     await fetchRoutes();
     setIsDeletingRoute(false);
@@ -448,7 +485,7 @@ function RouteDashboardContent() {
     setIsSnapshotActing(false);
     if (!routeSnapshot) return;
 
-    setRouteFocusKey(`${routeSnapshot.id}-${Date.now()}`);
+    focusRouteOnMap(routeSnapshot.id, routeSnapshot.polylines, setRouteFocusKey, setFocusWaypoints);
     setSelectedRoute(routeSnapshot);
     setEditingRoute(null);
     setEditingSnapshotId(null);
@@ -460,7 +497,10 @@ function RouteDashboardContent() {
     if (!selectedRoute) return;
 
     const selectedSnapshot = routeSnapshots.find((snapshot) => snapshot.id === snapshotId);
-    const isAdminEditingReady = selectedSnapshot?.state === "ready" && userRole === "administrator_user" && !selectedRoute.isPublic;
+    const isActiveSnapshot = snapshotId === activeRouteSnapshotId;
+    const isAdminEditingReady = selectedSnapshot?.state === "ready"
+      && userRole === "administrator_user"
+      && (!selectedRoute.isPublic || !isActiveSnapshot);
     if (!selectedSnapshot || (selectedSnapshot.state === "ready" && !isAdminEditingReady)) return;
 
     setIsSnapshotActing(true);
@@ -468,7 +508,7 @@ function RouteDashboardContent() {
     setIsSnapshotActing(false);
     if (!routeSnapshot) return;
 
-    setRouteFocusKey(`${routeSnapshot.id}-${Date.now()}`);
+    focusRouteOnMap(routeSnapshot.id, routeSnapshot.polylines, setRouteFocusKey, setFocusWaypoints);
     await openRouteEditor(routeSnapshot, snapshotId);
   };
 
@@ -489,7 +529,7 @@ function RouteDashboardContent() {
     setIsSnapshotActing(false);
     if (!routeSnapshot) return;
 
-    setRouteFocusKey(`${routeSnapshot.id}-${Date.now()}`);
+    focusRouteOnMap(routeSnapshot.id, routeSnapshot.polylines, setRouteFocusKey, setFocusWaypoints);
     await openRouteEditor(routeSnapshot, data.data.id);
     setSelectedRouteSnapshotId(data.data.id);
   };
@@ -541,6 +581,7 @@ function RouteDashboardContent() {
   const handleCreateBlankRouteSnapshot = () => {
     if (!selectedRoute) return;
     setRouteFocusKey(null);
+    setFocusWaypoints(undefined);
     setEditingRoute(null);
     setSnapshotCreateParentRouteId(selectedRoute.id);
     startCreating();
@@ -589,9 +630,7 @@ function RouteDashboardContent() {
             routing={mapRouting}
             closures={closures}
             showClosuresOnMap={showClosuresOnMap}
-            focusedWaypoints={selectedRoute
-              ? decodePolyline(selectedRoute.polylines.to)
-              : undefined}
+            focusedWaypoints={focusWaypoints}
             focusKey={routeFocusKey}
           />
           <RouteListCard
@@ -599,8 +638,8 @@ function RouteDashboardContent() {
             routes={routes}
             regions={[]}
             closures={[]}
-            isRoutesLoading={isRoutesLoading}
-            selectedRouteId={selectedRoute?.id ?? null}
+            isRoutesLoading={isFetchingRoutes}
+            selectedRouteId={pendingSelectedRouteId ?? selectedRoute?.id ?? null}
             selectedRegionId={null}
             selectedClosureId={null}
             onRouteSelect={handleSelectRoute}

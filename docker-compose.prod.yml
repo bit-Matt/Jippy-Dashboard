@@ -159,6 +159,9 @@ services:
       context: .
       dockerfile: Dockerfile
     restart: unless-stopped
+    args:
+       - NEXT_PUBLIC_TILESERVER_URL=${NEXT_PUBLIC_TILESERVER_URL}
+       - NEXT_PUBLIC_TURNSTILE_SITE_KEY=${NEXT_PUBLIC_TURNSTILE_SITE_KEY}
     environment:
       BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET}
       BETTER_AUTH_URL: ${BETTER_AUTH_URL}
@@ -172,7 +175,9 @@ services:
       OSRM_BICYCLE_URL: http://driving_bicycle:5000
       OSRM_FOOT_URL: http://osrm_foot:5000
       ALGORITHM_URL: http://algorithm:8080
+      CLOUDFLARE_TURNSTILE_SECRET_KEY: ${CLOUDFLARE_TURNSTILE_SECRET_KEY}
       NEXT_PUBLIC_TILESERVER_URL: ${NEXT_PUBLIC_TILESERVER_URL}
+      NEXT_PUBLIC_TURNSTILE_SITE_KEY: ${NEXT_PUBLIC_TURNSTILE_SITE_KEY}
     depends_on:
       db:
         condition: service_healthy

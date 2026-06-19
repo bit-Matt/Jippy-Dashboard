@@ -1,13 +1,6 @@
 #!/usr/bin/env bash
 
-echo ""
-echo "       ___                      ______            _____                        __            "
-echo "      / (_)___  ____  __  __   / ____/___  ____  / __(_)___ ___  ___________ _/ /_____  _____"
-echo " __  / / / __ \/ __ \/ / / /  / /   / __ \/ __ \/ /_/ / __ `/ / / / ___/ __ `/ __/ __ \/ ___/"
-echo "/ /_/ / / /_/ / /_/ / /_/ /  / /___/ /_/ / / / / __/ / /_/ / /_/ / /  / /_/ / /_/ /_/ / /    "
-echo "\____/_/ .___/ .___/\__, /   \____/\____/_/ /_/_/ /_/\__, /\__,_/_/   \__,_/\__/\____/_/     "
-echo "      /_/   /_/    /____/                           /____/                                   "
-echo ""
+echo "Jippy Configurator"
 
 ###############################################################################
 # Flags
@@ -198,6 +191,26 @@ if [[ "$IS_PRODUCTION" == "true" ]]; then
   fi
 fi
 
+if [[ -n "${ENV_HASH[CLOUDFLARE_TURNSTILE_SECRET_KEY]:-}" ]]; then
+  CLOUDFLARE_TURNSTILE_SECRET_KEY="${ENV_HASH[CLOUDFLARE_TURNSTILE_SECRET_KEY]}"
+else
+  read -r -p "Your Cloudflare Turnsstile Secret Key: " CLOUDFLARE_TURNSTILE_SECRET_KEY
+fi
+if [[ -z "$CLOUDFLARE_TURNSTILE_SECRET_KEY" ]]; then
+  yellow "Empty Cloudflare Turnstile Private Key"
+  exit 1
+fi
+
+if [[ -n "${ENV_HASH[NEXT_PUBLIC_TURNSTILE_SITE_KEY]:-}" ]]; then
+  NEXT_PUBLIC_TURNSTILE_SITE_KEY="${ENV_HASH[NEXT_PUBLIC_TURNSTILE_SITE_KEY]}"
+else
+  read -r -p "Your Cloudflare Turnstile Public Key: " NEXT_PUBLIC_TURNSTILE_SITE_KEY
+fi
+if [[ -z "$NEXT_PUBLIC_TURNSTILE_SITE_KEY" ]]; then
+  yellow "Empty Cloudflare Turnstile Public Key"
+  exit 1
+fi
+
 BETTER_AUTH_SECRET="$(new_secure_password 32)"
 if [[ -n "${ENV_HASH[BETTER_AUTH_URL]:-}" ]]; then
   BETTER_AUTH_URL="${ENV_HASH[BETTER_AUTH_URL]}"
@@ -252,7 +265,7 @@ cat > "${SCRIPT_DIR}/.env" <<EOF
 # DO NOT commit this file to your repository!
 
 ####################
-# Next.js Specific environment config
+# Web dashboard environment config
 ####################
 BETTER_AUTH_SECRET="${BETTER_AUTH_SECRET}"
 BETTER_AUTH_URL="${BETTER_AUTH_URL}"
@@ -261,6 +274,8 @@ RESEND_API_KEY="${RESEND_TOKEN}"
 RESEND_FROM_ADDRESS="${RESEND_ADDRESS}"
 POSTGRES_URL="${DATABASE_CONNSTR}"
 REDIS_URL="${REDIS_CONNSTR}"
+CLOUDFLARE_TURNSTILE_SECRET_KEY="${CLOUDFLARE_TURNSTILE_SECRET_KEY}"
+NEXT_PUBLIC_TURNSTILE_SITE_KEY="${NEXT_PUBLIC_TURNSTILE_SITE_KEY}"
 
 # Proxied and accessed internally by the server
 NOMINATIM_URL="${NOMINATIM_URL}"
@@ -450,7 +465,7 @@ if [[ "$IS_PRODUCTION" == "true" ]]; then
   echo "Switching to production deployment..."
 
   docker compose down
-  docker compose -f ./docker-compose.prod.yml up
+  docker compose -f ./docker-compose.prod.yml up -d --wait
 fi
 
 echo ""

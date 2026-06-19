@@ -192,6 +192,18 @@ if ($IsProduction) {
   }
 }
 
+$Cloudflare_Turnstile_Private_Key = $envHash.CLOUDFLARE_TURNSTILE_SECRET_KEY ? $envHash.CLOUDFLARE_TURNSTILE_SECRET_KEY : (Read-Host -Prompt "Your Cloudflare Turnsstile Secret Key")
+if (-not $Cloudflare_Turnstile_Private_Key) {
+  Write-Host "Empty Cloudflare Turnstile Private Key" -ForegroundColor Yellow
+  exit 1
+}
+
+$Cloudflare_Turnstile_Public_Key = $envHash.NEXT_PUBLIC_TURNSTILE_SITE_KEY ? $envHash.NEXT_PUBLIC_TURNSTILE_SITE_KEY : (Read-Host -Prompt "Your Cloudflare Turnstile Public Key")
+if (-not $Cloudflare_Turnstile_Public_Key) {
+  Write-Host "Empty Cloudflare Turnstile Public Key" -ForegroundColor Yellow
+  exit 1
+}
+
 # BetterAuth Configuration
 $Better_Auth_Secret = New-SecurePassword -Length 32 -AdditionalCharacters "!#%&()*+,/:;<=>?@[]^`{|}"
 $Better_Auth_URL    = $envHash.BETTER_AUTH_URL ? $envHash.BETTER_AUTH_URL : (Read-Host -Prompt "Deployment Host (Default: http://localhost:6769)")
@@ -205,11 +217,11 @@ if (($Tileserver_URL -eq "http://localhost:6700") -and ($IsProduction)) {
   $Tileserver_URL   = Read-Host -Prompt "Tileserver URL"
 }
 
-$Nominatim_URL      = $IsProduction ? "http://geocoder:8080" : "http://localhost:6701"
-$OSRM_Driving_URL   = $IsProduction ? "http://driving_router:5000" : "http://localhost:6702"
+$Nominatim_URL      = $IsProduction ? "http://geocoder:8080"        : "http://localhost:6701"
+$OSRM_Driving_URL   = $IsProduction ? "http://driving_router:5000"  : "http://localhost:6702"
 $OSRM_Bicycle_URL   = $IsProduction ? "http://driving_bicycle:5000" : "http://localhost:6703"
-$OSRM_Foot_URL      = $IsProduction ? "http://osrm_foot:5000" : "http://localhost:6704"
-$Algorithm_Serv_URL = $IsProduction ? "http://algorithm:8080" : "http://localhost:6705"
+$OSRM_Foot_URL      = $IsProduction ? "http://osrm_foot:5000"       : "http://localhost:6704"
+$Algorithm_Serv_URL = $IsProduction ? "http://algorithm:8080"       : "http://localhost:6705"
 
 # Database Configuration
 $Redis_Port             = Get-AvailablePort
@@ -229,7 +241,7 @@ $DotEnv_Contents = @"
 # DO NOT commit this file to your repository!
 
 ####################
-# Next.js Specific environment config
+# Web dashboard environment config
 ####################
 BETTER_AUTH_SECRET=`"$Better_Auth_Secret`"
 BETTER_AUTH_URL=`"$Better_Auth_URL`"
@@ -238,6 +250,8 @@ RESEND_API_KEY=`"$Resend_Token`"
 RESEND_FROM_ADDRESS=`"$Resend_Address`"
 POSTGRES_URL=`"$Database_ConnStr`"
 REDIS_URL=`"$Redis_ConnStr`"
+CLOUDFLARE_TURNSTILE_SECRET_KEY=`"$Cloudflare_Turnstile_Private_Key`"
+NEXT_PUBLIC_TURNSTILE_SITE_KEY=`"$Cloudflare_Turnstile_Public_Key`"
 
 # Proxied and accessed internally by the server
 NOMINATIM_URL=`"$Nominatim_URL`"
@@ -455,7 +469,7 @@ if ($IsProduction) {
   & docker compose down
 
   # Spin up the production-level compose file
-  & docker compose up -f .\docker-compose.prod.yml
+  & docker compose up -f .\docker-compose.prod.yml -d --wait
 }
 
 Write-Host ""

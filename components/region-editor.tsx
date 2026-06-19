@@ -385,7 +385,7 @@ export default function RegionEditor() {
                   Click any point on the map to place a station, as long as it is within the region.
                 </p>
 
-                <div className="space-y-2 pr-1 pb-1">
+                <div className="max-h-[22rem] space-y-2 overflow-y-auto pr-1">
                   {stations.length === 0 ? (
                     <p className="text-xs text-muted-foreground">
                       No stations yet. Click inside the region on the map to add one.

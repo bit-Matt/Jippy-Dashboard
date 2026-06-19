@@ -152,7 +152,7 @@ GET /api/public/nominatim/search?q=Jaro%20Plaza&format=jsonv2&countrycodes=ph
 
 Fetches a comprehensive dataset of all registered Routes, Regions, Tricycle stations, and current Road Closures.
 
-### POST `/api/public/navigate/v1`
+### POST `/api/public/navigate/v1` (Deprecated, use the `v2` instead.)
 
 Generates step-by-step navigation instructions between two points.
 
@@ -173,3 +173,9 @@ An optimized navigation endpoint utilizing the rewritten [`JippyServices.Algorit
 
 > [!NOTE]
 > While the input schema remains identical to `v1`, this version may yield different routing results or improved transfer logic (e.g., between Jeepneys and Tricycles) compared to the legacy engine.
+
+### POST `/api/public/navigate/v3`
+
+Stop-based step-by-step navigation instructions between two points. The request body has a similar payload as the `v1` and `v2`.
+However, the difference between the `v1` and `v2` is that, this navigate uses the official LPTRP stop points instead of the
+door-to-door loading/unloading.

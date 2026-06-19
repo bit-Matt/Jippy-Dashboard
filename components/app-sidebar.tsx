@@ -97,6 +97,10 @@ export function AppSidebar({
             title: "Vehicle Types",
             url: "/dashboard/vehicle",
           },
+          {
+            title: "Data Management",
+            url: "/dashboard/data",
+          },
         ],
       },
     ],

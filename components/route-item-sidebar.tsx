@@ -53,7 +53,11 @@ export default function RouteItemSidebar({
   const selectedSnapshot = snapshots.find((snapshot) => snapshot.id === selectedSnapshotId) ?? null;
   const displayedSnapshot = selectedSnapshot ?? snapshots.find((snapshot) => snapshot.id === activeSnapshotId) ?? null;
   const canSetActive = !!selectedSnapshot && selectedSnapshot.state === "ready" && selectedSnapshot.id !== activeSnapshotId;
-  const canEditOrDelete = !!selectedSnapshot && (selectedSnapshot.state !== "ready" || (isAdministrator && !route.isPublic));
+  const isActiveSnapshot = selectedSnapshot?.id === activeSnapshotId;
+  const canEditOrDelete = !!selectedSnapshot && (
+    selectedSnapshot.state !== "ready"
+    || (isAdministrator && (!route.isPublic || !isActiveSnapshot))
+  );
 
   return (
     <Card>

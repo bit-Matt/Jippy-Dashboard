@@ -195,17 +195,16 @@ export async function PATCH(
       .build();
   }
 
+  const routeInfo = await unwrap(route.getRouteById(id));
+
   let bypassReadyCheck = false;
   if (currentSession.user?.role === "administrator_user") {
-    const isPublished = await unwrap(route.isRoutePublished(id));
-    if (isPublished) {
-      return ApiResponseBuilder.createError(StatusCodes.Status403Forbidden, [{ message: "Cannot modify a ready snapshot of a published route." }])
+    if (routeInfo.isPublic && routeInfo.activeSnapshotId === snapshotId) {
+      return ApiResponseBuilder.createError(StatusCodes.Status403Forbidden, [{ message: "Cannot modify the active snapshot of a published route." }])
         .build();
     }
     bypassReadyCheck = true;
   }
-
-  const routeInfo = await unwrap(route.getRouteById(id));
 
   const patchPayload: route.UpdateRouteParameters = { ...data };
 
