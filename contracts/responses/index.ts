@@ -126,24 +126,34 @@ export interface ClosureObject {
   points: Array<ClosurePointObject>;
 }
 
-export type StopRestrictionType = "universal" | "specific";
-export type StopDisallowedDirection = "direction_to" | "direction_back" | "both";
+export type RbzRestrictionType = "universal" | "specific";
+export type RbzDisallowedDirection = "direction_to" | "direction_back" | "both";
 
-export interface StopPointResponse {
+export interface RbzPointResponse {
   id: string;
   sequence: number;
   point: [number, number];
 }
 
-export interface StopResponse {
+export interface RestrictedBoardingZoneResponse {
   id: string;
   name: string;
-  restrictionType: StopRestrictionType;
-  disallowedDirection: StopDisallowedDirection;
+  restrictionType: RbzRestrictionType;
+  disallowedDirection: RbzDisallowedDirection;
   polyline: string;
   isPublic: boolean;
-  points: StopPointResponse[];
+  points: RbzPointResponse[];
   routeIds: string[];
+}
+
+export type RestrictedBoardingZoneResponseList = RestrictedBoardingZoneResponse[];
+
+export interface StopResponse {
+  id: string;
+  number: number;
+  address: string;
+  point: [number, number] | null;
+  isPublic: boolean;
 }
 
 export type StopResponseList = StopResponse[];

@@ -5,7 +5,7 @@ import { oneOf, unwrap } from "@/lib/one-of";
 import { ApiResponseBuilder, StatusCodes } from "@/lib/http";
 import * as closure from "@/lib/management/closure-manager";
 import * as route from "@/lib/management/route-manager";
-import * as stops from "@/lib/management/stop-manager";
+import * as restrictedBoardingZones from "@/lib/management/restricted-boarding-zone-manager";
 import { tryParseJson } from "@/lib/http/RequestUtilities";
 import { utils, validator } from "@/lib/validator";
 import { session, SessionCode } from "@/lib/auth";
@@ -29,7 +29,7 @@ export async function GET() {
     const [allRoutes, allClosures, allStops] = await Promise.all([
       unwrap(route.getAllRoutes(false)),
       unwrap(closure.getAllClosures(true)),
-      unwrap(stops.getAllStops(true)),
+      unwrap(restrictedBoardingZones.getAllRestrictedBoardingZones(true)),
     ]);
 
     return ApiResponseBuilder.create(StatusCodes.Status200Ok)

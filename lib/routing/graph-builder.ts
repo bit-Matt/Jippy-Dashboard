@@ -12,7 +12,7 @@ import { unwrap } from "@/lib/one-of";
 import * as routeManager from "@/lib/management/route-manager";
 import * as regionManager from "@/lib/management/region-manager";
 import * as closureManager from "@/lib/management/closure-manager";
-import * as stopManager from "@/lib/management/stop-manager";
+import * as restrictedBoardingZoneManager from "@/lib/management/restricted-boarding-zone-manager";
 
 import { GridIndex } from "@/lib/routing/spatial-index";
 import {
@@ -109,7 +109,7 @@ export async function loadTransitData(): Promise<TransitData> {
     unwrap(routeManager.getAllRoutes(true)),
     unwrap(regionManager.getAllRegions(true)),
     unwrap(closureManager.getAllClosures(true)),
-    unwrap(stopManager.getAllStops(true)),
+    unwrap(restrictedBoardingZoneManager.getAllRestrictedBoardingZones(true)),
   ]);
 
   const routes: TransitRoute[] = allRoutes.map((r) => ({
@@ -138,7 +138,7 @@ export async function loadTransitData(): Promise<TransitData> {
     points: c.points,
   }));
 
-  const stops: TransitStop[] = (allStops as stopManager.BaseStopObject[])
+  const stops: TransitStop[] = (allStops as restrictedBoardingZoneManager.BaseRbzObject[])
     .filter((s) => s.polyline && s.polyline.length > 0)
     .map((s) => {
       const decoded = decodePolyline(s.polyline);

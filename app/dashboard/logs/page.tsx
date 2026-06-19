@@ -1,17 +1,11 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
+import { useMemo } from "react";
 import useSWR from "swr";
 
 import { AppSidebar } from "@/components/app-sidebar";
 import { Badge } from "@/components/ui/badge";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
 import {
   SidebarInset,
   SidebarProvider,
@@ -43,11 +37,6 @@ type ActivityListItem = {
   actorEmail: string | null;
 };
 
-type ActivityDetail = ActivityListItem & {
-  payload: Record<string, unknown>;
-  metadata: Record<string, unknown>;
-};
-
 type ApiResponse<T> = {
   data: {
     ok: boolean;
@@ -56,14 +45,11 @@ type ApiResponse<T> = {
 };
 
 export default function LogsPage() {
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const router = useRouter();
   const { data, isLoading, error } = useSWR<ApiResponse<{ rows: ActivityListItem[]; total: number; page: number; pageSize: number }>>(
     "/api/restricted/management/logs?page=1&pageSize=50",
     $fetch,
   );
-
-  const selectedUrl = selectedId ? `/api/restricted/management/logs/${selectedId}` : null;
-  const { data: selectedData, isLoading: selectedLoading } = useSWR<ApiResponse<ActivityDetail>>(selectedUrl, $fetch);
 
   const rows = useMemo(() => data?.data?.data?.rows ?? [], [data]);
 
@@ -103,7 +89,7 @@ export default function LogsPage() {
                 ) : rows.map((row) => (
                   <TableRow
                     key={row.id}
-                    onClick={() => setSelectedId(row.id)}
+                    onClick={() => router.push(`/dashboard/logs/${row.id}`)}
                     className="cursor-pointer"
                   >
                     <TableCell>{new Date(row.createdAt).toLocaleString()}</TableCell>
@@ -120,44 +106,6 @@ export default function LogsPage() {
           ) : null}
         </div>
       </SidebarInset>
-
-      <Dialog open={Boolean(selectedId)} onOpenChange={(open) => { if (!open) setSelectedId(null); }}>
-        <DialogContent className="sm:max-w-3xl">
-          <DialogHeader>
-            <DialogTitle>Activity Detail</DialogTitle>
-            <DialogDescription>Full detail of selected activity log.</DialogDescription>
-          </DialogHeader>
-
-          {selectedLoading || !selectedData ? (
-            <p className="text-sm text-muted-foreground">Loading details...</p>
-          ) : (
-            <div className="grid gap-4">
-              <div className="grid gap-2 text-sm">
-                <p><span className="font-medium">Time:</span> {new Date(selectedData.data.data.createdAt).toLocaleString()}</p>
-                <p><span className="font-medium">Actor:</span> {selectedData.data.data.actorEmail ?? selectedData.data.data.actorName ?? "System"}</p>
-                <p><span className="font-medium">Action:</span> {selectedData.data.data.action}</p>
-                <p><span className="font-medium">Category:</span> {selectedData.data.data.category}</p>
-                <p><span className="font-medium">Path:</span> {selectedData.data.data.routePath ?? "-"}</p>
-              </div>
-
-              <div className="grid gap-2">
-                <h3 className="font-medium">Summary</h3>
-                <p className="rounded-md border bg-muted/30 p-3 text-sm">{selectedData.data.data.summary}</p>
-              </div>
-
-              <div className="grid gap-2">
-                <h3 className="font-medium">Payload (Redacted)</h3>
-                <pre className="max-h-64 overflow-auto rounded-md border bg-muted/30 p-3 text-xs">{JSON.stringify(selectedData.data.data.payload, null, 2)}</pre>
-              </div>
-
-              <div className="grid gap-2">
-                <h3 className="font-medium">Metadata</h3>
-                <pre className="max-h-64 overflow-auto rounded-md border bg-muted/30 p-3 text-xs">{JSON.stringify(selectedData.data.data.metadata, null, 2)}</pre>
-              </div>
-            </div>
-          )}
-        </DialogContent>
-      </Dialog>
     </SidebarProvider>
   );
 }

@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef } from "react";
-import { MapContainer, Polyline, Tooltip, useMap } from "react-leaflet";
+import { CircleMarker, MapContainer, Marker, Polyline, Tooltip, useMap, useMapEvents } from "react-leaflet";
 import L from "leaflet";
 
 import "@maplibre/maplibre-gl-leaflet";
@@ -11,14 +11,31 @@ import "leaflet.vectorgrid";
 import "leaflet/dist/leaflet.css";
 import "@geoman-io/leaflet-geoman-free/dist/leaflet-geoman.css";
 
-import type { StopResponse, StopResponseList } from "@/contracts/responses";
-import { getStopLineCoordinates } from "@/lib/stops/display";
+import type {
+  RestrictedBoardingZoneResponse,
+  RestrictedBoardingZoneResponseList,
+  RouteListItemResponse,
+  StopResponse,
+  StopResponseList,
+} from "@/contracts/responses";
+import { getRbzLineCoordinates } from "@/lib/stops/display";
 import { getPositronStyleUrl } from "@/lib/map/style-url";
+import { createTransitPointIcon } from "@/lib/map/transit-marker-icon";
+import { decodePolyline } from "@/lib/routing/polyline";
 import { useStopDashboard } from "@/contexts/StopDashboardContext";
 
 interface StopMapProps {
-  stops?: StopResponseList;
-  onStopClick?: (stop: StopResponse) => void;
+  activeTab: "stops" | "restricted-zones";
+  transitStops?: StopResponseList;
+  rbzList?: RestrictedBoardingZoneResponseList;
+  overlayRoutes?: RouteListItemResponse[];
+  routeOverlayEnabled?: boolean;
+  selectedOverlayRouteIds?: string[];
+  onTransitStopClick?: (stop: StopResponse) => void;
+  onRbzClick?: (zone: RestrictedBoardingZoneResponse) => void;
+  onMapClick?: (point: [number, number]) => void;
+  onPendingPointDragEnd?: (point: [number, number]) => void;
+  onEditingPointDragEnd?: (point: [number, number]) => void;
   focusedWaypoints?: Array<[number, number]>;
   focusKey?: string | number | null;
 }
@@ -110,6 +127,26 @@ const FocusStopView = ({ focusKey, focusedWaypoints }: FocusStopViewProps) => {
     map.fitBounds(bounds, { padding: [40, 40], animate: true, maxZoom: 16 });
     lastFocusedKeyRef.current = focusKey;
   }, [map, focusKey, focusedWaypoints]);
+
+  return null;
+};
+
+const MapClickHandler = ({
+  enabled,
+  onMapClick,
+}: {
+  enabled: boolean;
+  onMapClick?: (point: [number, number]) => void;
+}) => {
+  useMapEvents({
+    click(event) {
+      if (!enabled || !onMapClick) {
+        return;
+      }
+
+      onMapClick([event.latlng.lat, event.latlng.lng]);
+    },
+  });
 
   return null;
 };
@@ -287,28 +324,64 @@ const StopLineDrawingLayer = ({
   return null;
 };
 
-const StopLinesLayer = ({
+const PendingStopMarker = ({
+  point,
+  onDragEnd,
+}: {
+  point: [number, number];
+  onDragEnd?: (point: [number, number]) => void;
+}) => {
+  return (
+    <Marker
+      position={point}
+      icon={createTransitPointIcon(true)}
+      draggable
+      autoPan
+      eventHandlers={{
+        dragend: (event) => {
+          const marker = event.target as L.Marker;
+          const { lat, lng } = marker.getLatLng();
+          onDragEnd?.([lat, lng]);
+        },
+      }}
+    />
+  );
+};
+
+const StopMarkersLayer = ({
   stops,
+  selectedStopId,
+  editingStopId,
   onStopClick,
 }: {
   stops: StopResponseList;
+  selectedStopId?: string | null;
+  editingStopId?: string | null;
   onStopClick?: (stop: StopResponse) => void;
 }) => {
   return (
     <>
       {stops.map((stop) => {
-        const sortedPoints = getStopLineCoordinates(stop);
+        if (!stop.point) {
+          return null;
+        }
 
-        if (sortedPoints.length < 2) return null;
+        if (stop.id === editingStopId) {
+          return null;
+        }
+
+        const isSelected = stop.id === selectedStopId;
 
         return (
-          <Polyline
+          <CircleMarker
             key={stop.id}
-            positions={sortedPoints}
+            center={stop.point}
+            radius={8}
             pathOptions={{
-              color: stop.isPublic ? "#059669" : "#b45309",
-              weight: 6,
-              opacity: 0.9,
+              color: stop.isPublic ? "#059669" : isSelected ? "#2563eb" : "#b45309",
+              fillColor: stop.isPublic ? "#059669" : isSelected ? "#2563eb" : "#b45309",
+              fillOpacity: 0.85,
+              weight: 2,
             }}
             eventHandlers={{
               click: (event) => {
@@ -321,9 +394,102 @@ const StopLinesLayer = ({
               },
             }}
           >
-            {stop.name.trim() ? (
+            <Tooltip sticky direction="top">
+              #{stop.number} · {stop.address}
+            </Tooltip>
+          </CircleMarker>
+        );
+      })}
+    </>
+  );
+};
+
+const RouteOverlayLayer = ({
+  routes,
+  selectedRouteIds,
+}: {
+  routes: RouteListItemResponse[];
+  selectedRouteIds: string[];
+}) => {
+  const selectedSet = useMemo(() => new Set(selectedRouteIds), [selectedRouteIds]);
+
+  return (
+    <>
+      {routes.map((route) => {
+        if (!selectedSet.has(route.id)) {
+          return null;
+        }
+
+        const goingTo = route.polylines.to.trim() ? decodePolyline(route.polylines.to) : [];
+        const goingBack = route.polylines.back.trim() ? decodePolyline(route.polylines.back) : [];
+
+        return (
+          <span key={route.id}>
+            {goingTo.length >= 2 ? (
+              <Polyline
+                positions={goingTo}
+                pathOptions={{
+                  color: route.routeColor,
+                  weight: 4,
+                  opacity: 0.55,
+                }}
+              />
+            ) : null}
+            {goingBack.length >= 2 ? (
+              <Polyline
+                positions={goingBack}
+                pathOptions={{
+                  color: route.routeColor,
+                  weight: 4,
+                  opacity: 0.35,
+                  dashArray: "8 6",
+                }}
+              />
+            ) : null}
+          </span>
+        );
+      })}
+    </>
+  );
+};
+
+const RbzLinesLayer = ({
+  zones,
+  onZoneClick,
+}: {
+  zones: RestrictedBoardingZoneResponseList;
+  onZoneClick?: (zone: RestrictedBoardingZoneResponse) => void;
+}) => {
+  return (
+    <>
+      {zones.map((zone) => {
+        const sortedPoints = getRbzLineCoordinates(zone);
+
+        if (sortedPoints.length < 2) return null;
+
+        return (
+          <Polyline
+            key={zone.id}
+            positions={sortedPoints}
+            pathOptions={{
+              color: zone.isPublic ? "#059669" : "#b45309",
+              weight: 6,
+              opacity: 0.9,
+            }}
+            eventHandlers={{
+              click: (event) => {
+                const originalEvent = event.originalEvent as unknown as Event | undefined;
+                if (originalEvent) {
+                  L.DomEvent.stopPropagation(originalEvent);
+                  L.DomEvent.preventDefault(originalEvent);
+                }
+                onZoneClick?.(zone);
+              },
+            }}
+          >
+            {zone.name.trim() ? (
               <Tooltip sticky>
-                {stop.name}
+                {zone.name}
               </Tooltip>
             ) : null}
           </Polyline>
@@ -334,53 +500,116 @@ const StopLinesLayer = ({
 };
 
 export default function StopMapComponent({
-  stops,
-  onStopClick,
+  activeTab,
+  transitStops,
+  rbzList,
+  overlayRoutes,
+  routeOverlayEnabled,
+  selectedOverlayRouteIds,
+  onTransitStopClick,
+  onRbzClick,
+  onMapClick,
+  onPendingPointDragEnd,
+  onEditingPointDragEnd,
   focusedWaypoints,
   focusKey,
 }: StopMapProps) {
   const {
     panelMode,
-    draft,
-    activeStopTool,
-    updateDraftPoints,
-    finishStopToolEditing,
+    rbzDraft,
+    activeRbzTool,
+    updateRbzDraftPoints,
+    finishRbzToolEditing,
     autoDrawRequested,
     consumeAutoDrawRequest,
+    transitStopCreateMode,
+    pendingCreatePoint,
+    selectedTransitStopId,
+    transitStopEditingPoint,
   } = useStopDashboard();
 
   useEffect(() => {
     fixLeafletIcons();
   }, []);
 
-  const isEditing = panelMode === "editor";
+  const isEditingRbz = panelMode === "editor";
   const linePoints = useMemo(() => {
-    return [...(draft?.points ?? [])]
+    return [...(rbzDraft?.points ?? [])]
       .sort((a, b) => a.sequence - b.sequence)
       .map((point) => point.point);
-  }, [draft?.points]);
+  }, [rbzDraft?.points]);
+
+  const mapTransitStops = useMemo(() => {
+    if (activeTab !== "stops") {
+      return [];
+    }
+
+    return transitStops ?? [];
+  }, [activeTab, transitStops]);
+
+  const mapRbzList = useMemo(() => {
+    if (activeTab !== "restricted-zones") {
+      return [];
+    }
+
+    return rbzList ?? [];
+  }, [activeTab, rbzList]);
 
   return (
     <div className="relative h-full w-full">
       <MapContainer center={[10.7302, 122.5591]} zoom={13} className="h-full w-full">
         <VectorTileLayer />
         <FocusStopView focusKey={focusKey} focusedWaypoints={focusedWaypoints} />
+        <MapClickHandler
+          enabled={activeTab === "stops" && transitStopCreateMode && !isEditingRbz}
+          onMapClick={onMapClick}
+        />
 
-        {isEditing ? (
+        {activeTab === "stops" && routeOverlayEnabled ? (
+          <RouteOverlayLayer
+            routes={overlayRoutes ?? []}
+            selectedRouteIds={selectedOverlayRouteIds ?? []}
+          />
+        ) : null}
+
+        {activeTab === "stops" && !isEditingRbz ? (
+          <StopMarkersLayer
+            stops={mapTransitStops}
+            selectedStopId={selectedTransitStopId}
+            editingStopId={transitStopEditingPoint ? selectedTransitStopId : null}
+            onStopClick={onTransitStopClick}
+          />
+        ) : null}
+
+        {activeTab === "stops" && pendingCreatePoint ? (
+          <PendingStopMarker
+            point={pendingCreatePoint}
+            onDragEnd={onPendingPointDragEnd}
+          />
+        ) : null}
+
+        {activeTab === "stops" && transitStopEditingPoint ? (
+          <PendingStopMarker
+            point={transitStopEditingPoint}
+            onDragEnd={onEditingPointDragEnd}
+          />
+        ) : null}
+
+        {isEditingRbz ? (
           <StopLineDrawingLayer
-            activeTool={activeStopTool}
+            activeTool={activeRbzTool}
             linePoints={linePoints}
-            onLinePointsChange={updateDraftPoints}
-            onToolComplete={finishStopToolEditing}
+            onLinePointsChange={updateRbzDraftPoints}
+            onToolComplete={finishRbzToolEditing}
             autoDrawRequested={autoDrawRequested}
             consumeAutoDrawRequest={consumeAutoDrawRequest}
           />
         ) : null}
 
-        {!isEditing ? (
-          <StopLinesLayer
-            stops={stops ?? []}
-            onStopClick={onStopClick}
+        {activeTab === "restricted-zones" && !isEditingRbz ? (
+          <RbzLinesLayer
+            zones={mapRbzList}
+            onZoneClick={onRbzClick}
           />
         ) : null}
       </MapContainer>

@@ -2,84 +2,113 @@
 
 import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from "react";
 
-import type { StopResponse, StopRestrictionType, StopDisallowedDirection } from "@/contracts/responses";
-import { getStopLineCoordinates } from "@/lib/stops/display";
+import type {
+  RestrictedBoardingZoneResponse,
+  RbzDisallowedDirection,
+  RbzRestrictionType,
+  StopResponse,
+} from "@/contracts/responses";
+import { getRbzLineCoordinates } from "@/lib/stops/display";
 
-export type StopEditorMode = "creating" | "editing";
-export type ActiveStopTool = "none" | "draw-line" | "edit-line";
+export type DashboardTab = "stops" | "restricted-zones";
+export type RbzEditorMode = "creating" | "editing";
+export type ActiveRbzTool = "none" | "draw-line" | "edit-line";
+export type DashboardPanelMode = "list" | "details" | "editor";
 
-type DashboardPanelMode = "list" | "details" | "editor";
-
-export interface StopDraftPoint {
+export interface RbzDraftPoint {
   id: string;
   sequence: number;
   point: [number, number];
 }
 
-interface StopDraft {
+interface RbzDraft {
   name: string;
-  restrictionType: StopRestrictionType;
-  disallowedDirection: StopDisallowedDirection;
-  points: StopDraftPoint[];
+  restrictionType: RbzRestrictionType;
+  disallowedDirection: RbzDisallowedDirection;
+  points: RbzDraftPoint[];
   routeIds: string[];
 }
 
 interface StopDashboardState {
+  activeTab: DashboardTab;
+  routeOverlayEnabled: boolean;
+  selectedOverlayRouteIds: string[];
+
+  selectedTransitStop: StopResponse | null;
+  selectedTransitStopId: string | null;
+  transitStopCreateMode: boolean;
+  pendingCreatePoint: [number, number] | null;
+  transitStopEditingPoint: [number, number] | null;
+
   panelMode: DashboardPanelMode;
-  selectedStop: StopResponse | null;
-  selectedStopId: string | null;
-  editorMode: StopEditorMode | null;
-  activeStopTool: ActiveStopTool;
-  draft: StopDraft | null;
+  selectedRbz: RestrictedBoardingZoneResponse | null;
+  selectedRbzId: string | null;
+  rbzEditorMode: RbzEditorMode | null;
+  activeRbzTool: ActiveRbzTool;
+  rbzDraft: RbzDraft | null;
   focusWaypoints: Array<[number, number]> | undefined;
   focusKey: string | number | null;
   autoDrawRequested: boolean;
 }
 
 interface StopDashboardContextValue extends StopDashboardState {
-  selectStop: (stop: StopResponse) => void;
-  clearSelection: () => void;
-  openCreateEditor: () => void;
-  openEditEditor: (stop: StopResponse) => void;
-  closeEditor: () => void;
-  updateDraftName: (name: string) => void;
-  updateDraftRestrictionType: (restrictionType: StopRestrictionType) => void;
-  updateDraftDisallowedDirection: (disallowedDirection: StopDisallowedDirection) => void;
-  updateDraftRouteIds: (routeIds: string[]) => void;
-  updateDraftPoints: (points: Array<[number, number]>) => void;
-  setActiveStopTool: (tool: ActiveStopTool) => void;
-  finishStopToolEditing: () => void;
+  setActiveTab: (tab: DashboardTab) => void;
+  setRouteOverlayEnabled: (enabled: boolean, allRouteIds?: string[]) => void;
+  toggleOverlayRouteId: (routeId: string, checked: boolean) => void;
+
+  selectTransitStopFromList: (stop: StopResponse) => void;
+  selectTransitStopFromMap: (stop: StopResponse) => void;
+  clearTransitStopSelection: () => void;
+  openTransitStopCreateMode: () => void;
+  cancelTransitStopCreateMode: () => void;
+  setPendingCreatePoint: (point: [number, number] | null) => void;
+  setTransitStopEditingPoint: (point: [number, number] | null) => void;
+  syncSelectedTransitStop: (stop: StopResponse | null) => void;
+  setSelectedTransitStopPublicState: (isPublic: boolean) => void;
+
+  selectRbz: (zone: RestrictedBoardingZoneResponse) => void;
+  clearRbzSelection: () => void;
+  openCreateRbzEditor: () => void;
+  openEditRbzEditor: (zone: RestrictedBoardingZoneResponse) => void;
+  closeRbzEditor: () => void;
+  updateRbzDraftName: (name: string) => void;
+  updateRbzDraftRestrictionType: (restrictionType: RbzRestrictionType) => void;
+  updateRbzDraftDisallowedDirection: (disallowedDirection: RbzDisallowedDirection) => void;
+  updateRbzDraftRouteIds: (routeIds: string[]) => void;
+  updateRbzDraftPoints: (points: Array<[number, number]>) => void;
+  setActiveRbzTool: (tool: ActiveRbzTool) => void;
+  finishRbzToolEditing: () => void;
   consumeAutoDrawRequest: () => void;
-  setSelectedStopPublicState: (isPublic: boolean) => void;
-  syncSelectedStop: (stop: StopResponse | null) => void;
+  setSelectedRbzPublicState: (isPublic: boolean) => void;
+  syncSelectedRbz: (zone: RestrictedBoardingZoneResponse | null) => void;
 }
 
 const StopDashboardContext = createContext<StopDashboardContextValue | undefined>(undefined);
 
-const buildDraftFromStop = (stop: StopResponse): StopDraft => ({
-  name: stop.name,
-  restrictionType: stop.restrictionType,
-  disallowedDirection: stop.disallowedDirection,
-  points: [...stop.points]
+const buildRbzDraftFromZone = (zone: RestrictedBoardingZoneResponse): RbzDraft => ({
+  name: zone.name,
+  restrictionType: zone.restrictionType,
+  disallowedDirection: zone.disallowedDirection,
+  points: [...zone.points]
     .sort((a, b) => a.sequence - b.sequence)
     .map((point, index) => ({
       id: point.id || crypto.randomUUID(),
       sequence: index + 1,
       point: point.point,
     })),
-  routeIds: [...stop.routeIds],
+  routeIds: [...zone.routeIds],
 });
 
-const buildFocusWaypoints = (stop: StopResponse | null): Array<[number, number]> | undefined => {
-  if (!stop) {
+const buildRbzFocusWaypoints = (zone: RestrictedBoardingZoneResponse | null): Array<[number, number]> | undefined => {
+  if (!zone) {
     return undefined;
   }
 
-  const points = getStopLineCoordinates(stop);
+  const points = getRbzLineCoordinates(zone);
   return points.length > 0 ? points : undefined;
 };
 
-const buildEmptyDraft = (): StopDraft => ({
+const buildEmptyRbzDraft = (): RbzDraft => ({
   name: "",
   restrictionType: "universal",
   disallowedDirection: "both",
@@ -87,90 +116,273 @@ const buildEmptyDraft = (): StopDraft => ({
   routeIds: [],
 });
 
+const buildTransitStopFocusWaypoints = (stop: StopResponse | null): Array<[number, number]> | undefined => {
+  if (!stop?.point) {
+    return undefined;
+  }
+
+  return [stop.point];
+};
+
 export function StopDashboardProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<StopDashboardState>({
+    activeTab: "stops",
+    routeOverlayEnabled: false,
+    selectedOverlayRouteIds: [],
+
+    selectedTransitStop: null,
+    selectedTransitStopId: null,
+    transitStopCreateMode: false,
+    pendingCreatePoint: null,
+    transitStopEditingPoint: null,
+
     panelMode: "list",
-    selectedStop: null,
-    selectedStopId: null,
-    editorMode: null,
-    activeStopTool: "none",
-    draft: null,
+    selectedRbz: null,
+    selectedRbzId: null,
+    rbzEditorMode: null,
+    activeRbzTool: "none",
+    rbzDraft: null,
     focusWaypoints: undefined,
     focusKey: null,
     autoDrawRequested: false,
   });
 
-  const selectStop = useCallback((stop: StopResponse) => {
+  const setActiveTab = useCallback((tab: DashboardTab) => {
+    setState((previousState) => ({
+      ...previousState,
+      activeTab: tab,
+      transitStopCreateMode: false,
+      pendingCreatePoint: null,
+      transitStopEditingPoint: null,
+      panelMode: tab === "restricted-zones" ? previousState.panelMode : "list",
+      selectedRbz: tab === "stops" ? null : previousState.selectedRbz,
+      selectedRbzId: tab === "stops" ? null : previousState.selectedRbzId,
+      rbzEditorMode: tab === "stops" ? null : previousState.rbzEditorMode,
+      activeRbzTool: tab === "stops" ? "none" : previousState.activeRbzTool,
+      rbzDraft: tab === "stops" ? null : previousState.rbzDraft,
+      selectedTransitStop: tab === "restricted-zones" ? null : previousState.selectedTransitStop,
+      selectedTransitStopId: tab === "restricted-zones" ? null : previousState.selectedTransitStopId,
+      focusWaypoints: tab === "stops"
+        ? buildTransitStopFocusWaypoints(previousState.selectedTransitStop)
+        : buildRbzFocusWaypoints(previousState.selectedRbz),
+    }));
+  }, []);
+
+  const setRouteOverlayEnabled = useCallback((enabled: boolean, allRouteIds: string[] = []) => {
+    setState((previousState) => ({
+      ...previousState,
+      routeOverlayEnabled: enabled,
+      selectedOverlayRouteIds: enabled ? allRouteIds : [],
+    }));
+  }, []);
+
+  const toggleOverlayRouteId = useCallback((routeId: string, checked: boolean) => {
+    setState((previousState) => {
+      const current = new Set(previousState.selectedOverlayRouteIds);
+      if (checked) {
+        current.add(routeId);
+      } else {
+        current.delete(routeId);
+      }
+
+      return {
+        ...previousState,
+        selectedOverlayRouteIds: [...current],
+      };
+    });
+  }, []);
+
+  const selectTransitStopFromList = useCallback((stop: StopResponse) => {
+    setState((previousState) => ({
+      ...previousState,
+      selectedTransitStop: stop,
+      selectedTransitStopId: stop.id,
+      transitStopCreateMode: false,
+      pendingCreatePoint: null,
+      transitStopEditingPoint: !stop.isPublic && stop.point ? stop.point : null,
+      focusWaypoints: buildTransitStopFocusWaypoints(stop),
+      focusKey: `${stop.id}-${Date.now()}`,
+    }));
+  }, []);
+
+  const selectTransitStopFromMap = useCallback((stop: StopResponse) => {
+    setState((previousState) => ({
+      ...previousState,
+      selectedTransitStop: stop,
+      selectedTransitStopId: stop.id,
+      transitStopCreateMode: false,
+      pendingCreatePoint: null,
+      transitStopEditingPoint: !stop.isPublic && stop.point ? stop.point : null,
+      focusWaypoints: undefined,
+      focusKey: null,
+    }));
+  }, []);
+
+  const clearTransitStopSelection = useCallback(() => {
+    setState((previousState) => ({
+      ...previousState,
+      selectedTransitStop: null,
+      selectedTransitStopId: null,
+      transitStopEditingPoint: null,
+      focusWaypoints: undefined,
+      focusKey: null,
+    }));
+  }, []);
+
+  const openTransitStopCreateMode = useCallback(() => {
+    setState((previousState) => ({
+      ...previousState,
+      selectedTransitStop: null,
+      selectedTransitStopId: null,
+      transitStopCreateMode: true,
+      pendingCreatePoint: null,
+      transitStopEditingPoint: null,
+      focusWaypoints: undefined,
+      focusKey: null,
+    }));
+  }, []);
+
+  const cancelTransitStopCreateMode = useCallback(() => {
+    setState((previousState) => ({
+      ...previousState,
+      transitStopCreateMode: false,
+      pendingCreatePoint: null,
+    }));
+  }, []);
+
+  const setPendingCreatePoint = useCallback((point: [number, number] | null) => {
+    setState((previousState) => ({
+      ...previousState,
+      pendingCreatePoint: point,
+      ...(point !== null ? {
+        selectedTransitStop: null,
+        selectedTransitStopId: null,
+        transitStopEditingPoint: null,
+      } : {}),
+    }));
+  }, []);
+
+  const setTransitStopEditingPoint = useCallback((point: [number, number] | null) => {
+    setState((previousState) => ({
+      ...previousState,
+      transitStopEditingPoint: point,
+    }));
+  }, []);
+
+  const syncSelectedTransitStop = useCallback((stop: StopResponse | null) => {
+    setState((previousState) => {
+      if (!stop) {
+        return {
+          ...previousState,
+          selectedTransitStop: null,
+          selectedTransitStopId: null,
+          transitStopEditingPoint: null,
+          focusWaypoints: undefined,
+          focusKey: null,
+        };
+      }
+
+      return {
+        ...previousState,
+        selectedTransitStop: stop,
+        selectedTransitStopId: stop.id,
+        transitStopEditingPoint: previousState.selectedTransitStopId === stop.id
+          && previousState.transitStopEditingPoint
+          && !stop.isPublic
+          ? previousState.transitStopEditingPoint
+          : (!stop.isPublic && stop.point ? stop.point : null),
+        focusWaypoints: buildTransitStopFocusWaypoints(stop),
+      };
+    });
+  }, []);
+
+  const setSelectedTransitStopPublicState = useCallback((isPublic: boolean) => {
+    setState((previousState) => {
+      if (!previousState.selectedTransitStop) {
+        return previousState;
+      }
+
+      return {
+        ...previousState,
+        selectedTransitStop: {
+          ...previousState.selectedTransitStop,
+          isPublic,
+        },
+      };
+    });
+  }, []);
+
+  const selectRbz = useCallback((zone: RestrictedBoardingZoneResponse) => {
     setState((previousState) => ({
       ...previousState,
       panelMode: "details",
-      selectedStop: stop,
-      selectedStopId: stop.id,
-      editorMode: null,
-      activeStopTool: "none",
-      draft: null,
-      focusWaypoints: buildFocusWaypoints(stop),
-      focusKey: `${stop.id}-${Date.now()}`,
+      selectedRbz: zone,
+      selectedRbzId: zone.id,
+      rbzEditorMode: null,
+      activeRbzTool: "none",
+      rbzDraft: null,
+      focusWaypoints: buildRbzFocusWaypoints(zone),
+      focusKey: `${zone.id}-${Date.now()}`,
       autoDrawRequested: false,
     }));
   }, []);
 
-  const clearSelection = useCallback(() => {
+  const clearRbzSelection = useCallback(() => {
     setState((previousState) => ({
       ...previousState,
       panelMode: "list",
-      selectedStop: null,
-      selectedStopId: null,
-      editorMode: null,
-      activeStopTool: "none",
-      draft: null,
+      selectedRbz: null,
+      selectedRbzId: null,
+      rbzEditorMode: null,
+      activeRbzTool: "none",
+      rbzDraft: null,
       focusWaypoints: undefined,
       focusKey: null,
       autoDrawRequested: false,
     }));
   }, []);
 
-  const openCreateEditor = useCallback(() => {
+  const openCreateRbzEditor = useCallback(() => {
     setState((previousState) => ({
       ...previousState,
       panelMode: "editor",
-      selectedStop: null,
-      selectedStopId: null,
-      editorMode: "creating",
-      activeStopTool: "draw-line",
-      draft: buildEmptyDraft(),
+      selectedRbz: null,
+      selectedRbzId: null,
+      rbzEditorMode: "creating",
+      activeRbzTool: "draw-line",
+      rbzDraft: buildEmptyRbzDraft(),
       focusWaypoints: undefined,
       focusKey: null,
       autoDrawRequested: true,
     }));
   }, []);
 
-  const openEditEditor = useCallback((stop: StopResponse) => {
-    const points = [...stop.points].sort((a, b) => a.sequence - b.sequence);
+  const openEditRbzEditor = useCallback((zone: RestrictedBoardingZoneResponse) => {
+    const points = [...zone.points].sort((a, b) => a.sequence - b.sequence);
 
     setState((previousState) => ({
       ...previousState,
       panelMode: "editor",
-      selectedStop: stop,
-      selectedStopId: stop.id,
-      editorMode: "editing",
-      activeStopTool: points.length >= 2 ? "edit-line" : "draw-line",
-      draft: buildDraftFromStop(stop),
-      focusWaypoints: buildFocusWaypoints(stop),
-      focusKey: `${stop.id}-${Date.now()}`,
+      selectedRbz: zone,
+      selectedRbzId: zone.id,
+      rbzEditorMode: "editing",
+      activeRbzTool: points.length >= 2 ? "edit-line" : "draw-line",
+      rbzDraft: buildRbzDraftFromZone(zone),
+      focusWaypoints: buildRbzFocusWaypoints(zone),
+      focusKey: `${zone.id}-${Date.now()}`,
       autoDrawRequested: points.length < 2,
     }));
   }, []);
 
-  const closeEditor = useCallback(() => {
+  const closeRbzEditor = useCallback(() => {
     setState((previousState) => {
-      if (previousState.selectedStop) {
+      if (previousState.selectedRbz) {
         return {
           ...previousState,
           panelMode: "details",
-          editorMode: null,
-          activeStopTool: "none",
-          draft: null,
+          rbzEditorMode: null,
+          activeRbzTool: "none",
+          rbzDraft: null,
           autoDrawRequested: false,
         };
       }
@@ -178,11 +390,11 @@ export function StopDashboardProvider({ children }: { children: ReactNode }) {
       return {
         ...previousState,
         panelMode: "list",
-        selectedStop: null,
-        selectedStopId: null,
-        editorMode: null,
-        activeStopTool: "none",
-        draft: null,
+        selectedRbz: null,
+        selectedRbzId: null,
+        rbzEditorMode: null,
+        activeRbzTool: "none",
+        rbzDraft: null,
         focusWaypoints: undefined,
         focusKey: null,
         autoDrawRequested: false,
@@ -190,104 +402,104 @@ export function StopDashboardProvider({ children }: { children: ReactNode }) {
     });
   }, []);
 
-  const updateDraftName = useCallback((name: string) => {
+  const updateRbzDraftName = useCallback((name: string) => {
     setState((previousState) => {
-      if (!previousState.draft) {
+      if (!previousState.rbzDraft) {
         return previousState;
       }
 
       return {
         ...previousState,
-        draft: {
-          ...previousState.draft,
+        rbzDraft: {
+          ...previousState.rbzDraft,
           name,
         },
       };
     });
   }, []);
 
-  const updateDraftRestrictionType = useCallback((restrictionType: StopRestrictionType) => {
+  const updateRbzDraftRestrictionType = useCallback((restrictionType: RbzRestrictionType) => {
     setState((previousState) => {
-      if (!previousState.draft) {
+      if (!previousState.rbzDraft) {
         return previousState;
       }
 
       return {
         ...previousState,
-        draft: {
-          ...previousState.draft,
+        rbzDraft: {
+          ...previousState.rbzDraft,
           restrictionType,
-          routeIds: restrictionType === "specific" ? previousState.draft.routeIds : [],
+          routeIds: restrictionType === "specific" ? previousState.rbzDraft.routeIds : [],
         },
       };
     });
   }, []);
 
-  const updateDraftDisallowedDirection = useCallback((disallowedDirection: StopDisallowedDirection) => {
+  const updateRbzDraftDisallowedDirection = useCallback((disallowedDirection: RbzDisallowedDirection) => {
     setState((previousState) => {
-      if (!previousState.draft) {
+      if (!previousState.rbzDraft) {
         return previousState;
       }
 
       return {
         ...previousState,
-        draft: {
-          ...previousState.draft,
+        rbzDraft: {
+          ...previousState.rbzDraft,
           disallowedDirection,
         },
       };
     });
   }, []);
 
-  const updateDraftRouteIds = useCallback((routeIds: string[]) => {
+  const updateRbzDraftRouteIds = useCallback((routeIds: string[]) => {
     setState((previousState) => {
-      if (!previousState.draft) {
+      if (!previousState.rbzDraft) {
         return previousState;
       }
 
       return {
         ...previousState,
-        draft: {
-          ...previousState.draft,
+        rbzDraft: {
+          ...previousState.rbzDraft,
           routeIds,
         },
       };
     });
   }, []);
 
-  const updateDraftPoints = useCallback((points: Array<[number, number]>) => {
+  const updateRbzDraftPoints = useCallback((points: Array<[number, number]>) => {
     setState((previousState) => {
-      if (!previousState.draft) {
+      if (!previousState.rbzDraft) {
         return previousState;
       }
 
       const normalizedPoints = points.map((point, index) => ({
-        id: previousState.draft?.points[index]?.id ?? crypto.randomUUID(),
+        id: previousState.rbzDraft?.points[index]?.id ?? crypto.randomUUID(),
         sequence: index + 1,
         point,
       }));
 
       return {
         ...previousState,
-        draft: {
-          ...previousState.draft,
+        rbzDraft: {
+          ...previousState.rbzDraft,
           points: normalizedPoints,
         },
       };
     });
   }, []);
 
-  const setActiveStopTool = useCallback((tool: ActiveStopTool) => {
+  const setActiveRbzTool = useCallback((tool: ActiveRbzTool) => {
     setState((previousState) => ({
       ...previousState,
-      activeStopTool: tool,
+      activeRbzTool: tool,
     }));
   }, []);
 
-  const finishStopToolEditing = useCallback(() => {
+  const finishRbzToolEditing = useCallback(() => {
     setState((previousState) => ({
       ...previousState,
-      activeStopTool: "none",
+      activeRbzTool: "none",
       autoDrawRequested: false,
     }));
   }, []);
@@ -305,85 +517,109 @@ export function StopDashboardProvider({ children }: { children: ReactNode }) {
     });
   }, []);
 
-  const setSelectedStopPublicState = useCallback((isPublic: boolean) => {
+  const setSelectedRbzPublicState = useCallback((isPublic: boolean) => {
     setState((previousState) => {
-      if (!previousState.selectedStop) {
+      if (!previousState.selectedRbz) {
         return previousState;
       }
 
       return {
         ...previousState,
-        selectedStop: {
-          ...previousState.selectedStop,
+        selectedRbz: {
+          ...previousState.selectedRbz,
           isPublic,
         },
       };
     });
   }, []);
 
-  const syncSelectedStop = useCallback((stop: StopResponse | null) => {
+  const syncSelectedRbz = useCallback((zone: RestrictedBoardingZoneResponse | null) => {
     setState((previousState) => {
-      if (!stop) {
+      if (!zone) {
         return {
           ...previousState,
           panelMode: "list",
-          selectedStop: null,
-          selectedStopId: null,
-          editorMode: null,
-          activeStopTool: "none",
-          draft: null,
+          selectedRbz: null,
+          selectedRbzId: null,
+          rbzEditorMode: null,
+          activeRbzTool: "none",
+          rbzDraft: null,
           focusWaypoints: undefined,
           focusKey: null,
           autoDrawRequested: false,
         };
       }
 
-      const isEditingCurrent = previousState.editorMode === "editing" && previousState.selectedStopId === stop.id;
+      const isEditingCurrent = previousState.rbzEditorMode === "editing" && previousState.selectedRbzId === zone.id;
 
       return {
         ...previousState,
-        selectedStop: stop,
-        selectedStopId: stop.id,
-        focusWaypoints: buildFocusWaypoints(stop),
-        draft: isEditingCurrent ? buildDraftFromStop(stop) : previousState.draft,
+        selectedRbz: zone,
+        selectedRbzId: zone.id,
+        focusWaypoints: buildRbzFocusWaypoints(zone),
+        rbzDraft: isEditingCurrent ? buildRbzDraftFromZone(zone) : previousState.rbzDraft,
       };
     });
   }, []);
 
   const value = useMemo<StopDashboardContextValue>(() => ({
     ...state,
-    selectStop,
-    clearSelection,
-    openCreateEditor,
-    openEditEditor,
-    closeEditor,
-    updateDraftName,
-    updateDraftRestrictionType,
-    updateDraftDisallowedDirection,
-    updateDraftRouteIds,
-    updateDraftPoints,
-    setActiveStopTool,
-    finishStopToolEditing,
+    setActiveTab,
+    setRouteOverlayEnabled,
+    toggleOverlayRouteId,
+    selectTransitStopFromList,
+    selectTransitStopFromMap,
+    clearTransitStopSelection,
+    openTransitStopCreateMode,
+    cancelTransitStopCreateMode,
+    setPendingCreatePoint,
+    setTransitStopEditingPoint,
+    syncSelectedTransitStop,
+    setSelectedTransitStopPublicState,
+    selectRbz,
+    clearRbzSelection,
+    openCreateRbzEditor,
+    openEditRbzEditor,
+    closeRbzEditor,
+    updateRbzDraftName,
+    updateRbzDraftRestrictionType,
+    updateRbzDraftDisallowedDirection,
+    updateRbzDraftRouteIds,
+    updateRbzDraftPoints,
+    setActiveRbzTool,
+    finishRbzToolEditing,
     consumeAutoDrawRequest,
-    setSelectedStopPublicState,
-    syncSelectedStop,
+    setSelectedRbzPublicState,
+    syncSelectedRbz,
   }), [
     state,
-    selectStop,
-    clearSelection,
-    openCreateEditor,
-    openEditEditor,
-    closeEditor,
-    updateDraftName,
-    updateDraftRestrictionType,
-    updateDraftDisallowedDirection,
-    updateDraftRouteIds,
-    updateDraftPoints,
-    setActiveStopTool,
-    finishStopToolEditing,
+    setActiveTab,
+    setRouteOverlayEnabled,
+    toggleOverlayRouteId,
+    selectTransitStopFromList,
+    selectTransitStopFromMap,
+    clearTransitStopSelection,
+    openTransitStopCreateMode,
+    cancelTransitStopCreateMode,
+    setPendingCreatePoint,
+    setTransitStopEditingPoint,
+    syncSelectedTransitStop,
+    setSelectedTransitStopPublicState,
+    selectRbz,
+    clearRbzSelection,
+    openCreateRbzEditor,
+    openEditRbzEditor,
+    closeRbzEditor,
+    updateRbzDraftName,
+    updateRbzDraftRestrictionType,
+    updateRbzDraftDisallowedDirection,
+    updateRbzDraftRouteIds,
+    updateRbzDraftPoints,
+    setActiveRbzTool,
+    finishRbzToolEditing,
     consumeAutoDrawRequest,
-    setSelectedStopPublicState,
-    syncSelectedStop,
+    setSelectedRbzPublicState,
+    syncSelectedRbz,
   ]);
 
   return (

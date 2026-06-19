@@ -2,192 +2,151 @@ import { eq, sql } from "drizzle-orm";
 
 import { db } from "@/lib/db";
 import type * as GeoJSON from "@/lib/db/postgis-extension/geojsonTypes";
-import { restrictedBordingZone, routeRestrictedInBoardingZone } from "@/lib/db/schema";
+import { stops } from "@/lib/db/schema";
 import { ErrorCodes, Failure, Result, Success } from "@/lib/one-of/types";
-import { encodePolyline } from "@/lib/routing/polyline";
 
-export function lineStringToStopPoints(lineString: GeoJSON.LineString | null, stopId: string): StopPointObject[] {
-  if (!lineString?.coordinates) return [];
-  return lineString.coordinates.map((pos, i) => ({
-    id: `${stopId}-${i + 1}`,
-    sequence: i + 1,
-    point: [pos[1], pos[0]] as [number, number],
-  }));
+async function reverseGeocode(lat: number, lon: number): Promise<string> {
+  const baseUrl = process.env.NOMINATIM_URL;
+  if (!baseUrl) {
+    return `${lat}, ${lon}`;
+  }
+
+  try {
+    const url = `${baseUrl.replace(/\/+$/, "")}/reverse?lat=${lat}&lon=${lon}&format=json`;
+    const res = await fetch(url, { cache: "no-store" });
+    if (!res.ok) {
+      return `${lat}, ${lon}`;
+    }
+
+    const data = await res.json() as { display_name?: string };
+    return data.display_name ?? `${lat}, ${lon}`;
+  } catch {
+    return `${lat}, ${lon}`;
+  }
 }
 
-export function pointsToLineString(points: Array<Omit<StopPointObject, "id">>): GeoJSON.LineString {
-  const sorted = [...points].sort((a, b) => a.sequence - b.sequence);
+async function getNextStopNumber(): Promise<number> {
+  const [row] = await db
+    .select({ max: sql<number>`MAX(${stops.number})` })
+    .from(stops);
+
+  return (row?.max ?? 0) + 1;
+}
+
+function pointToTuple(point: GeoJSON.Point | null): [number, number] | null {
+  if (!point?.coordinates) {
+    return null;
+  }
+
+  const [lon, lat] = point.coordinates;
+  return [lat, lon];
+}
+
+function tupleToPoint(tuple: [number, number]): GeoJSON.Point {
+  const [lat, lon] = tuple;
   return {
-    type: "LineString",
-    coordinates: sorted.map(p => [p.point[1], p.point[0]]),
+    type: "Point",
+    coordinates: [lon, lat],
+  };
+}
+
+function mapStopRow(row: {
+  id: string;
+  number: number;
+  address: string;
+  pointGeometry: GeoJSON.Point | null;
+  isPublic: boolean;
+}): StopObject {
+  return {
+    id: row.id,
+    number: row.number,
+    address: row.address,
+    point: pointToTuple(row.pointGeometry),
+    isPublic: row.isPublic,
   };
 }
 
 /**
- * Fetches all stops with their points and restricted routes.
+ * Fetches all transit stops.
  */
-export async function getAllStops(forPublic: boolean = true): Promise<Result<BaseStopObject[] | StopObject[]>> {
+export async function getAllStops(forPublic: boolean = true): Promise<Result<StopObject[]>> {
   try {
-    const routeIdsAggregation = sql<string[]>`
-      COALESCE(
-        json_agg(DISTINCT ${routeRestrictedInBoardingZone.routeId}) FILTER (WHERE ${routeRestrictedInBoardingZone.routeId} IS NOT NULL),
-        '[]'::json
-      )
-    `;
-
-    if (forPublic) {
-      const result = await db
-        .select({
-          id: restrictedBordingZone.id,
-          name: restrictedBordingZone.name,
-          restrictionType: restrictedBordingZone.restrictionType,
-          disallowedDirection: restrictedBordingZone.disallowedDirection,
-          polyline: restrictedBordingZone.polyline,
-          routeIds: routeIdsAggregation,
-        })
-        .from(restrictedBordingZone)
-        .leftJoin(
-          routeRestrictedInBoardingZone,
-          eq(routeRestrictedInBoardingZone.restrictionZoneId, restrictedBordingZone.id),
-        )
-        .where(eq(restrictedBordingZone.isPublic, true))
-        .groupBy(
-          restrictedBordingZone.id,
-          restrictedBordingZone.name,
-          restrictedBordingZone.restrictionType,
-          restrictedBordingZone.disallowedDirection,
-          restrictedBordingZone.polyline,
-          restrictedBordingZone.isPublic,
-        );
-
-      return new Success(result satisfies BaseStopObject[]);
-    }
-
-    const rows = await db
+    const query = db
       .select({
-        id: restrictedBordingZone.id,
-        name: restrictedBordingZone.name,
-        restrictionType: restrictedBordingZone.restrictionType,
-        disallowedDirection: restrictedBordingZone.disallowedDirection,
-        polyline: restrictedBordingZone.polyline,
-        isPublic: restrictedBordingZone.isPublic,
-        pointsGeometry: restrictedBordingZone.points,
-        routeIds: routeIdsAggregation,
+        id: stops.id,
+        number: stops.number,
+        address: stops.address,
+        pointGeometry: stops.point,
+        isPublic: stops.isPublic,
       })
-      .from(restrictedBordingZone)
-      .leftJoin(
-        routeRestrictedInBoardingZone,
-        eq(routeRestrictedInBoardingZone.restrictionZoneId, restrictedBordingZone.id),
-      )
-      .groupBy(
-        restrictedBordingZone.id,
-        restrictedBordingZone.name,
-        restrictedBordingZone.restrictionType,
-        restrictedBordingZone.disallowedDirection,
-        restrictedBordingZone.polyline,
-        restrictedBordingZone.isPublic,
-        restrictedBordingZone.points,
-      );
+      .from(stops);
 
-    const result = rows.map(row => ({
-      id: row.id,
-      name: row.name,
-      restrictionType: row.restrictionType,
-      disallowedDirection: row.disallowedDirection,
-      polyline: row.polyline,
-      isPublic: row.isPublic,
-      points: lineStringToStopPoints(row.pointsGeometry, row.id),
-      routeIds: row.routeIds ?? [],
-    }));
+    const rows = forPublic
+      ? await query.where(eq(stops.isPublic, true))
+      : await query;
 
-    return new Success(result satisfies StopObject[]);
+    const result = rows.map(mapStopRow);
+    return new Success(result);
   } catch (error) {
     return new Failure(ErrorCodes.Fatal, "Failed to fetch stops.", {}, error);
   }
 }
 
 /**
- * Creates a stop with its line points and optional route restrictions.
+ * Creates a transit stop with auto-assigned or user-provided number and reverse-geocoded address.
  */
 export async function createStop(payload: StopAddParameters, ownerId: string): Promise<Result<StopObject>> {
   try {
-    const result = await db.transaction(async tx => {
-      const lineString = pointsToLineString(payload.points);
-      const sortedForPolyline = [...payload.points].sort((a, b) => a.sequence - b.sequence);
-      const encodedPolyline = encodePolyline(sortedForPolyline.map(p => p.point));
+    const [lat, lon] = payload.point;
+    const address = await reverseGeocode(lat, lon);
+    const stopNumber = payload.number ?? await getNextStopNumber();
 
-      const [newStop] = await tx
-        .insert(restrictedBordingZone)
-        .values({
-          name: payload.name,
-          restrictionType: payload.restrictionType,
-          disallowedDirection: payload.disallowedDirection ?? "both",
-          points: lineString,
-          polyline: encodedPolyline,
-          isPublic: false,
-          ownerId,
-        })
-        .returning({
-          id: restrictedBordingZone.id,
-          name: restrictedBordingZone.name,
-          restrictionType: restrictedBordingZone.restrictionType,
-          isPublic: restrictedBordingZone.isPublic,
-          disallowedDirection: restrictedBordingZone.disallowedDirection,
-          polyline: restrictedBordingZone.polyline,
-        });
+    const [newStop] = await db
+      .insert(stops)
+      .values({
+        number: stopNumber,
+        address,
+        point: tupleToPoint(payload.point),
+        isPublic: false,
+        ownerId,
+      })
+      .returning({
+        id: stops.id,
+        number: stops.number,
+        address: stops.address,
+        pointGeometry: stops.point,
+        isPublic: stops.isPublic,
+      });
 
-      if (!newStop) {
-        return tx.rollback();
-      }
+    if (!newStop) {
+      return new Failure(ErrorCodes.Fatal, "Failed to create stop.", { payload });
+    }
 
-      let routeIds: string[] = [];
-      if (payload.restrictionType === "specific" && payload.routeIds && payload.routeIds.length > 0) {
-        const rows = await tx
-          .insert(routeRestrictedInBoardingZone)
-          .values(payload.routeIds.map((routeId) => ({
-            restrictionZoneId: newStop.id,
-            routeId,
-          })))
-          .returning({ routeId: routeRestrictedInBoardingZone.routeId });
-
-        routeIds = rows.map((r) => r.routeId);
-      }
-
-      return {
-        id: newStop.id,
-        name: newStop.name,
-        restrictionType: newStop.restrictionType,
-        isPublic: newStop.isPublic,
-        disallowedDirection: newStop.disallowedDirection,
-        polyline: newStop.polyline,
-        points: lineStringToStopPoints(lineString, newStop.id),
-        routeIds,
-      } satisfies StopObject;
-    });
-
-    return new Success(result);
+    return new Success(mapStopRow(newStop));
   } catch (error) {
     return new Failure(ErrorCodes.Fatal, "Failed to create stop.", { payload }, error);
   }
 }
 
 /**
- * Updates stop fields, points, and junction table entries.
- * Published stops are read-only and must be unpublished first.
+ * Updates a transit stop. Published stops are read-only and must be unpublished first.
  */
 export async function updateStop(stopId: string, params: StopUpdateParameters): Promise<Result<StopObject>> {
   try {
-    const [stop] = await db
-      .select({ id: restrictedBordingZone.id, isPublic: restrictedBordingZone.isPublic })
-      .from(restrictedBordingZone)
-      .where(eq(restrictedBordingZone.id, stopId))
+    const [existing] = await db
+      .select({
+        id: stops.id,
+        isPublic: stops.isPublic,
+      })
+      .from(stops)
+      .where(eq(stops.id, stopId))
       .limit(1);
 
-    if (!stop) {
+    if (!existing) {
       return new Failure(ErrorCodes.ResourceNotFound, "Stop not found.", { stopId });
     }
 
-    if (stop.isPublic) {
+    if (existing.isPublic) {
       return new Failure(
         ErrorCodes.ValidationFailure,
         "Published stops cannot be modified. Unpublish the stop first.",
@@ -195,148 +154,64 @@ export async function updateStop(stopId: string, params: StopUpdateParameters): 
       );
     }
 
-    const updated = await db.transaction(async tx => {
-      const stopPatch = {
-        ...(params.name !== undefined && { name: params.name }),
-        ...(params.restrictionType !== undefined && { restrictionType: params.restrictionType }),
-        ...(params.disallowedDirection !== undefined && { disallowedDirection: params.disallowedDirection }),
-      };
+    const patch: {
+      number?: number;
+      address?: string;
+      point?: GeoJSON.Point;
+    } = {};
 
-      let updatedStop: {
-        id: string;
-        name: string;
-        restrictionType: "universal" | "specific";
-        isPublic: boolean;
-        disallowedDirection: DisallowedDirection;
-        polyline: string;
-        points: GeoJSON.LineString | null;
-      };
+    if (params.number !== undefined) {
+      patch.number = params.number;
+    }
 
-      if (Array.isArray(params.points)) {
-        const lineString = params.points.length === 0 ? null : pointsToLineString(params.points);
-        const sortedForPolyline = [...params.points].sort((a, b) => a.sequence - b.sequence);
-        const encodedPolyline = params.points.length === 0
-          ? ""
-          : encodePolyline(sortedForPolyline.map(p => p.point));
+    if (params.point !== undefined) {
+      const [lat, lon] = params.point;
+      patch.point = tupleToPoint(params.point);
+      patch.address = await reverseGeocode(lat, lon);
+    }
 
-        Object.assign(stopPatch, {
-          points: lineString,
-          polyline: encodedPolyline,
-        });
-      }
+    if (Object.keys(patch).length === 0) {
+      return new Failure(ErrorCodes.ValidationFailure, "No update fields provided.", { stopId });
+    }
 
-      if (Object.keys(stopPatch).length > 0) {
-        const [patched] = await tx
-          .update(restrictedBordingZone)
-          .set(stopPatch)
-          .where(eq(restrictedBordingZone.id, stop.id))
-          .returning({
-            id: restrictedBordingZone.id,
-            name: restrictedBordingZone.name,
-            restrictionType: restrictedBordingZone.restrictionType,
-            isPublic: restrictedBordingZone.isPublic,
-            disallowedDirection: restrictedBordingZone.disallowedDirection,
-            polyline: restrictedBordingZone.polyline,
-            points: restrictedBordingZone.points,
-          });
+    const [updated] = await db
+      .update(stops)
+      .set(patch)
+      .where(eq(stops.id, stopId))
+      .returning({
+        id: stops.id,
+        number: stops.number,
+        address: stops.address,
+        pointGeometry: stops.point,
+        isPublic: stops.isPublic,
+      });
 
-        if (!patched) {
-          return tx.rollback();
-        }
+    if (!updated) {
+      return new Failure(ErrorCodes.ResourceNotFound, "Stop not found.", { stopId });
+    }
 
-        updatedStop = patched;
-      } else {
-        const [existing] = await tx
-          .select({
-            id: restrictedBordingZone.id,
-            name: restrictedBordingZone.name,
-            restrictionType: restrictedBordingZone.restrictionType,
-            isPublic: restrictedBordingZone.isPublic,
-            disallowedDirection: restrictedBordingZone.disallowedDirection,
-            polyline: restrictedBordingZone.polyline,
-            points: restrictedBordingZone.points,
-          })
-          .from(restrictedBordingZone)
-          .where(eq(restrictedBordingZone.id, stop.id))
-          .limit(1);
-
-        if (!existing) {
-          return tx.rollback();
-        }
-
-        updatedStop = existing;
-      }
-
-      const points = lineStringToStopPoints(updatedStop.points, updatedStop.id);
-
-      if (updatedStop.restrictionType === "universal") {
-        await tx.delete(routeRestrictedInBoardingZone)
-          .where(eq(routeRestrictedInBoardingZone.restrictionZoneId, updatedStop.id));
-      }
-
-      let routeIds: string[];
-      if (updatedStop.restrictionType === "specific" && Array.isArray(params.routeIds)) {
-        await tx.delete(routeRestrictedInBoardingZone)
-          .where(eq(routeRestrictedInBoardingZone.restrictionZoneId, updatedStop.id));
-
-        if (params.routeIds.length > 0) {
-          const rows = await tx
-            .insert(routeRestrictedInBoardingZone)
-            .values(params.routeIds.map((routeId) => ({
-              restrictionZoneId: updatedStop.id,
-              routeId,
-            })))
-            .returning({ routeId: routeRestrictedInBoardingZone.routeId });
-
-          routeIds = rows.map((r) => r.routeId);
-        } else {
-          routeIds = [];
-        }
-      } else if (updatedStop.restrictionType === "universal") {
-        routeIds = [];
-      } else {
-        const existing = await tx
-          .select({ routeId: routeRestrictedInBoardingZone.routeId })
-          .from(routeRestrictedInBoardingZone)
-          .where(eq(routeRestrictedInBoardingZone.restrictionZoneId, updatedStop.id));
-
-        routeIds = existing.map((r) => r.routeId);
-      }
-
-      return {
-        id: updatedStop.id,
-        name: updatedStop.name,
-        restrictionType: updatedStop.restrictionType,
-        isPublic: updatedStop.isPublic,
-        disallowedDirection: updatedStop.disallowedDirection,
-        polyline: updatedStop.polyline,
-        points,
-        routeIds,
-      } satisfies StopObject;
-    });
-
-    return new Success(updated);
+    return new Success(mapStopRow(updated));
   } catch (error) {
     return new Failure(ErrorCodes.Fatal, "Failed to update stop.", { stopId, params }, error);
   }
 }
 
 /**
- * Deletes a stop and all of its associated data (cascade).
+ * Deletes a transit stop.
  */
 export async function removeStop(stopId: string): Promise<Result<null>> {
   try {
     const [selectedStop] = await db
-      .select({ id: restrictedBordingZone.id })
-      .from(restrictedBordingZone)
-      .where(eq(restrictedBordingZone.id, stopId))
+      .select({ id: stops.id })
+      .from(stops)
+      .where(eq(stops.id, stopId))
       .limit(1);
 
     if (!selectedStop) {
       return new Failure(ErrorCodes.ResourceNotFound, "Stop not found.", { stopId });
     }
 
-    await db.delete(restrictedBordingZone).where(eq(restrictedBordingZone.id, selectedStop.id));
+    await db.delete(stops).where(eq(stops.id, selectedStop.id));
     return new Success(null);
   } catch (error) {
     return new Failure(
@@ -354,10 +229,14 @@ export async function removeStop(stopId: string): Promise<Result<null>> {
 export async function isStopModifiable(stopId: string): Promise<Result<boolean>> {
   try {
     const [stop] = await db
-      .select({ isPublic: restrictedBordingZone.isPublic })
-      .from(restrictedBordingZone)
-      .where(eq(restrictedBordingZone.id, stopId))
+      .select({ isPublic: stops.isPublic })
+      .from(stops)
+      .where(eq(stops.id, stopId))
       .limit(1);
+
+    if (!stop) {
+      return new Failure(ErrorCodes.ResourceNotFound, "Stop not found.", { stopId });
+    }
 
     return new Success(!stop.isPublic);
   } catch (e) {
@@ -371,10 +250,10 @@ export async function isStopModifiable(stopId: string): Promise<Result<boolean>>
 export async function toggleStopPublic(stopId: string, state: boolean): Promise<Result<PublicToggleResult>> {
   try {
     const [update] = await db
-      .update(restrictedBordingZone)
+      .update(stops)
       .set({ isPublic: state })
-      .where(eq(restrictedBordingZone.id, stopId))
-      .returning({ id: restrictedBordingZone.id, isPublic: restrictedBordingZone.isPublic });
+      .where(eq(stops.id, stopId))
+      .returning({ id: stops.id, isPublic: stops.isPublic });
 
     if (!update) {
       return new Failure(ErrorCodes.ResourceNotFound, "Stop not found.", { stopId, state });
@@ -389,39 +268,22 @@ export async function toggleStopPublic(stopId: string, state: boolean): Promise<
   }
 }
 
-export interface StopPointObject {
+export interface StopObject {
   id: string;
-  sequence: number;
+  number: number;
+  address: string;
+  point: [number, number] | null;
+  isPublic: boolean;
+}
+
+export interface StopAddParameters {
+  number?: number;
   point: [number, number];
 }
 
-export type DisallowedDirection = "direction_to" | "direction_back" | "both";
-
-export interface BaseStopObject {
-  id: string;
-  name: string;
-  restrictionType: "universal" | "specific";
-  disallowedDirection: DisallowedDirection;
-  polyline: string;
-  routeIds: string[];
-}
-
-export type StopObject = BaseStopObject & { isPublic: boolean; points: StopPointObject[] }
-
-export interface StopAddParameters {
-  name: string;
-  restrictionType: "universal" | "specific";
-  disallowedDirection?: DisallowedDirection;
-  points: Array<Omit<StopPointObject, "id">>;
-  routeIds?: string[];
-}
-
 export interface StopUpdateParameters {
-  name?: string;
-  restrictionType?: "universal" | "specific";
-  disallowedDirection?: DisallowedDirection;
-  points?: Array<Omit<StopPointObject, "id">>;
-  routeIds?: string[];
+  number?: number;
+  point?: [number, number];
 }
 
 export interface PublicToggleResult {

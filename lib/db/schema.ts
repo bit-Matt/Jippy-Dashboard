@@ -2,7 +2,7 @@ import { relations } from "drizzle-orm";
 import { pgEnum, pgTable, text, timestamp, boolean, index, integer, geometry, uuid } from "drizzle-orm/pg-core";
 import { v7 as uuidv7 } from "uuid";
 
-import { lineString, polygon } from "@/lib/db/postgis-extension/models";
+import { lineString, point, polygon } from "@/lib/db/postgis-extension/models";
 
 // TODO: Update enums as strings instead. We need to remove this stuff.
 export const roles = pgEnum("role", ["administrator_user", "regular_user"]);
@@ -456,6 +456,25 @@ export const routeRestrictedInBoardingZone = pgTable("routes_restricted_in_board
 }, (t) => [
   index("stop_routes_ref_idx").on(t.restrictionZoneId),
 ]);
+
+export const stops = pgTable("stops", {
+  id: uuid("id")
+    .primaryKey()
+    .$default(() => uuidv7()),
+
+  number: integer("stop_number").notNull(),
+  address: text("address").notNull(),
+  point: point("point", { srid: 4326 }),
+
+  isPublic: boolean("is_public").default(false).notNull(),
+  ownerId: text("owner_id")
+    .references(() => user.id, { onDelete: "set null" }),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at")
+    .defaultNow()
+    .$onUpdate(() => new Date())
+    .notNull(),
+});
 
 export const feedback = pgTable(
   "feedback",

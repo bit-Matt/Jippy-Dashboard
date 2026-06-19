@@ -2,52 +2,42 @@
 
 import { X } from "lucide-react";
 
-import type { RestrictedBoardingZoneResponse } from "@/contracts/responses";
-import { formatRbzDisallowedDirection, formatRbzRestrictionType } from "@/lib/stops/display";
+import type { StopResponse } from "@/contracts/responses";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { Switch } from "@/components/ui/switch";
 
-interface StopItemSidebarProps {
-  stop: RestrictedBoardingZoneResponse;
+interface TransitStopItemSidebarProps {
+  stop: StopResponse;
   userRole: string | null;
-  routeNameLookup: Record<string, string>;
   isPublishing: boolean;
   isDeletingStop: boolean;
   onClose: () => void;
-  onEditStop: () => void;
   onDeleteStop: () => void;
   onTogglePublic: (isPublic: boolean) => void;
 }
 
-const asDisplayList = (ids: string[], lookup: Record<string, string>) => {
-  return ids.map((id) => lookup[id] ?? id);
-};
-
-export default function StopItemSidebar({
+export default function TransitStopItemSidebar({
   stop,
   userRole,
-  routeNameLookup,
   isPublishing,
   isDeletingStop,
   onClose,
-  onEditStop,
   onDeleteStop,
   onTogglePublic,
-}: StopItemSidebarProps) {
+}: TransitStopItemSidebarProps) {
   const isAdministrator = userRole === "administrator_user";
   const isPublished = stop.isPublic;
-  const resolvedRoutes = asDisplayList(stop.routeIds, routeNameLookup);
 
   return (
     <Card>
       <CardHeader className="gap-1 pb-2">
         <div className="flex items-start justify-between gap-2">
           <div>
-            <CardTitle className="text-base">Restricted Zone Details</CardTitle>
-            <p className="text-sm font-medium">{stop.name.trim() || "(untitled)"}</p>
+            <CardTitle className="text-base">Stop Details</CardTitle>
+            <p className="text-sm font-medium">Stop #{stop.number}</p>
             <Badge
               className={`mt-1 w-fit ${
                 stop.isPublic
@@ -66,33 +56,16 @@ export default function StopItemSidebar({
       </CardHeader>
       <CardContent className="max-h-[75vh] space-y-3 overflow-y-auto">
         <div className="space-y-1 rounded-md border p-3">
-          <p className="text-xs text-muted-foreground">Restriction Type</p>
-          <p className="text-sm font-medium">
-            {formatRbzRestrictionType(stop.restrictionType)}
-          </p>
+          <p className="text-xs text-muted-foreground">Address</p>
+          <p className="text-sm font-medium">{stop.address}</p>
         </div>
 
-        <div className="space-y-1 rounded-md border p-3">
-          <p className="text-xs text-muted-foreground">Disallowed Direction</p>
-          <p className="text-sm font-medium">
-            {formatRbzDisallowedDirection(stop.disallowedDirection)}
-          </p>
-        </div>
-
-        {stop.restrictionType === "specific" ? (
-          <div className="space-y-3 rounded-md border p-3">
-            <div className="space-y-1">
-              <p className="text-xs text-muted-foreground">Disallowed Routes</p>
-              {resolvedRoutes.length === 0 ? (
-                <p className="text-sm">No route restrictions configured.</p>
-              ) : (
-                <ul className="list-disc space-y-1 pl-5 text-sm">
-                  {resolvedRoutes.map((routeName) => (
-                    <li key={routeName}>{routeName}</li>
-                  ))}
-                </ul>
-              )}
-            </div>
+        {stop.point ? (
+          <div className="space-y-1 rounded-md border p-3">
+            <p className="text-xs text-muted-foreground">Coordinates</p>
+            <p className="text-sm font-medium">
+              {stop.point[0].toFixed(6)}, {stop.point[1].toFixed(6)}
+            </p>
           </div>
         ) : null}
 
@@ -124,16 +97,6 @@ export default function StopItemSidebar({
         </div>
 
         <Separator />
-
-        <Button
-          type="button"
-          className="w-full"
-          variant="outline"
-          onClick={onEditStop}
-          disabled={isPublishing || isDeletingStop || isPublished}
-        >
-          {isPublished ? "Unpublish To Edit" : "Edit Stop"}
-        </Button>
 
         <Button
           type="button"

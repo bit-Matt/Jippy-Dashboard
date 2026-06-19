@@ -31,11 +31,7 @@ export async function PATCH(
       .build();
   }
 
-  const hasAnyPatchField = data.name !== undefined
-    || data.points !== undefined
-    || data.restrictionType !== undefined
-    || data.routeIds !== undefined
-    || data.disallowedDirection !== undefined;
+  const hasAnyPatchField = data.number !== undefined || data.point !== undefined;
   if (!hasAnyPatchField) {
     return ApiResponseBuilder.createError(StatusCodes.Status400BadRequest, [{ message: "No update fields provided." }])
       .build();
@@ -43,61 +39,15 @@ export async function PATCH(
 
   const validation = await validator.validate<PatchRequestBody>(data, {
     properties: {
-      name: { type: "string", formatter: "non-empty-string" },
-      restrictionType: {
-        type: "string",
-        formatterFn: async (value) => {
-          if (value !== "universal" && value !== "specific") {
-            return { ok: false, error: "restrictionType must be 'universal' or 'specific'." };
-          }
-          return { ok: true };
-        },
-      },
-      points: {
+      number: { type: "number", formatter: "positive-integer" },
+      point: {
         type: "object",
-        formatterFn: async (values) => {
-          if (!Array.isArray(values)) {
-            return { ok: false, error: "Invalid points." };
-          }
-
-          if (values.length < 2) {
-            return { ok: false, error: "At least 2 points are required." };
-          }
-
-          for (const point of values) {
-            if (!utils.isExisty(point.sequence) || !utils.isFinite(point.sequence)) {
-              return { ok: false, error: "Invalid sequence." };
-            }
-
-            if (!utils.isExisty(point.point) || !utils.isTuple(point.point)) {
-              return { ok: false, error: "Invalid point." };
-            }
-          }
-
-          return { ok: true };
-        },
-      },
-      routeIds: {
-        type: "object",
-        formatterFn: async (values) => {
-          if (!Array.isArray(values)) {
-            return { ok: false, error: "routeIds must be an array." };
-          }
-
-          for (const routeId of values) {
-            if (!utils.isUuid(routeId)) {
-              return { ok: false, error: "Invalid route ID." };
-            }
-          }
-
-          return { ok: true };
-        },
-      },
-      disallowedDirection: {
-        type: "string",
         formatterFn: async (value) => {
-          if (value !== "direction_to" && value !== "direction_back" && value !== "both") {
-            return { ok: false, error: "disallowedDirection must be 'direction_to', 'direction_back', or 'both'." };
+          if (value === undefined) {
+            return { ok: true };
+          }
+          if (!utils.isTuple(value)) {
+            return { ok: false, error: "Invalid point." };
           }
           return { ok: true };
         },
@@ -118,7 +68,7 @@ export async function PATCH(
         actorUserId: currentSession.user!.id,
         actorRole: currentSession.user!.role,
         category: "write_operation",
-        action: "stop_entry_updated",
+        action: "transit_stop_updated",
         summary: `Updated stop ${id}`,
         routePath: `/api/restricted/management/stops/${id}`,
         httpMethod: "PATCH",
@@ -168,7 +118,7 @@ export async function DELETE(
           actorUserId: currentSession.user!.id,
           actorRole: currentSession.user!.role,
           category: "write_operation",
-          action: "stop_deleted",
+          action: "transit_stop_deleted",
           summary: `Deleted stop ${id}`,
           routePath: `/api/restricted/management/stops/${id}`,
           httpMethod: "DELETE",
@@ -192,12 +142,6 @@ export async function DELETE(
 }
 
 type PatchRequestBody = {
-  name?: string;
-  restrictionType?: "universal" | "specific";
-  disallowedDirection?: "direction_to" | "direction_back" | "both";
-  points?: Array<{
-    sequence: number;
-    point: [number, number];
-  }>;
-  routeIds?: string[];
+  number?: number;
+  point?: [number, number];
 }

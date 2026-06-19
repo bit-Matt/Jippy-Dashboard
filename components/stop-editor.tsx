@@ -12,8 +12,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
 import { useStopDashboard } from "@/contexts/StopDashboardContext";
-import type { StopRestrictionType, StopDisallowedDirection } from "@/contracts/responses";
-import { formatStopDisallowedDirection, formatStopRestrictionType } from "@/lib/stops/display";
+import type { RbzDisallowedDirection, RbzRestrictionType } from "@/contracts/responses";
+import { formatRbzDisallowedDirection, formatRbzRestrictionType } from "@/lib/stops/display";
 
 const stopDraftSchema = z.object({
   name: z.string().trim().min(1, "Stop name is required."),
@@ -55,15 +55,15 @@ interface EditorErrors {
   points?: string;
 }
 
-const restrictionTypeOptions: Array<{ value: StopRestrictionType; label: string }> = [
-  { value: "universal", label: formatStopRestrictionType("universal") },
-  { value: "specific", label: formatStopRestrictionType("specific") },
+const restrictionTypeOptions: Array<{ value: RbzRestrictionType; label: string }> = [
+  { value: "universal", label: formatRbzRestrictionType("universal") },
+  { value: "specific", label: formatRbzRestrictionType("specific") },
 ];
 
-const disallowedDirectionOptions: Array<{ value: StopDisallowedDirection; label: string }> = [
-  { value: "both", label: formatStopDisallowedDirection("both") },
-  { value: "direction_to", label: formatStopDisallowedDirection("direction_to") },
-  { value: "direction_back", label: formatStopDisallowedDirection("direction_back") },
+const disallowedDirectionOptions: Array<{ value: RbzDisallowedDirection; label: string }> = [
+  { value: "both", label: formatRbzDisallowedDirection("both") },
+  { value: "direction_to", label: formatRbzDisallowedDirection("direction_to") },
+  { value: "direction_back", label: formatRbzDisallowedDirection("direction_back") },
 ];
 
 export default function StopEditor({
@@ -72,17 +72,17 @@ export default function StopEditor({
   onSave,
 }: StopEditorProps) {
   const {
-    editorMode,
-    draft,
-    activeStopTool,
-    closeEditor,
-    setActiveStopTool,
-    finishStopToolEditing,
-    updateDraftName,
-    updateDraftRestrictionType,
-    updateDraftDisallowedDirection,
-    updateDraftRouteIds,
-    updateDraftPoints,
+    rbzEditorMode: editorMode,
+    rbzDraft: draft,
+    activeRbzTool: activeStopTool,
+    closeRbzEditor: closeEditor,
+    setActiveRbzTool: setActiveStopTool,
+    finishRbzToolEditing: finishStopToolEditing,
+    updateRbzDraftName: updateDraftName,
+    updateRbzDraftRestrictionType: updateDraftRestrictionType,
+    updateRbzDraftDisallowedDirection: updateDraftDisallowedDirection,
+    updateRbzDraftRouteIds: updateDraftRouteIds,
+    updateRbzDraftPoints: updateDraftPoints,
   } = useStopDashboard();
 
   const [errors, setErrors] = useState<EditorErrors>({});
@@ -175,7 +175,7 @@ export default function StopEditor({
             <NativeSelect
               id="restriction-type"
               value={draft.restrictionType}
-              onChange={(event) => updateDraftRestrictionType(event.target.value as StopRestrictionType)}
+              onChange={(event) => updateDraftRestrictionType(event.target.value as RbzRestrictionType)}
               aria-invalid={Boolean(errors.restrictionType)}
               className="w-full"
             >
@@ -193,7 +193,7 @@ export default function StopEditor({
             <NativeSelect
               id="disallowed-direction"
               value={draft.disallowedDirection}
-              onChange={(event) => updateDraftDisallowedDirection(event.target.value as StopDisallowedDirection)}
+              onChange={(event) => updateDraftDisallowedDirection(event.target.value as RbzDisallowedDirection)}
               className="w-full"
             >
               {disallowedDirectionOptions.map((option) => (

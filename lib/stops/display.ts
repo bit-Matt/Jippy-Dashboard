@@ -1,8 +1,8 @@
-import type { StopDisallowedDirection, StopRestrictionType, StopResponse } from "@/contracts/responses";
+import type { RbzDisallowedDirection, RbzRestrictionType, RestrictedBoardingZoneResponse } from "@/contracts/responses";
 import { decodePolyline } from "@/lib/routing/polyline";
 
-export function getStopLineCoordinates(stop: Pick<StopResponse, "points" | "polyline">): Array<[number, number]> {
-  const sortedPoints = [...stop.points]
+export function getRbzLineCoordinates(zone: Pick<RestrictedBoardingZoneResponse, "points" | "polyline">): Array<[number, number]> {
+  const sortedPoints = [...zone.points]
     .sort((a, b) => a.sequence - b.sequence)
     .map((point) => point.point)
     .filter(([lat, lng]) => Number.isFinite(lat) && Number.isFinite(lng));
@@ -11,18 +11,18 @@ export function getStopLineCoordinates(stop: Pick<StopResponse, "points" | "poly
     return sortedPoints;
   }
 
-  if (stop.polyline.trim()) {
-    return decodePolyline(stop.polyline);
+  if (zone.polyline.trim()) {
+    return decodePolyline(zone.polyline);
   }
 
   return [];
 }
 
-export function formatStopRestrictionType(restrictionType: StopRestrictionType): string {
+export function formatRbzRestrictionType(restrictionType: RbzRestrictionType): string {
   return restrictionType === "universal" ? "Universal" : "Specific routes";
 }
 
-export function formatStopDisallowedDirection(direction: StopDisallowedDirection): string {
+export function formatRbzDisallowedDirection(direction: RbzDisallowedDirection): string {
   switch (direction) {
   case "direction_to":
     return "Direction to";

@@ -2,7 +2,7 @@ import type { NextRequest } from "next/server";
 
 import { session, SessionCode } from "@/lib/auth";
 import { ApiResponseBuilder, StatusCodes } from "@/lib/http";
-import { logActivity } from "@/lib/management/activity-logger";
+import { logActivity, logDashboardVisit } from "@/lib/management/activity-logger";
 import * as dataManager from "@/lib/management/data-manager";
 import { invalidate } from "@/lib/routing-fast";
 import { oneOf } from "@/lib/one-of";
@@ -16,7 +16,15 @@ export async function GET() {
 
   const result = await dataManager.getSnapshotCleanupStats();
   return oneOf(result).match(
-    stats => ApiResponseBuilder.create(StatusCodes.Status200Ok).withBody(stats).build(),
+    (stats) => {
+      void logDashboardVisit({
+        actorUserId: currentSession.user!.id,
+        actorRole: currentSession.user!.role,
+        routePath: "/dashboard/data",
+        summary: "Visited data management dashboard",
+      });
+      return ApiResponseBuilder.create(StatusCodes.Status200Ok).withBody(stats).build();
+    },
     error => ApiResponseBuilder.createFromFailure(error).build(),
   );
 }

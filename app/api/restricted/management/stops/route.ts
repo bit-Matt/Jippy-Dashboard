@@ -52,84 +52,24 @@ export async function POST(req: NextRequest) {
 
   const validation = await validator.validate<RequestBody>(data, {
     properties: {
-      name: { type: "string", formatter: "non-empty-string" },
-      restrictionType: {
-        type: "string",
-        formatterFn: async (value) => {
-          if (value !== "universal" && value !== "specific") {
-            return { ok: false, error: "restrictionType must be 'universal' or 'specific'." };
-          }
-          return { ok: true };
-        },
-      },
-      points: {
+      number: { type: "number", formatter: "positive-integer" },
+      point: {
         type: "object",
-        formatterFn: async (values) => {
-          if (!Array.isArray(values)) {
-            return { ok: false, error: "Invalid points." };
-          }
-
-          if (values.length < 2) {
-            return { ok: false, error: "At least 2 points are required." };
-          }
-
-          for (const point of values) {
-            if (!utils.isExisty(point.sequence) || !utils.isFinite(point.sequence)) {
-              return { ok: false, error: "Invalid sequence." };
-            }
-
-            if (!utils.isExisty(point.point) || !utils.isTuple(point.point)) {
-              return { ok: false, error: "Invalid point." };
-            }
-          }
-
-          return { ok: true };
-        },
-      },
-      routeIds: {
-        type: "object",
-        formatterFn: async (values) => {
-          if (!Array.isArray(values)) {
-            return { ok: false, error: "routeIds must be an array." };
-          }
-
-          for (const id of values) {
-            if (!utils.isUuid(id)) {
-              return { ok: false, error: "Invalid route ID." };
-            }
-          }
-
-          return { ok: true };
-        },
-      },
-      disallowedDirection: {
-        type: "string",
         formatterFn: async (value) => {
-          if (value !== "direction_to" && value !== "direction_back" && value !== "both") {
-            return { ok: false, error: "disallowedDirection must be 'direction_to', 'direction_back', or 'both'." };
+          if (!utils.isTuple(value)) {
+            return { ok: false, error: "Invalid point." };
           }
           return { ok: true };
         },
       },
     },
-    requiredProperties: ["name", "restrictionType", "points"],
+    requiredProperties: ["point"],
     allowUnvalidatedProperties: false,
   });
   if (!validation.ok) {
     return ApiResponseBuilder
       .createError(StatusCodes.Status400BadRequest, validation.errors!)
       .build();
-  }
-
-  // Business rule: if SPECIFIC, must have at least one routeId
-  if (data.restrictionType === "specific") {
-    const hasRoutes = Array.isArray(data.routeIds) && data.routeIds.length > 0;
-
-    if (!hasRoutes) {
-      return ApiResponseBuilder.createError(StatusCodes.Status400BadRequest, [{
-        message: "When restrictionType is 'specific', at least one routeId must be provided.",
-      }]).build();
-    }
   }
 
   const result = await stop.createStop(data, currentSession.user!.id);
@@ -139,8 +79,8 @@ export async function POST(req: NextRequest) {
         actorUserId: currentSession.user!.id,
         actorRole: currentSession.user!.role,
         category: "write_operation",
-        action: "stop_created",
-        summary: `Created stop ${s.name}`,
+        action: "transit_stop_created",
+        summary: `Created stop #${s.number}`,
         routePath: "/api/restricted/management/stops",
         httpMethod: "POST",
         statusCode: StatusCodes.Status201Created,
@@ -156,12 +96,6 @@ export async function POST(req: NextRequest) {
 }
 
 type RequestBody = {
-  name: string;
-  restrictionType: "universal" | "specific";
-  disallowedDirection?: "direction_to" | "direction_back" | "both";
-  points: Array<{
-    sequence: number;
-    point: [number, number];
-  }>;
-  routeIds?: string[];
+  number?: number;
+  point: [number, number];
 }

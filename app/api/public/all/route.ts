@@ -3,7 +3,7 @@ import { cacheManager } from "@/lib/cache";
 import * as closure from "@/lib/management/closure-manager";
 import * as region from "@/lib/management/region-manager";
 import * as route from "@/lib/management/route-manager";
-import * as stops from "@/lib/management/stop-manager";
+import * as restrictedBoardingZones from "@/lib/management/restricted-boarding-zone-manager";
 import { unwrap } from "@/lib/one-of";
 import {RedisJSON} from "redis";
 
@@ -30,7 +30,7 @@ export async function GET() {
       unwrap(route.getAllRoutes(true)),
       unwrap(region.getAllRegions(true)),
       unwrap(closure.getAllClosures(true)),
-      unwrap(stops.getAllStops(true)),
+      unwrap(restrictedBoardingZones.getAllRestrictedBoardingZones(true)),
     ]);
 
     const response = {
@@ -60,5 +60,5 @@ type AllData = {
   routes: route.RouteBaseObject[]
   regions: region.RegionBaseObject[]
   closure: closure.ClosureBaseObject[]
-  stops: stops.BaseStopObject[]
+  stops: restrictedBoardingZones.BaseRbzObject[]
 }

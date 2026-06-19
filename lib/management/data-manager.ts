@@ -18,7 +18,7 @@ import {
 } from "@/lib/db/schema";
 import type { ExportPayload, ImportPayload } from "@/lib/management/data-schema";
 import { polygonToPointObjects, pointsToPolygon } from "@/lib/management/closure-manager";
-import { lineStringToStopPoints, pointsToLineString } from "@/lib/management/stop-manager";
+import { lineStringToRbzPoints, pointsToLineString } from "@/lib/management/restricted-boarding-zone-manager";
 import { ErrorCodes, Failure, Result, Success } from "@/lib/one-of/types";
 
 type LatLng = [number, number];
@@ -423,7 +423,7 @@ export async function exportAllData(): Promise<Result<ExportPayload>> {
         polyline: stop.polyline,
         isPublic: stop.isPublic,
         routeIds: stop.routeIds ?? [],
-        points: lineStringToStopPoints(stop.pointsGeometry, stop.id).map(({ sequence, point }) => ({
+        points: lineStringToRbzPoints(stop.pointsGeometry, stop.id).map(({ sequence, point }) => ({
           sequence,
           point,
         })),
