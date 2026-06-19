@@ -15,6 +15,8 @@ import {
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
+  SidebarRail,
+  SidebarTrigger,
 } from "@/components/ui/sidebar";
 
 export function AppSidebar({
@@ -107,21 +109,24 @@ export function AppSidebar({
   };
 
   return (
-    <Sidebar variant="inset" {...props}>
+    <Sidebar variant="inset" collapsible="icon" {...props}>
       <SidebarHeader>
         <SidebarMenu>
           <SidebarMenuItem>
-            <SidebarMenuButton size="lg" asChild>
-              <a href="#">
-                <div className="bg-sidebar-primary text-sidebar-primary-foreground flex aspect-square size-8 items-center justify-center rounded-lg">
-                  <Command className="size-4" />
-                </div>
-                <div className="grid flex-1 text-left text-sm leading-tight">
-                  <span className="truncate font-medium">Jippy Dashboard</span>
-                  <span className="truncate text-xs">v0.0.1-alpha</span>
-                </div>
-              </a>
-            </SidebarMenuButton>
+            <div className="flex w-full items-center gap-1 group-data-[collapsible=icon]:flex-col">
+              <SidebarMenuButton size="lg" asChild className="min-w-0 flex-1" tooltip="Jippy Dashboard">
+                <a href="#">
+                  <div className="bg-sidebar-primary text-sidebar-primary-foreground flex aspect-square size-8 items-center justify-center rounded-lg">
+                    <Command className="size-4" />
+                  </div>
+                  <div className="grid flex-1 text-left text-sm leading-tight">
+                    <span className="truncate font-medium">Jippy Dashboard</span>
+                    <span className="truncate text-xs">v0.0.1-alpha</span>
+                  </div>
+                </a>
+              </SidebarMenuButton>
+              <SidebarTrigger className="shrink-0" />
+            </div>
           </SidebarMenuItem>
         </SidebarMenu>
       </SidebarHeader>
@@ -140,6 +145,7 @@ export function AppSidebar({
           hasError={Boolean(error || meResponse?.error)}
         />
       </SidebarFooter>
+      <SidebarRail />
     </Sidebar>
   );
 }
