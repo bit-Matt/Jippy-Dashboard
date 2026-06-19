@@ -14,9 +14,8 @@ public class DataContext : DbContext
     public DbSet<RegionSequence> RegionSequences => Set<RegionSequence>();
     public DbSet<RegionStation> RegionStations => Set<RegionStation>();
     public DbSet<RoadClosure> RoadClosures => Set<RoadClosure>();
-    public DbSet<RoadClosurePoint> RoadClosurePoints => Set<RoadClosurePoint>();
-    public DbSet<Stop> Stops => Set<Stop>();
-    public DbSet<StopRoute> StopRoutes => Set<StopRoute>();
+    public DbSet<RestrictedBordingZone> RestrictedBordingZones => Set<RestrictedBordingZone>();
+    public DbSet<RoutesRestrictedInBoardingZone> RoutesRestrictedInBoardingZones => Set<RoutesRestrictedInBoardingZone>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -37,20 +36,12 @@ public class DataContext : DbContext
                 .HasForeignKey(st => st.RegionSnapshotId);
         });
 
-        // RoadClosure → points
-        modelBuilder.Entity<RoadClosure>(e =>
+        // RestrictedBordingZone → routes (join)
+        modelBuilder.Entity<RestrictedBordingZone>(e =>
         {
-            e.HasMany(rc => rc.Points)
-                .WithOne(pt => pt.RoadClosure)
-                .HasForeignKey(pt => pt.RoadClosureId);
-        });
-
-        // Stop → routes (join)
-        modelBuilder.Entity<Stop>(e =>
-        {
-            e.HasMany(s => s.Routes)
-                .WithOne(sr => sr.Stop)
-                .HasForeignKey(sr => sr.StopId);
+            e.HasMany(z => z.Routes)
+                .WithOne(r => r.RestrictionZone)
+                .HasForeignKey(r => r.RestrictionZoneId);
         });
     }
 }

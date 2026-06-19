@@ -89,25 +89,32 @@ public sealed class GraphBuilder(DataContext db, OsrmWalkClient osrmWalk, Transi
         var dbClosures = await db.RoadClosures
             .AsNoTracking()
             .Where(c => c.IsPublic && (c.EndDate == null || c.EndDate > DateTime.UtcNow))
-            .Include(c => c.Points)
             .ToListAsync();
 
-        var closures = dbClosures.Select(c => new TransitClosure
-        {
-            Id = c.Id.ToString(),
-            ClosureName = c.Name,
-            Points = c.Points
-                .Select(p => new RegionPoint
+        var closures = dbClosures
+            .Where(c => c.Polygon != null && c.Polygon.ExteriorRing.NumPoints >= 4)
+            .Select(c =>
+            {
+                var coords = c.Polygon!.ExteriorRing.Coordinates;
+                return new TransitClosure
                 {
-                    Id = p.Id.ToString(),
-                    Sequence = p.SequenceNumber,
-                    Point = GeoUtils.ToLatLng(p.Point),
-                })
-                .ToList(),
-        }).ToList();
+                    Id = c.Id.ToString(),
+                    ClosureName = c.Name,
+                    Points = coords
+                        .Take(coords.Length - 1)
+                        .Select((coord, i) => new RegionPoint
+                        {
+                            Id = $"{c.Id}:{i}",
+                            Sequence = i,
+                            Point = new LatLng(coord.Y, coord.X),
+                        })
+                        .ToList(),
+                };
+            })
+            .ToList();
 
         // Public stops with their associated route restrictions
-        var dbStops = await db.Stops
+        var dbStops = await db.RestrictedBordingZones
             .AsNoTracking()
             .Where(s => s.IsPublic && s.Polyline != string.Empty)
             .Include(s => s.Routes)

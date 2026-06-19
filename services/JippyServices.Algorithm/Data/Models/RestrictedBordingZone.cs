@@ -4,12 +4,12 @@ using System.ComponentModel.DataAnnotations.Schema;
 namespace JippyServices.Algorithm.Data.Models;
 
 /// <summary>
-/// Maps to the "stops" table. Represents a no-boarding / no-alighting zone
+/// Maps to the "restricted_boarding_zone" table. Represents a no-boarding / no-alighting zone
 /// defined by an encoded polyline. Nodes that fall within STOP_PROXIMITY_METERS
 /// of the polyline are restricted for the specified direction(s) and routes.
 /// </summary>
-[Table("stops")]
-public class Stop
+[Table("restricted_boarding_zone")]
+public class RestrictedBordingZone
 {
     [Key]
     [Column("id")]
@@ -34,5 +34,5 @@ public class Stop
     public bool IsPublic { get; set; }
 
     /// <summary>Routes whose nodes are restricted when RestrictionType is "specific".</summary>
-    public ICollection<StopRoute> Routes { get; set; } = [];
+    public ICollection<RoutesRestrictedInBoardingZone> Routes { get; set; } = [];
 }
