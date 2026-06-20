@@ -118,7 +118,7 @@ public sealed class LegAssembler(
     // Convert path sections into RouteLeg array
     // =====================================================================
 
-    public async Task<List<RouteLeg>> BuildLegsFromSectionsAsync(List<PathSection> sections)
+    public async Task<List<RouteLeg>> BuildLegsFromSectionsAsync(List<PathSection> sections, RoutingConfig config)
     {
         var legs = new List<RouteLeg>();
 
@@ -162,7 +162,7 @@ public sealed class LegAssembler(
                     {
                         var straightDist = GeoUtils.HaversineMeters(from, to);
                         if (straightDist < 1) continue;
-                        var leg = await BuildLocalTricycleLegAsync(from, to, stationName);
+                        var leg = await BuildLocalTricycleLegAsync(from, to, stationName, config);
                         legs.Add(leg);
                         break;
                     }
@@ -199,7 +199,7 @@ public sealed class LegAssembler(
                                     Polyline = PolylineCodec.Encode([from, stationPt]),
                                     Color = null,
                                     Distance = walkToStation * 1.2,
-                                    Duration = Math.Round(walkToStation * 1.2 / GeoUtils.SpeedMps(RoutingConstants.WalkSpeedKmh)),
+                                    Duration = Math.Round(walkToStation * 1.2 / GeoUtils.SpeedMps(config.WalkSpeedKmh)),
                                     Instructions = [new Instruction { Text = "Walk to tricycle station", ManeuverType = ManeuverType.Depart }],
                                     Bbox = GeoUtils.ComputeBbox([from, stationPt]),
                                 });
@@ -208,7 +208,7 @@ public sealed class LegAssembler(
                         routeFrom = stationPt;
                     }
 
-                    var tricycleLeg = await BuildTricycleLegAsync(routeFrom, to, stationName, actualIsHail);
+                    var tricycleLeg = await BuildTricycleLegAsync(routeFrom, to, stationName, actualIsHail, config);
                     legs.Add(tricycleLeg);
                     break;
                 }
@@ -224,7 +224,7 @@ public sealed class LegAssembler(
                     for (var j = 0; j < coords.Count - 1; j++)
                         distance += GeoUtils.HaversineMeters(coords[j], coords[j + 1]);
 
-                    var duration = (int)Math.Round(distance / GeoUtils.SpeedMps(RoutingConstants.JeepneySpeedKmh));
+                    var duration = (int)Math.Round(distance / GeoUtils.SpeedMps(config.JeepneySpeedKmh));
 
                     var segment = new PathSegment
                     {
@@ -260,7 +260,7 @@ public sealed class LegAssembler(
             }
         }
 
-        return await FillLegGapsAsync(legs);
+        return await FillLegGapsAsync(legs, config);
     }
 
     // =====================================================================
@@ -274,7 +274,7 @@ public sealed class LegAssembler(
     /// OSRM foot. If the following leg is already a WALK, the two walks
     /// are merged to avoid WALK→WALK.
     /// </summary>
-    private async Task<List<RouteLeg>> FillLegGapsAsync(List<RouteLeg> legs)
+    private async Task<List<RouteLeg>> FillLegGapsAsync(List<RouteLeg> legs, RoutingConfig config)
     {
         const double GapThresholdMeters = 10;
         var result = new List<RouteLeg>();
@@ -327,7 +327,7 @@ public sealed class LegAssembler(
             {
                 glueCoords = [prevEnd, currStart];
                 glueDistance = gap * 1.2;
-                glueDuration = Math.Round(gap * 1.2 / GeoUtils.SpeedMps(RoutingConstants.WalkSpeedKmh));
+                glueDuration = Math.Round(gap * 1.2 / GeoUtils.SpeedMps(config.WalkSpeedKmh));
                 glueInstructions =
                 [
                     new Instruction { Text = "Walk to continue", ManeuverType = ManeuverType.Depart },
@@ -389,7 +389,7 @@ public sealed class LegAssembler(
 
 
     private async Task<RouteLeg> BuildTricycleLegAsync(
-        LatLng from, LatLng to, string stationName, bool isHail)
+        LatLng from, LatLng to, string stationName, bool isHail, RoutingConfig config)
     {
         string polyline;
         double distance;
@@ -406,7 +406,7 @@ public sealed class LegAssembler(
         {
             polyline = PolylineCodec.Encode([from, to]);
             distance = GeoUtils.HaversineMeters(from, to) * 1.2;
-            duration = Math.Round(distance / GeoUtils.SpeedMps(RoutingConstants.TricycleSpeedKmh));
+            duration = Math.Round(distance / GeoUtils.SpeedMps(config.TricycleSpeedKmh));
         }
 
         return new RouteLeg
@@ -427,7 +427,7 @@ public sealed class LegAssembler(
     /// geometry at tricycle speed) for station → jeepney transfers.
     /// </summary>
     private async Task<RouteLeg> BuildLocalTricycleLegAsync(
-        LatLng from, LatLng to, string stationName)
+        LatLng from, LatLng to, string stationName, RoutingConfig config)
     {
         string polyline;
         double distance;
@@ -459,7 +459,7 @@ public sealed class LegAssembler(
             }
         }
 
-        var duration = (int)Math.Round(distance / GeoUtils.SpeedMps(RoutingConstants.TricycleSpeedKmh));
+        var duration = (int)Math.Round(distance / GeoUtils.SpeedMps(config.TricycleSpeedKmh));
 
         return new RouteLeg
         {

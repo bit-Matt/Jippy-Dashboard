@@ -32,6 +32,7 @@ builder.Services.AddHttpClient<OsrmClient>();
 builder.Services.AddHttpClient<NominatimClient>();
 
 // Navigator services
+builder.Services.AddSingleton<WeightsManager>();
 builder.Services.AddSingleton<TransitDataCache>();
 builder.Services.AddScoped<GraphBuilder>();
 builder.Services.AddScoped<InstructionGenerator>();
@@ -40,23 +41,33 @@ builder.Services.AddScoped<NavigationService>();
 
 var app = builder.Build();
 
-app.MapPost("/navigate", async (NavigationRequest request, NavigationService nav) =>
+app.MapPost("/navigate", async (NavigationRequest request, NavigationService nav, WeightsManager weights) =>
 {
     var start = new LatLng(request.Start.Lat, request.Start.Lng);
     var end = new LatLng(request.End.Lat, request.End.Lng);
-
-    var result = await nav.ComputeRouteAsync(start, end);
-    return Results.Ok(result);
-});
-
-app.MapPost("/navigate/simulate", async (SimulationRequest request, NavigationService nav) =>
-{
-    var start = new LatLng(request.Start.Lat, request.Start.Lng);
-    var end = new LatLng(request.End.Lat, request.End.Lng);
-    var config = RoutingConfig.FromOverrides(request.Overrides);
+    var config = weights.GetConfig();
 
     var result = await nav.ComputeRouteAsync(start, end, config);
     return Results.Ok(result);
+});
+
+app.MapPost("/navigate/simulate", async (SimulationRequest request, NavigationService nav, WeightsManager weights) =>
+{
+    var start = new LatLng(request.Start.Lat, request.Start.Lng);
+    var end = new LatLng(request.End.Lat, request.End.Lng);
+    var config = weights.GetConfig().WithOverrides(request.Overrides);
+
+    var result = await nav.ComputeRouteAsync(start, end, config);
+    return Results.Ok(result);
+});
+
+app.MapGet("/weights", (WeightsManager weights) => Results.Ok(weights.Current));
+
+app.MapPut("/weights", async (AlgorithmWeights body, WeightsManager weights, TransitDataCache transitCache) =>
+{
+    weights.Update(body);
+    await transitCache.InvalidateAsync();
+    return Results.Ok(new { message = "Weights updated" });
 });
 
 // Called by the dashboard when routes/regions/closures are edited

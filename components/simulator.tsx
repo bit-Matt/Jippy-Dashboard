@@ -262,11 +262,16 @@ export interface SimulatorProps {
   result: MultiNavigateRouteResponse | null;
   error: string | null;
   overrides: SimulationOverrides;
+  isAdmin?: boolean;
+  isApplyingWeights?: boolean;
+  applyMessage?: string | null;
+  applyError?: string | null;
   onApiVersionChange: (version: "v1" | "v2") => void;
   onPickingModeChange: (mode: "start" | "end" | null) => void;
   onSimulate: () => void;
   onSuggestionChange: (suggestion: NavigateRouteSuggestion | null) => void;
   onOverridesChange: (overrides: SimulationOverrides) => void;
+  onApplyWeights?: () => void;
 }
 
 export default function Simulator({
@@ -280,11 +285,16 @@ export default function Simulator({
   result,
   error,
   overrides,
+  isAdmin = false,
+  isApplyingWeights = false,
+  applyMessage = null,
+  applyError = null,
   onApiVersionChange,
   onPickingModeChange,
   onSimulate,
   onSuggestionChange,
   onOverridesChange,
+  onApplyWeights,
 }: SimulatorProps) {
   const [activeTab, setActiveTab] = useState<string>("");
 
@@ -393,6 +403,26 @@ export default function Simulator({
               overrides={overrides}
               onOverridesChange={onOverridesChange}
             />
+          )}
+
+          {apiVersion === "v2" && isAdmin && onApplyWeights && (
+            <div className="space-y-2">
+              <Button
+                type="button"
+                variant="secondary"
+                className="w-full"
+                onClick={onApplyWeights}
+                disabled={isApplyingWeights || isSimulating}
+              >
+                {isApplyingWeights ? "Applying..." : "Apply to Algorithm"}
+              </Button>
+              {applyMessage && (
+                <p className="text-xs text-muted-foreground">{applyMessage}</p>
+              )}
+              {applyError && (
+                <p className="text-xs text-destructive">{applyError}</p>
+              )}
+            </div>
           )}
 
           <Button

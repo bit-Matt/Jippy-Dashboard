@@ -1,5 +1,6 @@
 import { type NextRequest } from "next/server";
 
+import { session, SessionCode } from "@/lib/auth";
 import { ApiResponseBuilder } from "@/lib/http/ApiResponseBuilder";
 import * as routingFast from "@/lib/routing-fast";
 import type { SimulationOverrides } from "@/lib/routing-fast";
@@ -11,6 +12,12 @@ import type { LatLng } from "@/lib/routing/types";
 import { oneOf } from "@/lib/one-of";
 
 export async function POST(req: NextRequest) {
+  const currentSession = await session.verify();
+  if (currentSession.code !== SessionCode.Ok) {
+    return ApiResponseBuilder.createFromSessionValidation(currentSession)
+      .build();
+  }
+
   const data = await tryParseJson<RequestBody>(req);
   if (!data) {
     return ApiResponseBuilder.createError(StatusCodes.Status400BadRequest, [{

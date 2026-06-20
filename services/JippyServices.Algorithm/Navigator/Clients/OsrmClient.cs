@@ -9,7 +9,7 @@ namespace JippyServices.Algorithm.Navigator.Clients;
 // Ported from lib/routing/osrm-motorcycle.ts
 // -------------------------------------------------------------------------
 
-public sealed class OsrmClient(HttpClient http, IConfiguration config, ILogger<OsrmClient> logger)
+public sealed class OsrmClient(HttpClient http, IConfiguration config, WeightsManager weightsManager, ILogger<OsrmClient> logger)
 {
     private readonly string _bicycleUrl = config["Services:OSRM:Bicycle"]
                                           ?? throw new InvalidOperationException("Services:OSRM:Bicycle not configured.");
@@ -41,7 +41,7 @@ public sealed class OsrmClient(HttpClient http, IConfiguration config, ILogger<O
         {
             Polyline = PolylineCodec.Encode([from, to]),
             Distance = straight * 1.2,
-            Duration = (int)Math.Round(straight * 1.2 / GeoUtils.SpeedMps(RoutingConstants.TricycleSpeedKmh)),
+            Duration = (int)Math.Round(straight * 1.2 / GeoUtils.SpeedMps(weightsManager.Current.TricycleSpeedKmh)),
         };
     }
 

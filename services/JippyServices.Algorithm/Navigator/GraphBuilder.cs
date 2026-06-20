@@ -8,7 +8,7 @@ namespace JippyServices.Algorithm.Navigator;
 /// <summary>
 /// Dynamic graph construction from transit data.
 /// </summary>
-public sealed class GraphBuilder(DataContext db, OsrmWalkClient osrmWalk, TransitDataCache transitCache)
+public sealed class GraphBuilder(DataContext db, OsrmWalkClient osrmWalk, TransitDataCache transitCache, WeightsManager weightsManager)
 {
     /// <summary>
     /// Load transit data from database
@@ -286,9 +286,10 @@ public sealed class GraphBuilder(DataContext db, OsrmWalkClient osrmWalk, Transi
     /// <param name="baseEdges"></param>
     private static void BuildBaseTransferEdges(
         Dictionary<string, GraphNode> nodes,
-        Dictionary<string, List<BaseEdge>> baseEdges)
+        Dictionary<string, List<BaseEdge>> baseEdges,
+        RoutingConfig config)
     {
-        var index = new GridIndex(RoutingConstants.TransferProximityMeters);
+        var index = new GridIndex(config.TransferProximityMeters);
 
         foreach (var (nodeId, node) in nodes)
             index.Insert(nodeId, node.Lat, node.Lng);
@@ -300,7 +301,7 @@ public sealed class GraphBuilder(DataContext db, OsrmWalkClient osrmWalk, Transi
         foreach (var (nodeId, node) in nodes)
         {
             nearbyBuffer.Clear();
-            index.QueryNearby(node.Lat, node.Lng, RoutingConstants.TransferProximityMeters, nearbyBuffer);
+            index.QueryNearby(node.Lat, node.Lng, config.TransferProximityMeters, nearbyBuffer);
 
             // Use a (RouteId, Direction) value-tuple key to avoid string
             // interpolation allocations inside the hot inner loop.
@@ -315,7 +316,7 @@ public sealed class GraphBuilder(DataContext db, OsrmWalkClient osrmWalk, Transi
                 var dist = GeoUtils.HaversineMeters(
                     new LatLng(node.Lat, node.Lng),
                     new LatLng(other.Lat, other.Lng));
-                if (dist > RoutingConstants.TransferProximityMeters) continue;
+                if (dist > config.TransferProximityMeters) continue;
 
                 var key = (other.RouteId, other.Direction);
                 if (!bestPerRoute.TryGetValue(key, out var existing) || dist < existing.Dist)
@@ -436,7 +437,7 @@ public sealed class GraphBuilder(DataContext db, OsrmWalkClient osrmWalk, Transi
         {
             if (region.Points.Count < 3) continue;
 
-            var availableStations = GetAvailableStations(region, now);
+            var availableStations = GetAvailableStations(region, now, config);
             if (availableStations.Count == 0) continue;
 
             var regionPoly = BuildRegionPolygon(factory, region);
@@ -906,7 +907,7 @@ public sealed class GraphBuilder(DataContext db, OsrmWalkClient osrmWalk, Transi
         var abLng = end.Lng - start.Lng;
 
         // --- ACCESS candidates ---
-        var accessDegThreshold = RoutingConstants.MaxTransitProximityMeters / 111_320.0;
+        var accessDegThreshold = config.MaxTransitProximityMeters / 111_320.0;
         var candidatesByGroup = new Dictionary<string, List<(string NodeId, double GeoDist)>>();
 
         foreach (var (nodeId, node) in nodes)
@@ -916,7 +917,7 @@ public sealed class GraphBuilder(DataContext db, OsrmWalkClient osrmWalk, Transi
             if (Math.Abs(node.Lng - start.Lng) > accessDegThreshold * 1.5) continue;
 
             var dist = GeoUtils.HaversineMeters(new LatLng(node.Lat, node.Lng), start);
-            if (dist > RoutingConstants.MaxTransitProximityMeters) continue;
+            if (dist > config.MaxTransitProximityMeters) continue;
 
             var route = routes.Find(r => r.Id == node.RouteId);
             if (route == null) continue;
@@ -964,7 +965,7 @@ public sealed class GraphBuilder(DataContext db, OsrmWalkClient osrmWalk, Transi
         }
 
         // --- EGRESS candidates ---
-        var egressDegThreshold = RoutingConstants.MaxTransitProximityMeters / 111_320.0;
+        var egressDegThreshold = config.MaxTransitProximityMeters / 111_320.0;
         var egressByGroup = new Dictionary<string, List<(string NodeId, double GeoDist)>>();
 
         foreach (var (nodeId, node) in nodes)
@@ -974,7 +975,7 @@ public sealed class GraphBuilder(DataContext db, OsrmWalkClient osrmWalk, Transi
             if (Math.Abs(node.Lng - end.Lng) > egressDegThreshold * 1.5) continue;
 
             var dist = GeoUtils.HaversineMeters(new LatLng(node.Lat, node.Lng), end);
-            if (dist > RoutingConstants.MaxTransitProximityMeters) continue;
+            if (dist > config.MaxTransitProximityMeters) continue;
 
             var dirStr = node.Direction == RouteDirection.GoingTo ? "goingTo" : "goingBack";
             var groupKey = $"{node.RouteId}:{dirStr}";
@@ -1034,7 +1035,7 @@ public sealed class GraphBuilder(DataContext db, OsrmWalkClient osrmWalk, Transi
         HashSet<string> stopRestrictedNodes,
         RoutingConfig? config = null)
     {
-        var cfg = config ?? RoutingConfig.Default;
+        var cfg = config ?? RoutingConfig.FromWeights(AlgorithmWeights.Defaults);
         var adjacency = new Dictionary<string, List<GraphEdge>>();
 
         // Apply costs to all base edges
@@ -1179,6 +1180,8 @@ public sealed class GraphBuilder(DataContext db, OsrmWalkClient osrmWalk, Transi
     /// </summary>
     private async Task<CachedStaticGraph?> GetStaticGraphAsync()
     {
+        var config = weightsManager.GetConfig();
+
         return await transitCache.GetOrBuildAsync(async () =>
         {
             var transitData = await LoadTransitDataAsync();
@@ -1186,11 +1189,11 @@ public sealed class GraphBuilder(DataContext db, OsrmWalkClient osrmWalk, Transi
 
             var nodes = BuildGraphNodes(transitData.Routes);
             var baseEdges = BuildBaseTransitEdges(transitData.Routes, nodes);
-            BuildBaseTransferEdges(nodes, baseEdges);
+            BuildBaseTransferEdges(nodes, baseEdges, config);
             MarkClosureEdges(baseEdges, nodes, transitData.Closures);
 
             var rawBoardingCosts = ComputeRawBoardingCosts(transitData.Routes);
-            var stopRestrictedNodes = MarkStopRestrictedNodes(nodes, transitData.Stops);
+            var stopRestrictedNodes = MarkStopRestrictedNodes(nodes, transitData.Stops, config);
 
             return new CachedStaticGraph
             {
@@ -1206,7 +1209,7 @@ public sealed class GraphBuilder(DataContext db, OsrmWalkClient osrmWalk, Transi
     public async Task<(BaseGraph Graph, TransitData Data)?> BuildBaseGraphAsync(
         LatLng start, LatLng end, DateTime? now = null, RoutingConfig? config = null)
     {
-        var cfg = config ?? RoutingConfig.Default;
+        var cfg = config ?? weightsManager.GetConfig();
         var staticGraph = await GetStaticGraphAsync();
         if (staticGraph == null) return null;
 
@@ -1250,7 +1253,8 @@ public sealed class GraphBuilder(DataContext db, OsrmWalkClient osrmWalk, Transi
     /// </summary>
     private static HashSet<string> MarkStopRestrictedNodes(
         Dictionary<string, GraphNode> nodes,
-        List<TransitStop> stops)
+        List<TransitStop> stops,
+        RoutingConfig config)
     {
         var restricted = new HashSet<string>();
         if (stops.Count == 0) return restricted;
@@ -1264,7 +1268,7 @@ public sealed class GraphBuilder(DataContext db, OsrmWalkClient osrmWalk, Transi
             foreach (var stop in stops)
             {
                 var dist = DistanceToPolylineMeters(nodePoint, stop.DecodedPolyline);
-                if (dist > RoutingConstants.StopProximityMeters) continue;
+                if (dist > config.StopProximityMeters) continue;
 
                 // Check direction match
                 var directionMatches =
@@ -1343,12 +1347,12 @@ public sealed class GraphBuilder(DataContext db, OsrmWalkClient osrmWalk, Transi
         return currentMinutes >= fromMin || currentMinutes <= toMin;
     }
 
-    private static List<TransitStation> GetAvailableStations(TransitRegion region, DateTime now)
+    private static List<TransitStation> GetAvailableStations(TransitRegion region, DateTime now, RoutingConfig config)
     {
         if (region.Stations.Count == 0) return [];
         var available = region.Stations.Where(s => IsStationAvailable(s, now)).ToList();
         var unavailableRatio = 1.0 - (double)available.Count / region.Stations.Count;
-        if (unavailableRatio >= RoutingConstants.StationUnavailabilityThreshold) return [];
+        if (unavailableRatio >= config.StationUnavailabilityThreshold) return [];
         return available;
     }
 

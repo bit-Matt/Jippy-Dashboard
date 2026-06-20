@@ -5,7 +5,11 @@ namespace JippyServices.Algorithm.Navigator;
 // Ported from lib/routing/index.ts
 // -------------------------------------------------------------------------
 
-public sealed class NavigationService(GraphBuilder graphBuilder, LegAssembler legAssembler, ILogger<NavigationService> logger)
+public sealed class NavigationService(
+    GraphBuilder graphBuilder,
+    LegAssembler legAssembler,
+    WeightsManager weightsManager,
+    ILogger<NavigationService> logger)
 {
     /// <summary>
     /// Compute multi-suggestion transit routing from start to end.
@@ -13,10 +17,10 @@ public sealed class NavigationService(GraphBuilder graphBuilder, LegAssembler le
     public async Task<MultiNavigateResponse> ComputeRouteAsync(
         LatLng start, LatLng end, RoutingConfig? config = null)
     {
-        config ??= RoutingConfig.Default;
+        config ??= weightsManager.GetConfig();
 
         var straightLineDistance = GeoUtils.HaversineMeters(start, end);
-        if (straightLineDistance < RoutingConstants.WalkOnlyThresholdMeters)
+        if (straightLineDistance < config.WalkOnlyThresholdMeters)
         {
             var walkOnly = AssembleResponse(await legAssembler.BuildWalkOnlyRouteAsync(start, end));
             return new MultiNavigateResponse { Suggestions = [new RouteSuggestion { Label = SuggestionLabel.Fastest, Route = walkOnly }] };
@@ -60,7 +64,7 @@ public sealed class NavigationService(GraphBuilder graphBuilder, LegAssembler le
         var deduped = DeduplicateSuggestions(suggestions);
 
         // Drop suggestions with a long mid-route walk unless that leaves us empty
-        var filtered = deduped.Where(s => !HasLongMidRouteWalk(s.Route.Legs)).ToList();
+        var filtered = deduped.Where(s => !HasLongMidRouteWalk(s.Route.Legs, config)).ToList();
         var final = filtered.Count > 0 ? filtered : deduped;
 
         if (final.Count == 0)
@@ -170,7 +174,7 @@ public sealed class NavigationService(GraphBuilder graphBuilder, LegAssembler le
         sections = FilterShortTransitSections(sections, config);
         if (sections.Count == 0) return null;
 
-        var legs = await legAssembler.BuildLegsFromSectionsAsync(sections);
+        var legs = await legAssembler.BuildLegsFromSectionsAsync(sections, config);
         if (legs.Count == 0) return null;
 
         return legs;
@@ -243,11 +247,11 @@ public sealed class NavigationService(GraphBuilder graphBuilder, LegAssembler le
         }).ToList();
     }
 
-    private static bool HasLongMidRouteWalk(List<RouteLeg> legs)
+    private bool HasLongMidRouteWalk(List<RouteLeg> legs, RoutingConfig config)
     {
         for (var i = 1; i < legs.Count - 1; i++)
         {
-            if (legs[i].Type == LegType.Walk && legs[i].Distance >= RoutingConstants.LongWalkThresholdMeters)
+            if (legs[i].Type == LegType.Walk && legs[i].Distance >= config.LongWalkThresholdMeters)
                 return true;
         }
         return false;

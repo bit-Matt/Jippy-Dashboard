@@ -9,8 +9,14 @@ export type SimulationOverrides = {
   transferPenaltyMeters?: number;
   closurePenaltyMultiplier?: number;
   boardingCostFactor?: number;
+  transferProximityMeters?: number;
   transitCostFactor?: number;
   minTransitRideMeters?: number;
+  walkOnlyThresholdMeters?: number;
+  maxTransitProximityMeters?: number;
+  walkSpeedKmh?: number;
+  tricycleSpeedKmh?: number;
+  jeepneySpeedKmh?: number;
   tricycleRideCostFactor?: number;
   stationWaitPenaltyMeters?: number;
   hailingWaitPenaltyMeters?: number;
@@ -23,6 +29,9 @@ export type SimulationOverrides = {
   maxTricycleRideToTransitMeters?: number;
   maxBoundaryExitWalkMeters?: number;
   maxRegionBoundaryMeters?: number;
+  longWalkThresholdMeters?: number;
+  stationUnavailabilityThreshold?: number;
+  stopProximityMeters?: number;
   explorerDiversityPenalty?: number;
   explorerMaxTransfers?: number;
   explorerDurationCap?: number;
@@ -32,16 +41,24 @@ export type SimulationOverrides = {
   maxEgressQueries?: number;
 };
 
-/** Default values mirrored from the .NET RoutingConstants for UI placeholders. */
-export const SIMULATION_OVERRIDE_DEFAULTS: Required<SimulationOverrides> = {
+export type AlgorithmWeights = Required<SimulationOverrides>;
+
+/** Default values mirrored from the .NET weights.json for UI placeholders. */
+export const ALGORITHM_WEIGHT_DEFAULTS: AlgorithmWeights = {
   walkPenaltyMultiplier: 2.0,
   walkComfortMeters: 150,
   walkEscalationRate: 0.008,
   transferPenaltyMeters: 120,
   closurePenaltyMultiplier: 5.0,
   boardingCostFactor: 0.25,
+  transferProximityMeters: 100,
   transitCostFactor: 0.5,
   minTransitRideMeters: 300,
+  walkOnlyThresholdMeters: 200,
+  maxTransitProximityMeters: 5_000,
+  walkSpeedKmh: 4.25,
+  tricycleSpeedKmh: 10,
+  jeepneySpeedKmh: 10,
   tricycleRideCostFactor: 0.3,
   stationWaitPenaltyMeters: 350,
   hailingWaitPenaltyMeters: 525,
@@ -54,6 +71,9 @@ export const SIMULATION_OVERRIDE_DEFAULTS: Required<SimulationOverrides> = {
   maxTricycleRideToTransitMeters: 600,
   maxBoundaryExitWalkMeters: 500,
   maxRegionBoundaryMeters: 300,
+  longWalkThresholdMeters: 1_000,
+  stationUnavailabilityThreshold: 0.9,
+  stopProximityMeters: 30,
   explorerDiversityPenalty: 5.0,
   explorerMaxTransfers: 2,
   explorerDurationCap: 1.5,
@@ -62,6 +82,21 @@ export const SIMULATION_OVERRIDE_DEFAULTS: Required<SimulationOverrides> = {
   egressCandidatesPerDirection: 16,
   maxEgressQueries: 30,
 };
+
+/** @deprecated Use ALGORITHM_WEIGHT_DEFAULTS */
+export const SIMULATION_OVERRIDE_DEFAULTS = ALGORITHM_WEIGHT_DEFAULTS;
+
+export function mergeWeightsWithOverrides(
+  base: AlgorithmWeights,
+  overrides: SimulationOverrides,
+): AlgorithmWeights {
+  return {
+    ...base,
+    ...Object.fromEntries(
+      Object.entries(overrides).filter(([, value]) => value !== undefined),
+    ),
+  } as AlgorithmWeights;
+}
 
 export async function route(start: LatLng, end: LatLng): Promise<Result<MultiNavigateResponse>> {
   try {
@@ -133,6 +168,66 @@ export async function simulate(
     return new Success(result);
   } catch (e) {
     return new Failure(ErrorCodes.Fatal, "Failed to simulate route", { start, end, overrides }, e);
+  }
+}
+
+export async function getWeights(): Promise<Result<AlgorithmWeights>> {
+  try {
+    const algorithmUrl = process.env.ALGORITHM_URL;
+    if (!utils.isExisty(algorithmUrl)) {
+      return new Failure(ErrorCodes.Fatal, "Configuration error.", { algorithmUrl: "Not set" });
+    }
+
+    const url = new URL("/weights", algorithmUrl!);
+    const request = await fetch(url.toString(), {
+      method: "GET",
+    });
+
+    if (!request.ok) {
+      const content = await request.text();
+      return new Failure(ErrorCodes.Fatal, "Failed to fetch algorithm weights", {
+        status: request.status,
+        statusText: request.statusText,
+        content,
+      });
+    }
+
+    const result = await request.json() as AlgorithmWeights;
+    return new Success(result);
+  } catch (e) {
+    return new Failure(ErrorCodes.Fatal, "Failed to fetch algorithm weights", {}, e);
+  }
+}
+
+export async function updateWeights(weights: AlgorithmWeights): Promise<Result<{ message: string }>> {
+  try {
+    const algorithmUrl = process.env.ALGORITHM_URL;
+    if (!utils.isExisty(algorithmUrl)) {
+      return new Failure(ErrorCodes.Fatal, "Configuration error.", { algorithmUrl: "Not set" });
+    }
+
+    const url = new URL("/weights", algorithmUrl!);
+    const request = await fetch(url.toString(), {
+      method: "PUT",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(weights),
+    });
+
+    if (!request.ok) {
+      const content = await request.text();
+      return new Failure(ErrorCodes.Fatal, "Failed to update algorithm weights", {
+        status: request.status,
+        statusText: request.statusText,
+        content,
+      });
+    }
+
+    const result = await request.json() as { message: string };
+    return new Success(result);
+  } catch (e) {
+    return new Failure(ErrorCodes.Fatal, "Failed to update algorithm weights", {}, e);
   }
 }
 

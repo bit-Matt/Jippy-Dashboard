@@ -129,6 +129,8 @@ services:
     build:
       context: services/
       dockerfile: JippyServices.Algorithm/Dockerfile
+    volumes:
+      - ./.osm-data/algorithm:/app/data
     restart: unless-stopped
     environment:
       Services__Nominatim: http://geocoder:8080

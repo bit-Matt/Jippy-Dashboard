@@ -103,6 +103,10 @@ export function AppSidebar({
             title: "Data Management",
             url: "/dashboard/data",
           },
+          {
+            title: "Algorithm Weights",
+            url: "/dashboard/algorithm",
+          },
         ],
       },
     ],

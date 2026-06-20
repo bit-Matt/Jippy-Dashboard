@@ -217,7 +217,7 @@ public sealed class WeightProfile
 
 /// <summary>
 /// Optional weight/graph-builder overrides sent by the simulator.
-/// All fields are nullable; omitted values fall back to <see cref="RoutingConstants"/>.
+/// All fields are nullable; omitted values fall back to the active routing config.
 /// </summary>
 public sealed class SimulationOverrides
 {
@@ -228,10 +228,18 @@ public sealed class SimulationOverrides
     [JsonPropertyName("transferPenaltyMeters")] public double? TransferPenaltyMeters { get; init; }
     [JsonPropertyName("closurePenaltyMultiplier")] public double? ClosurePenaltyMultiplier { get; init; }
     [JsonPropertyName("boardingCostFactor")] public double? BoardingCostFactor { get; init; }
+    [JsonPropertyName("transferProximityMeters")] public double? TransferProximityMeters { get; init; }
 
     // Transit
     [JsonPropertyName("transitCostFactor")] public double? TransitCostFactor { get; init; }
     [JsonPropertyName("minTransitRideMeters")] public double? MinTransitRideMeters { get; init; }
+    [JsonPropertyName("walkOnlyThresholdMeters")] public double? WalkOnlyThresholdMeters { get; init; }
+    [JsonPropertyName("maxTransitProximityMeters")] public double? MaxTransitProximityMeters { get; init; }
+
+    // Speeds
+    [JsonPropertyName("walkSpeedKmh")] public double? WalkSpeedKmh { get; init; }
+    [JsonPropertyName("tricycleSpeedKmh")] public double? TricycleSpeedKmh { get; init; }
+    [JsonPropertyName("jeepneySpeedKmh")] public double? JeepneySpeedKmh { get; init; }
 
     // Tricycle
     [JsonPropertyName("tricycleRideCostFactor")] public double? TricycleRideCostFactor { get; init; }
@@ -246,6 +254,9 @@ public sealed class SimulationOverrides
     [JsonPropertyName("maxTricycleRideToTransitMeters")] public double? MaxTricycleRideToTransitMeters { get; init; }
     [JsonPropertyName("maxBoundaryExitWalkMeters")] public double? MaxBoundaryExitWalkMeters { get; init; }
     [JsonPropertyName("maxRegionBoundaryMeters")] public double? MaxRegionBoundaryMeters { get; init; }
+    [JsonPropertyName("longWalkThresholdMeters")] public double? LongWalkThresholdMeters { get; init; }
+    [JsonPropertyName("stationUnavailabilityThreshold")] public double? StationUnavailabilityThreshold { get; init; }
+    [JsonPropertyName("stopProximityMeters")] public double? StopProximityMeters { get; init; }
 
     // Profile
     [JsonPropertyName("explorerDiversityPenalty")] public double? ExplorerDiversityPenalty { get; init; }
@@ -260,7 +271,7 @@ public sealed class SimulationOverrides
 }
 
 /// <summary>
-/// Resolved routing configuration with all tunables materialized from constants and overrides.
+/// Resolved routing configuration with all tunables materialized from weights and overrides.
 /// </summary>
 public sealed class RoutingConfig
 {
@@ -272,6 +283,12 @@ public sealed class RoutingConfig
     public double BoardingCostFactor { get; init; }
     public double ClosurePenaltyMultiplier { get; init; }
     public double MinTransitRideMeters { get; init; }
+    public double TransferProximityMeters { get; init; }
+    public double WalkOnlyThresholdMeters { get; init; }
+    public double MaxTransitProximityMeters { get; init; }
+    public double WalkSpeedKmh { get; init; }
+    public double TricycleSpeedKmh { get; init; }
+    public double JeepneySpeedKmh { get; init; }
     public double TricycleRideCostFactor { get; init; }
     public double StationWaitPenaltyMeters { get; init; }
     public double HailingWaitPenaltyMeters { get; init; }
@@ -284,6 +301,9 @@ public sealed class RoutingConfig
     public double MaxTricycleRideToTransitMeters { get; init; }
     public double MaxBoundaryExitWalkMeters { get; init; }
     public double MaxRegionBoundaryMeters { get; init; }
+    public double LongWalkThresholdMeters { get; init; }
+    public double StationUnavailabilityThreshold { get; init; }
+    public double StopProximityMeters { get; init; }
     public double ExplorerDiversityPenalty { get; init; }
     public int ExplorerMaxTransfers { get; init; }
     public double ExplorerDurationCap { get; init; }
@@ -292,70 +312,88 @@ public sealed class RoutingConfig
     public int EgressCandidatesPerDirection { get; init; }
     public int MaxEgressQueries { get; init; }
 
-    public static RoutingConfig Default { get; } = new()
+    public static RoutingConfig FromWeights(AlgorithmWeights weights) => new()
     {
-        WalkPenaltyMultiplier = RoutingConstants.WalkPenaltyMultiplier,
-        WalkComfortMeters = RoutingConstants.WalkComfortMeters,
-        WalkEscalationRate = RoutingConstants.WalkEscalationRate,
-        TransitCostFactor = RoutingConstants.TransitCostFactor,
-        TransferPenaltyMeters = RoutingConstants.TransferPenaltyMeters,
-        BoardingCostFactor = RoutingConstants.BoardingCostFactor,
-        ClosurePenaltyMultiplier = RoutingConstants.ClosurePenaltyMultiplier,
-        MinTransitRideMeters = RoutingConstants.MinTransitRideMeters,
-        TricycleRideCostFactor = RoutingConstants.TricycleRideCostFactor,
-        StationWaitPenaltyMeters = RoutingConstants.StationWaitPenaltyMeters,
-        HailingWaitPenaltyMeters = RoutingConstants.HailingWaitPenaltyMeters,
-        MaxTricycleStationWalkMeters = RoutingConstants.MaxTricycleStationWalkMeters,
-        MinTricycleRideMeters = RoutingConstants.MinTricycleRideMeters,
-        BacktrackPenaltyMultiplier = RoutingConstants.BacktrackPenaltyMultiplier,
-        TricycleDetourFactor = RoutingConstants.TricycleDetourFactor,
-        WalkDetourFactor = RoutingConstants.WalkDetourFactor,
-        MaxDirectWalkInsteadOfHailMeters = RoutingConstants.MaxDirectWalkInsteadOfHailMeters,
-        MaxTricycleRideToTransitMeters = RoutingConstants.MaxTricycleRideToTransitMeters,
-        MaxBoundaryExitWalkMeters = RoutingConstants.MaxBoundaryExitWalkMeters,
-        MaxRegionBoundaryMeters = RoutingConstants.MaxRegionBoundaryMeters,
-        ExplorerDiversityPenalty = RoutingConstants.ExplorerDiversityPenalty,
-        ExplorerMaxTransfers = RoutingConstants.ExplorerMaxTransfers,
-        ExplorerDurationCap = RoutingConstants.ExplorerDurationCap,
-        AccessCandidatesPerDirection = RoutingConstants.AccessCandidatesPerDirection,
-        MaxAccessQueries = RoutingConstants.MaxAccessQueries,
-        EgressCandidatesPerDirection = RoutingConstants.EgressCandidatesPerDirection,
-        MaxEgressQueries = RoutingConstants.MaxEgressQueries,
+        WalkPenaltyMultiplier = weights.WalkPenaltyMultiplier,
+        WalkComfortMeters = weights.WalkComfortMeters,
+        WalkEscalationRate = weights.WalkEscalationRate,
+        TransitCostFactor = weights.TransitCostFactor,
+        TransferPenaltyMeters = weights.TransferPenaltyMeters,
+        BoardingCostFactor = weights.BoardingCostFactor,
+        ClosurePenaltyMultiplier = weights.ClosurePenaltyMultiplier,
+        MinTransitRideMeters = weights.MinTransitRideMeters,
+        TransferProximityMeters = weights.TransferProximityMeters,
+        WalkOnlyThresholdMeters = weights.WalkOnlyThresholdMeters,
+        MaxTransitProximityMeters = weights.MaxTransitProximityMeters,
+        WalkSpeedKmh = weights.WalkSpeedKmh,
+        TricycleSpeedKmh = weights.TricycleSpeedKmh,
+        JeepneySpeedKmh = weights.JeepneySpeedKmh,
+        TricycleRideCostFactor = weights.TricycleRideCostFactor,
+        StationWaitPenaltyMeters = weights.StationWaitPenaltyMeters,
+        HailingWaitPenaltyMeters = weights.HailingWaitPenaltyMeters,
+        MaxTricycleStationWalkMeters = weights.MaxTricycleStationWalkMeters,
+        MinTricycleRideMeters = weights.MinTricycleRideMeters,
+        BacktrackPenaltyMultiplier = weights.BacktrackPenaltyMultiplier,
+        TricycleDetourFactor = weights.TricycleDetourFactor,
+        WalkDetourFactor = weights.WalkDetourFactor,
+        MaxDirectWalkInsteadOfHailMeters = weights.MaxDirectWalkInsteadOfHailMeters,
+        MaxTricycleRideToTransitMeters = weights.MaxTricycleRideToTransitMeters,
+        MaxBoundaryExitWalkMeters = weights.MaxBoundaryExitWalkMeters,
+        MaxRegionBoundaryMeters = weights.MaxRegionBoundaryMeters,
+        LongWalkThresholdMeters = weights.LongWalkThresholdMeters,
+        StationUnavailabilityThreshold = weights.StationUnavailabilityThreshold,
+        StopProximityMeters = weights.StopProximityMeters,
+        ExplorerDiversityPenalty = weights.ExplorerDiversityPenalty,
+        ExplorerMaxTransfers = weights.ExplorerMaxTransfers,
+        ExplorerDurationCap = weights.ExplorerDurationCap,
+        AccessCandidatesPerDirection = weights.AccessCandidatesPerDirection,
+        MaxAccessQueries = weights.MaxAccessQueries,
+        EgressCandidatesPerDirection = weights.EgressCandidatesPerDirection,
+        MaxEgressQueries = weights.MaxEgressQueries,
     };
 
-    public static RoutingConfig FromOverrides(SimulationOverrides? overrides)
+    public RoutingConfig WithOverrides(SimulationOverrides? overrides)
     {
-        if (overrides == null) return Default;
+        if (overrides == null) return this;
 
         return new RoutingConfig
         {
-            WalkPenaltyMultiplier = overrides.WalkPenaltyMultiplier ?? RoutingConstants.WalkPenaltyMultiplier,
-            WalkComfortMeters = overrides.WalkComfortMeters ?? RoutingConstants.WalkComfortMeters,
-            WalkEscalationRate = overrides.WalkEscalationRate ?? RoutingConstants.WalkEscalationRate,
-            TransitCostFactor = overrides.TransitCostFactor ?? RoutingConstants.TransitCostFactor,
-            TransferPenaltyMeters = overrides.TransferPenaltyMeters ?? RoutingConstants.TransferPenaltyMeters,
-            BoardingCostFactor = overrides.BoardingCostFactor ?? RoutingConstants.BoardingCostFactor,
-            ClosurePenaltyMultiplier = overrides.ClosurePenaltyMultiplier ?? RoutingConstants.ClosurePenaltyMultiplier,
-            MinTransitRideMeters = overrides.MinTransitRideMeters ?? RoutingConstants.MinTransitRideMeters,
-            TricycleRideCostFactor = overrides.TricycleRideCostFactor ?? RoutingConstants.TricycleRideCostFactor,
-            StationWaitPenaltyMeters = overrides.StationWaitPenaltyMeters ?? RoutingConstants.StationWaitPenaltyMeters,
-            HailingWaitPenaltyMeters = overrides.HailingWaitPenaltyMeters ?? RoutingConstants.HailingWaitPenaltyMeters,
-            MaxTricycleStationWalkMeters = overrides.MaxTricycleStationWalkMeters ?? RoutingConstants.MaxTricycleStationWalkMeters,
-            MinTricycleRideMeters = overrides.MinTricycleRideMeters ?? RoutingConstants.MinTricycleRideMeters,
-            BacktrackPenaltyMultiplier = overrides.BacktrackPenaltyMultiplier ?? RoutingConstants.BacktrackPenaltyMultiplier,
-            TricycleDetourFactor = overrides.TricycleDetourFactor ?? RoutingConstants.TricycleDetourFactor,
-            WalkDetourFactor = overrides.WalkDetourFactor ?? RoutingConstants.WalkDetourFactor,
-            MaxDirectWalkInsteadOfHailMeters = overrides.MaxDirectWalkInsteadOfHailMeters ?? RoutingConstants.MaxDirectWalkInsteadOfHailMeters,
-            MaxTricycleRideToTransitMeters = overrides.MaxTricycleRideToTransitMeters ?? RoutingConstants.MaxTricycleRideToTransitMeters,
-            MaxBoundaryExitWalkMeters = overrides.MaxBoundaryExitWalkMeters ?? RoutingConstants.MaxBoundaryExitWalkMeters,
-            MaxRegionBoundaryMeters = overrides.MaxRegionBoundaryMeters ?? RoutingConstants.MaxRegionBoundaryMeters,
-            ExplorerDiversityPenalty = overrides.ExplorerDiversityPenalty ?? RoutingConstants.ExplorerDiversityPenalty,
-            ExplorerMaxTransfers = overrides.ExplorerMaxTransfers ?? RoutingConstants.ExplorerMaxTransfers,
-            ExplorerDurationCap = overrides.ExplorerDurationCap ?? RoutingConstants.ExplorerDurationCap,
-            AccessCandidatesPerDirection = overrides.AccessCandidatesPerDirection ?? RoutingConstants.AccessCandidatesPerDirection,
-            MaxAccessQueries = overrides.MaxAccessQueries ?? RoutingConstants.MaxAccessQueries,
-            EgressCandidatesPerDirection = overrides.EgressCandidatesPerDirection ?? RoutingConstants.EgressCandidatesPerDirection,
-            MaxEgressQueries = overrides.MaxEgressQueries ?? RoutingConstants.MaxEgressQueries,
+            WalkPenaltyMultiplier = overrides.WalkPenaltyMultiplier ?? WalkPenaltyMultiplier,
+            WalkComfortMeters = overrides.WalkComfortMeters ?? WalkComfortMeters,
+            WalkEscalationRate = overrides.WalkEscalationRate ?? WalkEscalationRate,
+            TransitCostFactor = overrides.TransitCostFactor ?? TransitCostFactor,
+            TransferPenaltyMeters = overrides.TransferPenaltyMeters ?? TransferPenaltyMeters,
+            BoardingCostFactor = overrides.BoardingCostFactor ?? BoardingCostFactor,
+            ClosurePenaltyMultiplier = overrides.ClosurePenaltyMultiplier ?? ClosurePenaltyMultiplier,
+            MinTransitRideMeters = overrides.MinTransitRideMeters ?? MinTransitRideMeters,
+            TransferProximityMeters = overrides.TransferProximityMeters ?? TransferProximityMeters,
+            WalkOnlyThresholdMeters = overrides.WalkOnlyThresholdMeters ?? WalkOnlyThresholdMeters,
+            MaxTransitProximityMeters = overrides.MaxTransitProximityMeters ?? MaxTransitProximityMeters,
+            WalkSpeedKmh = overrides.WalkSpeedKmh ?? WalkSpeedKmh,
+            TricycleSpeedKmh = overrides.TricycleSpeedKmh ?? TricycleSpeedKmh,
+            JeepneySpeedKmh = overrides.JeepneySpeedKmh ?? JeepneySpeedKmh,
+            TricycleRideCostFactor = overrides.TricycleRideCostFactor ?? TricycleRideCostFactor,
+            StationWaitPenaltyMeters = overrides.StationWaitPenaltyMeters ?? StationWaitPenaltyMeters,
+            HailingWaitPenaltyMeters = overrides.HailingWaitPenaltyMeters ?? HailingWaitPenaltyMeters,
+            MaxTricycleStationWalkMeters = overrides.MaxTricycleStationWalkMeters ?? MaxTricycleStationWalkMeters,
+            MinTricycleRideMeters = overrides.MinTricycleRideMeters ?? MinTricycleRideMeters,
+            BacktrackPenaltyMultiplier = overrides.BacktrackPenaltyMultiplier ?? BacktrackPenaltyMultiplier,
+            TricycleDetourFactor = overrides.TricycleDetourFactor ?? TricycleDetourFactor,
+            WalkDetourFactor = overrides.WalkDetourFactor ?? WalkDetourFactor,
+            MaxDirectWalkInsteadOfHailMeters = overrides.MaxDirectWalkInsteadOfHailMeters ?? MaxDirectWalkInsteadOfHailMeters,
+            MaxTricycleRideToTransitMeters = overrides.MaxTricycleRideToTransitMeters ?? MaxTricycleRideToTransitMeters,
+            MaxBoundaryExitWalkMeters = overrides.MaxBoundaryExitWalkMeters ?? MaxBoundaryExitWalkMeters,
+            MaxRegionBoundaryMeters = overrides.MaxRegionBoundaryMeters ?? MaxRegionBoundaryMeters,
+            LongWalkThresholdMeters = overrides.LongWalkThresholdMeters ?? LongWalkThresholdMeters,
+            StationUnavailabilityThreshold = overrides.StationUnavailabilityThreshold ?? StationUnavailabilityThreshold,
+            StopProximityMeters = overrides.StopProximityMeters ?? StopProximityMeters,
+            ExplorerDiversityPenalty = overrides.ExplorerDiversityPenalty ?? ExplorerDiversityPenalty,
+            ExplorerMaxTransfers = overrides.ExplorerMaxTransfers ?? ExplorerMaxTransfers,
+            ExplorerDurationCap = overrides.ExplorerDurationCap ?? ExplorerDurationCap,
+            AccessCandidatesPerDirection = overrides.AccessCandidatesPerDirection ?? AccessCandidatesPerDirection,
+            MaxAccessQueries = overrides.MaxAccessQueries ?? MaxAccessQueries,
+            EgressCandidatesPerDirection = overrides.EgressCandidatesPerDirection ?? EgressCandidatesPerDirection,
+            MaxEgressQueries = overrides.MaxEgressQueries ?? MaxEgressQueries,
         };
     }
 

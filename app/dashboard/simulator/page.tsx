@@ -2,6 +2,7 @@
 
 import dynamic from "next/dynamic";
 import { useCallback, useState } from "react";
+import useSWR from "swr";
 
 import { AppSidebar } from "@/components/app-sidebar";
 import Simulator from "@/components/simulator";
@@ -11,11 +12,19 @@ import type { IApiResponse } from "@/lib/http/ApiResponseBuilder";
 import { $fetch } from "@/lib/http/client";
 import * as nominatim from "@/lib/osm/nominatim";
 import { getErrorMessage } from "@/contracts/parsers";
-import type { SimulationOverrides } from "@/lib/routing-fast";
+import {
+  ALGORITHM_WEIGHT_DEFAULTS,
+  mergeWeightsWithOverrides,
+  type AlgorithmWeights,
+  type SimulationOverrides,
+} from "@/lib/routing-fast";
 
 const SimulatorMapDynamic = dynamic(() => import("./SimulatorMap"), { ssr: false });
 
 export default function SimulatorPage() {
+  const { data: meResponse } = useSWR<{ data: IApiResponse<{ role: string }> }>("/api/me", $fetch);
+  const isAdmin = meResponse?.data?.data?.role === "administrator_user";
+
   const [apiVersion, setApiVersion] = useState<"v1" | "v2">("v1");
   const [startPoint, setStartPoint] = useState<[number, number] | null>(null);
   const [endPoint, setEndPoint] = useState<[number, number] | null>(null);
@@ -27,6 +36,9 @@ export default function SimulatorPage() {
   const [isSimulating, setIsSimulating] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [overrides, setOverrides] = useState<SimulationOverrides>({});
+  const [isApplyingWeights, setIsApplyingWeights] = useState(false);
+  const [applyMessage, setApplyMessage] = useState<string | null>(null);
+  const [applyError, setApplyError] = useState<string | null>(null);
 
   const handleApiVersionChange = useCallback((version: "v1" | "v2") => {
     setApiVersion(version);
@@ -71,7 +83,7 @@ export default function SimulatorPage() {
     setActiveSuggestion(null);
 
     const endpoint = apiVersion === "v2"
-      ? "/api/public/navigate/simulate"
+      ? "/api/restricted/navigate/simulate"
       : `/api/public/navigate/${apiVersion}`;
 
     const body = apiVersion === "v2"
@@ -98,6 +110,45 @@ export default function SimulatorPage() {
     setActiveSuggestion(data.data.suggestions[0] ?? null);
   }, [apiVersion, startPoint, endPoint, overrides]);
 
+  const handleApplyWeights = useCallback(async () => {
+    setIsApplyingWeights(true);
+    setApplyMessage(null);
+    setApplyError(null);
+
+    const { data: currentWeightsResponse, error: loadError } = await $fetch<
+      IApiResponse<AlgorithmWeights>
+    >("/api/restricted/management/algorithm-weights");
+
+    if (loadError || !currentWeightsResponse?.ok) {
+      setIsApplyingWeights(false);
+      setApplyError(getErrorMessage(loadError, "Failed to load current algorithm weights."));
+      return;
+    }
+
+    const mergedWeights = mergeWeightsWithOverrides(
+      currentWeightsResponse.data ?? ALGORITHM_WEIGHT_DEFAULTS,
+      overrides,
+    );
+
+    const { data, error: saveError } = await $fetch<IApiResponse<{ message: string }>>(
+      "/api/restricted/management/algorithm-weights",
+      {
+        method: "PUT",
+        body: JSON.stringify(mergedWeights),
+        headers: { "Content-Type": "application/json" },
+      },
+    );
+
+    setIsApplyingWeights(false);
+
+    if (saveError || !data?.ok) {
+      setApplyError(getErrorMessage(saveError, "Failed to apply algorithm weights."));
+      return;
+    }
+
+    setApplyMessage("Algorithm weights updated from current overrides.");
+  }, [overrides]);
+
   return (
     <SidebarProvider>
       <AppSidebar />
@@ -122,11 +173,16 @@ export default function SimulatorPage() {
             result={result}
             error={error}
             overrides={overrides}
+            isAdmin={isAdmin}
+            isApplyingWeights={isApplyingWeights}
+            applyMessage={applyMessage}
+            applyError={applyError}
             onApiVersionChange={handleApiVersionChange}
             onPickingModeChange={setPickingMode}
             onSimulate={handleSimulate}
             onSuggestionChange={setActiveSuggestion}
             onOverridesChange={setOverrides}
+            onApplyWeights={handleApplyWeights}
           />
         </div>
       </SidebarInset>

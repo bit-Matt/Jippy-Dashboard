@@ -170,6 +170,8 @@ services:
     restart: unless-stopped
     ports:
       - "6705:8080"
+    volumes:
+      - ./.osm-data/algorithm:/app/data
     environment:
       Services__Nominatim: http://geocoder:8080
       Services__OSRM__Driving: http://driving_router:5000
