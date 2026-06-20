@@ -55,6 +55,7 @@ type ImportSummary = {
   regions: number;
   closures: number;
   stops: number;
+  restrictedBoardingZones: number;
 };
 
 type ImportPreview = {
@@ -63,6 +64,7 @@ type ImportPreview = {
   regions: number;
   closures: number;
   stops: number;
+  restrictedBoardingZones: number;
   orphanedRouteSnapshots: number;
   orphanedRegionSnapshots: number;
 };
@@ -74,6 +76,7 @@ function getImportPreview(payload: ImportPayload): ImportPreview {
     regions: payload.regions.length,
     closures: payload.closures.length,
     stops: payload.stops.length,
+    restrictedBoardingZones: payload.restrictedBoardingZones.length,
     orphanedRouteSnapshots: payload.orphanedSnapshots?.routes.length ?? 0,
     orphanedRegionSnapshots: payload.orphanedSnapshots?.regions.length ?? 0,
   };
@@ -170,7 +173,7 @@ export default function DataManagementPage() {
     const summary = data.data;
     setImportPayload(null);
     setStatusMessage(
-      `Import complete: ${summary.routes} routes, ${summary.regions} regions, ${summary.closures} closures, ${summary.stops} stops.`,
+      `Import complete: ${summary.routes} routes, ${summary.regions} regions, ${summary.closures} closures, ${summary.stops} stops, ${summary.restrictedBoardingZones} restricted boarding zones.`,
     );
     setIsImporting(false);
     await mutateStats();
@@ -230,7 +233,7 @@ export default function DataManagementPage() {
                 <CardHeader>
                   <CardTitle>Export Data</CardTitle>
                   <CardDescription>
-                    Download all routes, regions, closures, stops, vehicle types, and snapshots as JSON.
+                    Download all routes, regions, closures, stops, restricted boarding zones, vehicle types, and snapshots as JSON.
                     Orphaned snapshots are included in the export.
                   </CardDescription>
                 </CardHeader>
@@ -268,6 +271,7 @@ export default function DataManagementPage() {
                         <p>Regions: {importPreview.regions}</p>
                         <p>Closures: {importPreview.closures}</p>
                         <p>Stops: {importPreview.stops}</p>
+                        <p>Restricted boarding zones: {importPreview.restrictedBoardingZones}</p>
                         <p>Orphaned route snapshots (ignored): {importPreview.orphanedRouteSnapshots}</p>
                         <p>Orphaned region snapshots (ignored): {importPreview.orphanedRegionSnapshots}</p>
                       </div>

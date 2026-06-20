@@ -4,9 +4,9 @@ const LatLngTuple = z.tuple([z.number(), z.number()]);
 
 const SnapshotStateEnum = z.enum(["ready", "wip", "for_approval"]);
 const SequenceTypeEnum = z.enum(["going_to", "going_back"]);
+const ClosureTypeEnum = z.enum(["indefinite", "scheduled"]);
 const RestrictionTypeEnum = z.enum(["universal", "specific"]);
 const DisallowedDirectionEnum = z.enum(["direction_to", "direction_back", "both"]);
-const ClosureTypeEnum = z.enum(["indefinite", "scheduled"]);
 
 const RouteSequencePointSchema = z.object({
   sequence: z.number().int().nonnegative(),
@@ -107,6 +107,14 @@ export const ClosureExportSchema = z.object({
 
 export const StopExportSchema = z.object({
   id: z.uuid(),
+  number: z.number().int(),
+  address: z.string(),
+  point: LatLngTuple.nullable(),
+  isPublic: z.boolean(),
+});
+
+export const RestrictedBoardingZoneExportSchema = z.object({
+  id: z.uuid(),
   name: z.string(),
   restrictionType: RestrictionTypeEnum,
   disallowedDirection: DisallowedDirectionEnum,
@@ -135,6 +143,7 @@ export const ImportPayloadSchema = z.object({
   regions: z.array(RegionExportSchema),
   closures: z.array(ClosureExportSchema),
   stops: z.array(StopExportSchema),
+  restrictedBoardingZones: z.array(RestrictedBoardingZoneExportSchema).default([]),
   orphanedSnapshots: OrphanedSnapshotsSchema.optional(),
 });
 
@@ -144,7 +153,7 @@ export type ExportPayload = ImportPayload & { exportedAt: string; orphanedSnapsh
 export {
   SnapshotStateEnum,
   SequenceTypeEnum,
+  ClosureTypeEnum,
   RestrictionTypeEnum,
   DisallowedDirectionEnum,
-  ClosureTypeEnum,
 };

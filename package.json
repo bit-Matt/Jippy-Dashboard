@@ -18,7 +18,8 @@
     "db:seed:clean": "tsx ./scripts/seeding/apply-route-seed-cleaned.ts",
     "lptrp:parse": "tsx scripts/lptrp/parse-stops.ts",
     "lptrp:geocode": "tsx scripts/lptrp/geocode-stops.ts",
-    "lptrp:apply-overrides": "tsx scripts/lptrp/apply-overrides.ts"
+    "lptrp:apply-overrides": "tsx scripts/lptrp/apply-overrides.ts",
+    "gtfs:stops-data": "tsx scripts/seeding/apply-gtfs-stops-data.ts"
   },
   "dependencies": {
     "@base-ui/react": "^1.4.0",

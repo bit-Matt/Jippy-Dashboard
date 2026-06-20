@@ -14,8 +14,10 @@ import {
   routes,
   restrictedBordingZone,
   routeRestrictedInBoardingZone,
+  stops,
   vehicleTypes,
 } from "@/lib/db/schema";
+import type * as GeoJSON from "@/lib/db/postgis-extension/geojsonTypes";
 import type { ExportPayload, ImportPayload } from "@/lib/management/data-schema";
 import { polygonToPointObjects, pointsToPolygon } from "@/lib/management/closure-manager";
 import { lineStringToRbzPoints, pointsToLineString } from "@/lib/management/restricted-boarding-zone-manager";
@@ -47,6 +49,23 @@ type RegionSnapshotRow = {
     point: LatLng;
   }[];
 };
+
+function stopPointToTuple(point: GeoJSON.Point | null): LatLng | null {
+  if (!point?.coordinates) {
+    return null;
+  }
+
+  const [lon, lat] = point.coordinates;
+  return [lat, lon];
+}
+
+function tupleToStopPoint(tuple: LatLng): GeoJSON.Point {
+  const [lat, lon] = tuple;
+  return {
+    type: "Point",
+    coordinates: [lon, lat],
+  };
+}
 
 function toDbPoint(point: LatLng): LatLng {
   return [point[1], point[0]];
@@ -309,6 +328,7 @@ export async function exportAllData(): Promise<Result<ExportPayload>> {
       regionRows,
       closureRows,
       stopRows,
+      rbzRows,
     ] = await Promise.all([
       db.select({
         id: vehicleTypes.id,
@@ -351,6 +371,14 @@ export async function exportAllData(): Promise<Result<ExportPayload>> {
         isPublic: roadClosures.isPublic,
         polygon: roadClosures.polygon,
       }).from(roadClosures),
+
+      db.select({
+        id: stops.id,
+        number: stops.number,
+        address: stops.address,
+        pointGeometry: stops.point,
+        isPublic: stops.isPublic,
+      }).from(stops),
 
       db.select({
         id: restrictedBordingZone.id,
@@ -417,13 +445,20 @@ export async function exportAllData(): Promise<Result<ExportPayload>> {
       })),
       stops: stopRows.map(stop => ({
         id: stop.id,
-        name: stop.name,
-        restrictionType: stop.restrictionType,
-        disallowedDirection: stop.disallowedDirection,
-        polyline: stop.polyline,
+        number: stop.number,
+        address: stop.address,
+        point: stopPointToTuple(stop.pointGeometry),
         isPublic: stop.isPublic,
-        routeIds: stop.routeIds ?? [],
-        points: lineStringToRbzPoints(stop.pointsGeometry, stop.id).map(({ sequence, point }) => ({
+      })),
+      restrictedBoardingZones: rbzRows.map(zone => ({
+        id: zone.id,
+        name: zone.name,
+        restrictionType: zone.restrictionType,
+        disallowedDirection: zone.disallowedDirection,
+        polyline: zone.polyline,
+        isPublic: zone.isPublic,
+        routeIds: zone.routeIds ?? [],
+        points: lineStringToRbzPoints(zone.pointsGeometry, zone.id).map(({ sequence, point }) => ({
           sequence,
           point,
         })),
@@ -446,6 +481,7 @@ export interface ImportSummary {
   regions: number;
   closures: number;
   stops: number;
+  restrictedBoardingZones: number;
 }
 
 export async function importData(payload: ImportPayload, ownerId: string): Promise<Result<ImportSummary>> {
@@ -639,31 +675,48 @@ export async function importData(payload: ImportPayload, ownerId: string): Promi
 
       for (const stop of payload.stops) {
         const [created] = await tx
+          .insert(stops)
+          .values({
+            ownerId,
+            number: stop.number,
+            address: stop.address,
+            point: stop.point ? tupleToStopPoint(stop.point) : null,
+            isPublic: stop.isPublic,
+          })
+          .returning({ id: stops.id });
+
+        if (!created) throw new Error("Failed to create stop.");
+      }
+
+      for (const zone of payload.restrictedBoardingZones) {
+        const [created] = await tx
           .insert(restrictedBordingZone)
           .values({
             ownerId,
-            name: stop.name,
-            restrictionType: stop.restrictionType,
-            disallowedDirection: stop.disallowedDirection,
-            polyline: stop.polyline,
-            points: stop.points.length > 0 ? pointsToLineString(stop.points) : null,
-            isPublic: stop.isPublic,
+            name: zone.name,
+            restrictionType: zone.restrictionType,
+            disallowedDirection: zone.disallowedDirection,
+            polyline: zone.polyline,
+            points: zone.points.length > 0 ? pointsToLineString(zone.points) : null,
+            isPublic: zone.isPublic,
           })
           .returning({ id: restrictedBordingZone.id });
 
-        if (!created) throw new Error("Failed to create stop.");
+        if (!created) throw new Error("Failed to create restricted boarding zone.");
 
-        const remappedRouteIds = stop.routeIds
-          .map(routeId => routeRemapper.get(routeId))
-          .filter((routeId): routeId is string => Boolean(routeId));
+        if (zone.restrictionType === "specific") {
+          const remappedRouteIds = zone.routeIds
+            .map(routeId => routeRemapper.get(routeId))
+            .filter((routeId): routeId is string => Boolean(routeId));
 
-        if (remappedRouteIds.length > 0) {
-          await tx.insert(routeRestrictedInBoardingZone).values(
-            remappedRouteIds.map(routeId => ({
-              restrictionZoneId: created.id,
-              routeId,
-            })),
-          );
+          if (remappedRouteIds.length > 0) {
+            await tx.insert(routeRestrictedInBoardingZone).values(
+              remappedRouteIds.map(routeId => ({
+                restrictionZoneId: created.id,
+                routeId,
+              })),
+            );
+          }
         }
       }
 
@@ -673,6 +726,7 @@ export async function importData(payload: ImportPayload, ownerId: string): Promi
         regions: payload.regions.length,
         closures: payload.closures.length,
         stops: payload.stops.length,
+        restrictedBoardingZones: payload.restrictedBoardingZones.length,
       } satisfies ImportSummary;
     });
 
