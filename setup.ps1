@@ -398,7 +398,8 @@ $osrm_configs = @{
   }
   Foot = @{
     VolumePath = Join-Path -Path $PSScriptRoot ".osm-data\osrm-foot"
-    LuaPath = "/opt/foot.lua"
+    MountedLuaPath = "./osm-assets/osrm-profiless/foot.lua"
+    LuaPath = "/data/foot.lua"
   }
 }
 
@@ -411,8 +412,9 @@ foreach ($Pair in $osrm_configs.GetEnumerator()) {
   $osrm_extract_args = @(
     "run",
     "-t", "--rm",
-    "-v", "$($Pair.Value.VolumePath):/data"
-    "-v", "./.osm-data/philippines-latest.osm.pbf:/data/philippines-latest.osm.pbf"
+    "-v", "$($Pair.Value.VolumePath):/data",
+    "-v", "./.osm-data/philippines-latest.osm.pbf:/data/philippines-latest.osm.pbf",
+    $(if ($Pair.Value.MountedLuaPath -is [string]) { "-v", "$($Pair.Value.MountedLuaPath):$($Pair.Value.LuaPath)" })
     "osrm/osrm-backend",
     "osrm-extract",
     "-p", "$($Pair.Value.LuaPath)",

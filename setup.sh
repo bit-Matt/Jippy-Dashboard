@@ -413,18 +413,21 @@ EOF
 
 declare -A OSRM_VOLUME_PATH
 declare -A OSRM_LUA_PATH
+declare -A OSRM_MOUNTED_LUA_PATH
 OSRM_VOLUME_PATH[Driving]="${SCRIPT_DIR}/.osm-data/osrm-driving"
 OSRM_LUA_PATH[Driving]="/opt/car.lua"
 OSRM_VOLUME_PATH[Bicycle]="${SCRIPT_DIR}/.osm-data/osrm-bicycle"
 OSRM_LUA_PATH[Bicycle]="/opt/bicycle.lua"
 OSRM_VOLUME_PATH[Foot]="${SCRIPT_DIR}/.osm-data/osrm-foot"
-OSRM_LUA_PATH[Foot]="/opt/foot.lua"
+OSRM_MOUNTED_LUA_PATH[Foot]="${SCRIPT_DIR}/osm-assets/osrm-profiles/foot.lua"
+OSRM_LUA_PATH[Foot]="/data/foot.lua"
 
 for KEY in "${!OSRM_VOLUME_PATH[@]}"; do
   echo "Preparing data for ${KEY}..."
 
   VOLUME_PATH="${OSRM_VOLUME_PATH[$KEY]}"
   LUA_PATH="${OSRM_LUA_PATH[$KEY]}"
+  MOUNTED_LUA_PATH="${OSRM_MOUNTED_LUA_PATH[$KEY]:-}"
 
   if [[ -d "$VOLUME_PATH" ]]; then
     continue
@@ -432,9 +435,15 @@ for KEY in "${!OSRM_VOLUME_PATH[@]}"; do
 
   mkdir -p "$VOLUME_PATH"
 
+  MOUNTED_LUA_VOLUME=()
+  if [[ -n "$MOUNTED_LUA_PATH" ]]; then
+    MOUNTED_LUA_VOLUME=(-v "${MOUNTED_LUA_PATH}:${LUA_PATH}")
+  fi
+
   docker run -t --rm \
     -v "${VOLUME_PATH}:/data" \
     -v "${SCRIPT_DIR}/.osm-data/philippines-latest.osm.pbf:/data/philippines-latest.osm.pbf" \
+    "${MOUNTED_LUA_VOLUME[@]}" \
     osrm/osrm-backend \
     osrm-extract -p "${LUA_PATH}" /data/philippines-latest.osm.pbf
 
