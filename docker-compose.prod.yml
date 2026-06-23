@@ -48,7 +48,9 @@ services:
     restart: unless-stopped
     volumes:
       - ./.osm-data/tileserver:/data
-      - ./scripts/tileserver/config.json:/data/config.json
+      - ./osm-assets/fontstack:/data/fonts
+      - ./osm-assets/sprites:/data/sprites
+      - ./osm-assets/styles:/data/styles
     command:
       - "-c"
       - "/data/config.json"
@@ -110,7 +112,6 @@ services:
       - "--algorithm"
       - "mld"
       - "/data/philippines-latest.osrm"
-
   osrm_foot:
     image: osrm/osrm-backend:latest
     restart: unless-stopped
