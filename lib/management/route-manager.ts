@@ -21,6 +21,7 @@ export async function getAllRoutes(forPublic: boolean = false): Promise<Result<R
       const result = await db
         .select({
           id: routes.id,
+          activeSnapshotId: routes.activeSnapshotId,
           routeNumber: routes.routeNumber,
           routeName: routes.routeName,
           routeColor: routes.routeColor,
@@ -37,26 +38,35 @@ export async function getAllRoutes(forPublic: boolean = false): Promise<Result<R
         .leftJoin(vehicleTypes, eq(vehicleTypes.id, routes.vehicleTypeId))
         .where(eq(routes.isPublic, true));
 
-      const mapping: RouteBaseObject[] = result.map(x => ({
-        id: x.id,
-        routeNumber: x.routeNumber,
-        routeName: x.routeName,
-        routeColor: x.routeColor,
-        routeDetails: x.routeDetails,
-        fleetCount: x.fleetCount ?? 100,
-        polylines: {
-          to: x.polylineGoingTo,
-          back: x.polylineGoingBack,
-        },
-        availability: {
-          from: x.availableFrom,
-          to: x.availableTo,
-        },
-        vehicle: {
-          id: x.vehicleTypeId,
-          name: x.vehicleTypeName!,
-        },
-      }));
+      const imageUrlsBySnapshotId = await imageManager.getPublicImageUrlsBySnapshotIds(
+        result.map(routeRow => routeRow.activeSnapshotId),
+      );
+
+      const mapping: RouteBaseObject[] = result.map(x => {
+        const imageUrls = imageUrlsBySnapshotId.get(x.activeSnapshotId);
+
+        return {
+          id: x.id,
+          routeNumber: x.routeNumber,
+          routeName: x.routeName,
+          routeColor: x.routeColor,
+          routeDetails: x.routeDetails,
+          fleetCount: x.fleetCount ?? 100,
+          imageUrls: imageUrls && imageUrls.length > 0 ? imageUrls : null,
+          polylines: {
+            to: x.polylineGoingTo,
+            back: x.polylineGoingBack,
+          },
+          availability: {
+            from: x.availableFrom,
+            to: x.availableTo,
+          },
+          vehicle: {
+            id: x.vehicleTypeId,
+            name: x.vehicleTypeName!,
+          },
+        };
+      });
 
       return new Success(mapping);
     }
@@ -1099,6 +1109,7 @@ export interface RouteBaseObject {
   routeColor: string;
   routeDetails: string;
   fleetCount: number;
+  imageUrls?: string[] | null;
   availability: {
     from: string;
     to: string;

@@ -2,7 +2,7 @@ import { promises as fs } from "node:fs";
 import path from "node:path";
 import os from "node:os";
 
-import { and, asc, eq } from "drizzle-orm";
+import { and, asc, eq, inArray } from "drizzle-orm";
 import sharp, { type Metadata } from "sharp";
 import { v7 as uuidv7 } from "uuid";
 
@@ -169,6 +169,33 @@ export async function getSnapshotImages(snapshotId: string): Promise<Result<Rout
   } catch (error) {
     return new Failure(ErrorCodes.Fatal, "Failed to fetch snapshot images.", { snapshotId }, error);
   }
+}
+
+export async function getPublicImageUrlsBySnapshotIds(
+  snapshotIds: string[],
+): Promise<Map<string, string[]>> {
+  if (snapshotIds.length === 0) {
+    return new Map();
+  }
+
+  const records = await db
+    .select({
+      snapshotId: routeSnapshotImages.snapshotId,
+      id: routeSnapshotImages.id,
+      mimeType: routeSnapshotImages.mimeType,
+    })
+    .from(routeSnapshotImages)
+    .where(inArray(routeSnapshotImages.snapshotId, snapshotIds))
+    .orderBy(asc(routeSnapshotImages.uploadedAt));
+
+  const imageUrlsBySnapshotId = new Map<string, string[]>();
+  for (const record of records) {
+    const urls = imageUrlsBySnapshotId.get(record.snapshotId) ?? [];
+    urls.push(buildPublicImageUrl(record.id, record.mimeType));
+    imageUrlsBySnapshotId.set(record.snapshotId, urls);
+  }
+
+  return imageUrlsBySnapshotId;
 }
 
 export async function deleteImage(
