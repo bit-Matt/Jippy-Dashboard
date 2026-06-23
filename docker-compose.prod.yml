@@ -137,7 +137,7 @@ services:
       Services__OSRM__Driving: http://driving_router:5000
       Services__OSRM__Bicycle: http://driving_bicycle:5000
       Services__OSRM__Foot: http://osrm_foot:5000
-      ConnectionStrings__DefaultConnection: ${DOTNET_POSTGRES_URL}
+      ConnectionStrings__DefaultConnection: ${DOCKER_DOTNET_POSTGRES}
       ConnectionStrings__RedisCache: cache:6379
     depends_on:
       db:
