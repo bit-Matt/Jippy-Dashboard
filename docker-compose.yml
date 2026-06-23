@@ -144,22 +144,6 @@ services:
       - "mld"
       - "/data/philippines-latest.osrm"
 
-  debug_frontend:
-    image: osrm/osrm-frontend:latest
-    restart: unless-stopped
-    ports:
-      - "6901:9966"
-    environment:
-      OSRM_BACKEND: "http://driving_router:5000"
-      OSRM_MODES: '[{"name":"driving","url":"http://driving_router:5000"},{"name":"bicycle","url":"http://driving_bicycle:5000"},{"name":"foot","url":"http://osrm_foot:5000"}]'
-    depends_on:
-      driving_router:
-        condition: service_started
-      driving_bicycle:
-        condition: service_started
-      osrm_foot:
-        condition: service_started
-
   #############################################################################
   # Algorithm
   #############################################################################
