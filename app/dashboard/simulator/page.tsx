@@ -4,7 +4,7 @@ import dynamic from "next/dynamic";
 import { useCallback, useState } from "react";
 
 import { AppSidebar } from "@/components/app-sidebar";
-import Simulator from "@/components/simulator";
+import Simulator, { type SimulatorApiVersion } from "@/components/simulator";
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
 import type { MultiNavigateRouteResponse, NavigateRouteSuggestion } from "@/contracts/responses";
 import type { IApiResponse } from "@/lib/http/ApiResponseBuilder";
@@ -16,7 +16,7 @@ import { type SimulationOverrides } from "@/lib/routing-fast";
 const SimulatorMapDynamic = dynamic(() => import("./SimulatorMap"), { ssr: false });
 
 export default function SimulatorPage() {
-  const [apiVersion, setApiVersion] = useState<"v1" | "v2">("v1");
+  const [apiVersion, setApiVersion] = useState<SimulatorApiVersion>("v2");
   const [startPoint, setStartPoint] = useState<[number, number] | null>(null);
   const [endPoint, setEndPoint] = useState<[number, number] | null>(null);
   const [startAddress, setStartAddress] = useState("");
@@ -28,7 +28,7 @@ export default function SimulatorPage() {
   const [error, setError] = useState<string | null>(null);
   const [overrides, setOverrides] = useState<SimulationOverrides>({});
 
-  const handleApiVersionChange = useCallback((version: "v1" | "v2") => {
+  const handleApiVersionChange = useCallback((version: SimulatorApiVersion) => {
     setApiVersion(version);
     setError(null);
     setResult(null);
@@ -70,13 +70,13 @@ export default function SimulatorPage() {
     setResult(null);
     setActiveSuggestion(null);
 
-    const endpoint = apiVersion === "v2"
-      ? "/api/restricted/navigate/simulate"
-      : `/api/public/navigate/${apiVersion}`;
+    const endpoint =
+      apiVersion === "v2" ? "/api/restricted/navigate/simulate" : "/api/public/navigate/v3";
 
-    const body = apiVersion === "v2"
-      ? JSON.stringify({ start: startPoint, end: endPoint, overrides })
-      : JSON.stringify({ start: startPoint, end: endPoint });
+    const body =
+      apiVersion === "v2"
+        ? JSON.stringify({ start: startPoint, end: endPoint, overrides })
+        : JSON.stringify({ start: startPoint, end: endPoint });
 
     const { data, error: fetchError } = await $fetch<IApiResponse<MultiNavigateRouteResponse>>(
       endpoint,

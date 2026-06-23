@@ -40,6 +40,15 @@ const SimulateSchema = z.object({
   end: z.tuple([z.number(), z.number()]),
 });
 
+export type SimulatorApiVersion = "v2" | "v3";
+
+export const SIMULATOR_API_VERSION_OPTIONS: {
+  value: SimulatorApiVersion;
+  label: string;
+}[] = [
+  { value: "v2", label: "/api/public/navigate/v2 - Stable" },
+];
+
 const LEG_FALLBACK_COLOR = "#6B7280";
 
 const LEG_ICONS: Record<string, React.ReactNode> = {
@@ -61,15 +70,7 @@ function formatSuggestionLabel(label: string, totalTransfers?: number): string {
     const count = Number(transfersMatch[1]);
     return `${count} Transfers`;
   }
-  // Legacy v1 preset labels
-  const legacy: Record<string, string> = {
-    fastest: "Fastest",
-    least_walking: "Less Walk",
-    simplest: "Simplest",
-    explorer: "Explorer",
-    tricycle: "Tricycle",
-  };
-  return legacy[label] ?? label;
+  return label;
 }
 
 function formatSuggestionOptionLabel(
@@ -287,7 +288,7 @@ function SuggestionPanel({ suggestion }: { suggestion: NavigateRouteSuggestion }
 }
 
 export interface SimulatorProps {
-  apiVersion: "v1" | "v2";
+  apiVersion: SimulatorApiVersion;
   startAddress: string;
   endAddress: string;
   startPoint: [number, number] | null;
@@ -297,7 +298,7 @@ export interface SimulatorProps {
   result: MultiNavigateRouteResponse | null;
   error: string | null;
   overrides: SimulationOverrides;
-  onApiVersionChange: (version: "v1" | "v2") => void;
+  onApiVersionChange: (version: SimulatorApiVersion) => void;
   onPickingModeChange: (mode: "start" | "end" | null) => void;
   onSimulate: () => void;
   onSuggestionChange: (suggestion: NavigateRouteSuggestion | null) => void;
@@ -369,10 +370,14 @@ export default function Simulator({
             <NativeSelect
               id="simulator-api-version"
               value={apiVersion}
-              onChange={(event) => onApiVersionChange(event.target.value as "v1" | "v2")}
+              onChange={(event) => onApiVersionChange(event.target.value as SimulatorApiVersion)}
               className="w-full"
             >
-              <NativeSelectOption value="v2">/api/public/navigate/v2 - Stable</NativeSelectOption>
+              {SIMULATOR_API_VERSION_OPTIONS.map((option) => (
+                <NativeSelectOption key={option.value} value={option.value}>
+                  {option.label}
+                </NativeSelectOption>
+              ))}
             </NativeSelect>
           </div>
 
