@@ -21,7 +21,7 @@ import type {
 import { getRbzLineCoordinates } from "@/lib/stops/display";
 import { getPositronStyleUrl } from "@/lib/map/style-url";
 import { createTransitPointIcon } from "@/lib/map/transit-marker-icon";
-import { decodePolyline } from "@/lib/routing/polyline";
+import { decodePolyline } from "@/lib/map/polyline";
 import { useStopDashboard } from "@/contexts/StopDashboardContext";
 
 interface StopMapProps {

@@ -4,7 +4,7 @@ import { db } from "@/lib/db";
 import type * as GeoJSON from "@/lib/db/postgis-extension/geojsonTypes";
 import { restrictedBordingZone, routeRestrictedInBoardingZone } from "@/lib/db/schema";
 import { ErrorCodes, Failure, Result, Success } from "@/lib/one-of/types";
-import { encodePolyline } from "@/lib/routing/polyline";
+import { encodePolyline } from "@/lib/map/polyline";
 
 export function lineStringToRbzPoints(lineString: GeoJSON.LineString | null, zoneId: string): RbzPointObject[] {
   if (!lineString?.coordinates) return [];

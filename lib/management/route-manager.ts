@@ -2,6 +2,7 @@ import {and, count, eq, sql} from "drizzle-orm";
 
 import {db} from "@/lib/db";
 import {routes, routeSequences, routeSnapshots, vehicleTypes} from "@/lib/db/schema";
+import * as imageManager from "@/lib/management/image-manager";
 import {ErrorCodes, Failure, Result, Success} from "@/lib/one-of/types";
 import {unwrap} from "@/lib/one-of";
 
@@ -547,6 +548,15 @@ export async function copySnapshot(routeId: string, sourceSnapshotId: string, ow
         updatedAt: newSnapshot.updatedAt,
       };
     });
+
+    if (!result) {
+      return new Failure(ErrorCodes.Fatal, "Failed to copy snapshot", { routeId, sourceSnapshotId });
+    }
+
+    const copyImagesResult = await imageManager.copyImagesForSnapshot(sourceSnapshotId, result.id, ownerId);
+    if (copyImagesResult instanceof Failure) {
+      return copyImagesResult;
+    }
 
     return new Success(result);
   } catch (e) {

@@ -1,5 +1,5 @@
 import { ErrorCodes, Failure, Result, Success } from "@/lib/one-of";
-import { MultiNavigateResponse } from "@/lib/routing/types";
+import { MultiNavigateResponse } from "@/lib/map/types";
 import { utils } from "@/lib/validator";
 
 export type SimulationOverrides = {

@@ -234,19 +234,17 @@ function ValueSliderRow({
   trackStyle: React.CSSProperties;
   onChange: (value: number) => void;
 }) {
-  const [inputValue, setInputValue] = useState(String(value));
-
-  useEffect(() => {
-    setInputValue(String(value));
-  }, [value]);
+  const [draft, setDraft] = useState<string | null>(null);
+  const displayValue = draft ?? String(value);
 
   const commitInput = () => {
-    const parsed = Number(inputValue);
+    const parsed = Number(displayValue);
     if (!Number.isFinite(parsed)) {
-      setInputValue(String(value));
+      setDraft(null);
       return;
     }
     onChange(Math.round(Math.min(max, Math.max(min, parsed))));
+    setDraft(null);
   };
 
   return (
@@ -273,8 +271,8 @@ function ValueSliderRow({
       </div>
       <div className={cn("flex items-center gap-0.5", unit ? "w-14" : "w-11")}>
         <Input
-          value={inputValue}
-          onChange={(event) => setInputValue(event.target.value)}
+          value={displayValue}
+          onChange={(event) => setDraft(event.target.value)}
           onBlur={commitInput}
           onKeyDown={(event) => {
             if (event.key === "Enter") {
@@ -299,28 +297,26 @@ function HexInputField({
   value: string;
   onChange: (hex: string) => void;
 }) {
-  const [inputValue, setInputValue] = useState(value);
-
-  useEffect(() => {
-    setInputValue(value);
-  }, [value]);
+  const [draft, setDraft] = useState<string | null>(null);
+  const displayValue = draft ?? value;
 
   const commitInput = () => {
-    const trimmed = inputValue.trim();
+    const trimmed = displayValue.trim();
     const withHash = trimmed.startsWith("#") ? trimmed : `#${trimmed}`;
     if (!isValidHex(withHash)) {
-      setInputValue(value);
+      setDraft(null);
       return;
     }
     onChange(normalizeHex(withHash));
+    setDraft(null);
   };
 
   return (
     <div className="flex items-center gap-2">
       <span className="text-xs font-medium text-muted-foreground">Hex</span>
       <Input
-        value={inputValue}
-        onChange={(event) => setInputValue(event.target.value)}
+        value={displayValue}
+        onChange={(event) => setDraft(event.target.value)}
         onBlur={commitInput}
         onKeyDown={(event) => {
           if (event.key === "Enter") {
@@ -345,19 +341,14 @@ function ColorWheelPickerPanel({
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const dragTargetRef = useRef<DragTarget>(null);
   const [colorMode, setColorMode] = useState<ColorMode>("hsb");
-  const [hsb, setHsb] = useState<Hsb>(() => hexToHsb(normalizeHex(value)));
 
   const normalizedValue = normalizeHex(value);
+  const hsb = hexToHsb(normalizedValue);
   const rgb = hexToRgb(normalizedValue);
-
-  useEffect(() => {
-    setHsb(hexToHsb(normalizedValue));
-  }, [normalizedValue]);
 
   const emitChange = useCallback(
     (next: Hsb) => {
       const clamped = clampHsb(next);
-      setHsb(clamped);
       onChange(hsbToHex(clamped.h, clamped.s, clamped.b));
     },
     [onChange],
@@ -558,7 +549,7 @@ function ColorWheelPickerPanel({
                 max={255}
                 unit=""
                 trackStyle={{
-                  background: `linear-gradient(to right, #000000, #ff0000)`,
+                  background: "linear-gradient(to right, #000000, #ff0000)",
                 }}
                 onChange={(r) => emitRgbChange({ r })}
               />
@@ -569,7 +560,7 @@ function ColorWheelPickerPanel({
                 max={255}
                 unit=""
                 trackStyle={{
-                  background: `linear-gradient(to right, #000000, #00ff00)`,
+                  background: "linear-gradient(to right, #000000, #00ff00)",
                 }}
                 onChange={(g) => emitRgbChange({ g })}
               />
@@ -580,7 +571,7 @@ function ColorWheelPickerPanel({
                 max={255}
                 unit=""
                 trackStyle={{
-                  background: `linear-gradient(to right, #000000, #0000ff)`,
+                  background: "linear-gradient(to right, #000000, #0000ff)",
                 }}
                 onChange={(b) => emitRgbChange({ b })}
               />

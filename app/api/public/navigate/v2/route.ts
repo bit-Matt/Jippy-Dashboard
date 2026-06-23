@@ -6,8 +6,8 @@ import { StatusCodes } from "@/lib/http/StatusCodes";
 import { tryParseJson } from "@/lib/http/RequestUtilities";
 import { utils, validator } from "@/lib/validator";
 
-import type { LatLng } from "@/lib/routing/types";
-import {oneOf} from "@/lib/one-of";
+import type { LatLng } from "@/lib/map/types";
+import { oneOf } from "@/lib/one-of";
 
 export async function POST(req: NextRequest) {
   const data = await tryParseJson<RequestBody>(req);

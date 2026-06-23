@@ -272,6 +272,27 @@ export const routeSequences = pgTable(
   ],
 );
 
+export const routeSnapshotImages = pgTable(
+  "route_snapshot_images",
+  {
+    id: uuid("id")
+      .primaryKey()
+      .$default(() => uuidv7()),
+    snapshotId: uuid("snapshot_id")
+      .notNull()
+      .references(() => routeSnapshots.id, { onDelete: "cascade" }),
+    originalFilename: text("original_filename").notNull(),
+    storedFilename: text("stored_filename").notNull(),
+    fileSize: integer("file_size").notNull(),
+    mimeType: text("mime_type").notNull(),
+    uploadedAt: timestamp("uploaded_at").defaultNow().notNull(),
+    uploadedBy: text("uploaded_by").references(() => user.id, { onDelete: "set null" }),
+  },
+  (t) => [
+    index("route_snapshot_images_snapshot_idx").on(t.snapshotId),
+  ],
+);
+
 export const region = pgTable(
   "region_markers",
   {

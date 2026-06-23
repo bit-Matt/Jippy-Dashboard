@@ -11,7 +11,7 @@ import "leaflet/dist/leaflet.css";
 
 import type { NavigateRouteLeg } from "@/contracts/responses";
 import { getLibertyStyleUrl } from "@/lib/map/style-url";
-import { decodePolyline } from "@/lib/routing/polyline";
+import { decodePolyline } from "@/lib/map/polyline";
 
 const fixLeafletIcons = () => {
   L.Icon.Default.mergeOptions({

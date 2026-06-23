@@ -1,4 +1,4 @@
-import { decodePolyline, encodePolyline } from "@/lib/routing/polyline";
+import { decodePolyline, encodePolyline } from "@/lib/map/polyline";
 
 type RoutePoint = {
   sequence: number;

@@ -1,7 +1,7 @@
 "use client";
 
-import { ChevronLeft, MapPin, Trash2 } from "lucide-react";
-import { useState, useEffect, useRef, type DragEvent } from "react";
+import { ChevronLeft, ImagePlus, Loader2, MapPin, Trash2 } from "lucide-react";
+import { useState, useEffect, useRef, type ChangeEvent, type DragEvent } from "react";
 import useSWR from "swr";
 import { z } from "zod";
 
@@ -72,6 +72,10 @@ export default function RouteEditor({
   const [availableTo, setAvailableTo] = useState("23:59");
   const [isDetailsDialogOpen, setIsDetailsDialogOpen] = useState(false);
   const [draftRouteDetails, setDraftRouteDetails] = useState("");
+  const [imageUploadError, setImageUploadError] = useState<string | null>(null);
+  const [isUploadingImage, setIsUploadingImage] = useState(false);
+  const [deletingImageId, setDeletingImageId] = useState<string | null>(null);
+  const imageFileInputRef = useRef<HTMLInputElement>(null);
   const [draggedWaypointId, setDraggedWaypointId] = useState<number | null>(null);
   const dragPreviewRef = useRef<HTMLElement | null>(null);
   const [loadingAddresses, setLoadingAddresses] = useState<Set<number>>(new Set());
@@ -96,6 +100,18 @@ export default function RouteEditor({
     saveRoute,
     stopCreating,
   } = useRouteEditor();
+
+  const isSnapshotEdit = !!editingRoute?.id && !!editingSnapshotId;
+  const snapshotImagesKey = isSnapshotEdit
+    ? `/api/restricted/management/route/${editingRoute!.id}/${editingSnapshotId}/images`
+    : null;
+  const {
+    data: snapshotImagesResponse,
+    mutate: mutateSnapshotImages,
+    isLoading: isLoadingSnapshotImages,
+  } = useSWR<RouteSnapshotImagesResponse>(snapshotImagesKey, $fetch);
+
+  const snapshotImages = snapshotImagesResponse?.data?.data ?? [];
 
   useEffect(() => {
     if (!editingRoute) {
@@ -346,12 +362,90 @@ export default function RouteEditor({
 
   const handleOpenRouteDetails = () => {
     setDraftRouteDetails(routeDetails);
+    setImageUploadError(null);
     setIsDetailsDialogOpen(true);
   };
 
   const handleSaveRouteDetails = () => {
     setRouteDetails(draftRouteDetails);
     setIsDetailsDialogOpen(false);
+  };
+
+  const handleImageUpload = async (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    setImageUploadError(null);
+
+    if (!file || !isSnapshotEdit) {
+      event.target.value = "";
+      return;
+    }
+
+    setIsUploadingImage(true);
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+
+      const response = await fetch(
+        `/api/restricted/management/route/${editingRoute!.id}/${editingSnapshotId}/images`,
+        {
+          method: "POST",
+          body: formData,
+        },
+      );
+
+      if (!response.ok) {
+        const body = await response.json().catch(() => null);
+        setImageUploadError(getErrorMessage(body, "Failed to upload image."));
+        return;
+      }
+
+      await mutateSnapshotImages();
+    } catch (error) {
+      console.error("Error uploading image:", error);
+      setImageUploadError(getErrorMessage(error, "Failed to upload image."));
+    } finally {
+      setIsUploadingImage(false);
+      event.target.value = "";
+    }
+  };
+
+  const handleDeleteImage = async (imageId: string) => {
+    if (!isSnapshotEdit) {
+      return;
+    }
+
+    setImageUploadError(null);
+    setDeletingImageId(imageId);
+
+    try {
+      const response = await fetch(
+        `/api/restricted/management/route/${editingRoute!.id}/${editingSnapshotId}/images/${imageId}`,
+        { method: "DELETE" },
+      );
+
+      if (!response.ok) {
+        const body = await response.json().catch(() => null);
+        setImageUploadError(getErrorMessage(body, "Failed to delete image."));
+        return;
+      }
+
+      await mutateSnapshotImages();
+    } catch (error) {
+      console.error("Error deleting image:", error);
+      setImageUploadError(getErrorMessage(error, "Failed to delete image."));
+    } finally {
+      setDeletingImageId(null);
+    }
+  };
+
+  const formatFileSize = (bytes: number) => {
+    if (bytes < 1024) {
+      return `${bytes} B`;
+    }
+    if (bytes < 1024 * 1024) {
+      return `${(bytes / 1024).toFixed(1)} KB`;
+    }
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
   };
 
   const isRouteAvailabilityValid = Boolean(availableFrom) && Boolean(availableTo) && availableFrom <= availableTo;
@@ -672,6 +766,110 @@ export default function RouteEditor({
             onChange={(e) => setDraftRouteDetails(e.target.value)}
             className="min-h-56 max-h-[60vh] resize-y"
           />
+
+          <div className="space-y-3">
+            <div className="flex items-center justify-between gap-2">
+              <Label>Route Images</Label>
+              {isSnapshotEdit && (
+                <>
+                  <Input
+                    ref={imageFileInputRef}
+                    type="file"
+                    accept=".png,.jpg,.jpeg,image/png,image/jpeg"
+                    className="hidden"
+                    onChange={handleImageUpload}
+                    disabled={isUploadingImage}
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    disabled={isUploadingImage}
+                    onClick={() => imageFileInputRef.current?.click()}
+                  >
+                    {isUploadingImage ? (
+                      <>
+                        <Loader2 className="mr-2 size-4 animate-spin" />
+                        Uploading...
+                      </>
+                    ) : (
+                      <>
+                        <ImagePlus className="mr-2 size-4" />
+                        Upload Image
+                      </>
+                    )}
+                  </Button>
+                </>
+              )}
+            </div>
+
+            {!isSnapshotEdit && (
+              <p className="text-xs text-muted-foreground">
+                Save the snapshot first to enable image uploads.
+              </p>
+            )}
+
+            {isSnapshotEdit && (
+              <p className="text-xs text-muted-foreground">
+                PNG or JPG up to 10 MB. Images are publicly accessible once uploaded.
+              </p>
+            )}
+
+            {imageUploadError && (
+              <p className="text-xs text-destructive">{imageUploadError}</p>
+            )}
+
+            {isSnapshotEdit && isLoadingSnapshotImages && (
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <Loader2 className="size-4 animate-spin" />
+                Loading images...
+              </div>
+            )}
+
+            {isSnapshotEdit && !isLoadingSnapshotImages && snapshotImages.length > 0 && (
+              <div className="grid max-h-64 grid-cols-2 gap-3 overflow-y-auto sm:grid-cols-3">
+                {snapshotImages.map((image) => (
+                  <div
+                    key={image.id}
+                    className="group relative overflow-hidden rounded-md border bg-muted/30"
+                  >
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={image.publicUrl}
+                      alt={image.originalFilename}
+                      className="aspect-video w-full object-cover"
+                    />
+                    <div className="space-y-1 p-2">
+                      <p className="truncate text-xs font-medium" title={image.originalFilename}>
+                        {image.originalFilename}
+                      </p>
+                      <p className="text-xs text-muted-foreground">{formatFileSize(image.fileSize)}</p>
+                    </div>
+                    <Button
+                      type="button"
+                      variant="destructive"
+                      size="icon"
+                      className="absolute top-2 right-2 size-7 opacity-0 transition-opacity group-hover:opacity-100"
+                      disabled={deletingImageId === image.id}
+                      onClick={() => handleDeleteImage(image.id)}
+                      aria-label={`Delete ${image.originalFilename}`}
+                    >
+                      {deletingImageId === image.id ? (
+                        <Loader2 className="size-4 animate-spin" />
+                      ) : (
+                        <Trash2 className="size-4" />
+                      )}
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {isSnapshotEdit && !isLoadingSnapshotImages && snapshotImages.length === 0 && (
+              <p className="text-xs text-muted-foreground">No images uploaded yet.</p>
+            )}
+          </div>
+
           <DialogFooter>
             <DialogClose asChild>
               <Button type="button" variant="outline">
@@ -696,6 +894,24 @@ interface RouteEditorProps {
   snapshotParentRouteId?: string | null
   onSaved?: () => void
   onClosed?: () => void
+}
+
+type RouteSnapshotImagesResponse = {
+  data?: {
+    ok: boolean;
+    data: RouteSnapshotImage[];
+  };
+  error?: unknown;
+}
+
+type RouteSnapshotImage = {
+  id: string;
+  snapshotId: string;
+  originalFilename: string;
+  fileSize: number;
+  mimeType: string;
+  uploadedAt: string;
+  publicUrl: string;
 }
 
 type MeResponse = {

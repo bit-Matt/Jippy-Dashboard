@@ -1,5 +1,5 @@
 import type { RbzDisallowedDirection, RbzRestrictionType, RestrictedBoardingZoneResponse } from "@/contracts/responses";
-import { decodePolyline } from "@/lib/routing/polyline";
+import { decodePolyline } from "@/lib/map/polyline";
 
 export function getRbzLineCoordinates(zone: Pick<RestrictedBoardingZoneResponse, "points" | "polyline">): Array<[number, number]> {
   const sortedPoints = [...zone.points]

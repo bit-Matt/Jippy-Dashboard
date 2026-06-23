@@ -372,8 +372,7 @@ export default function Simulator({
               onChange={(event) => onApiVersionChange(event.target.value as "v1" | "v2")}
               className="w-full"
             >
-              <NativeSelectOption value="v1">/api/public/navigate/v1 - Stable</NativeSelectOption>
-              <NativeSelectOption value="v2">/api/public/navigate/v2 - Beta (.NET 10 router-fast)</NativeSelectOption>
+              <NativeSelectOption value="v2">/api/public/navigate/v2 - Stable</NativeSelectOption>
             </NativeSelect>
           </div>
 

@@ -15,7 +15,7 @@ import "leaflet-routing-machine/dist/leaflet-routing-machine.css";
 
 import { useRouteEditor } from "@/contexts/RouteEditorContext";
 import { getPositronStyleUrl } from "@/lib/map/style-url";
-import { decodePolyline } from "@/lib/routing/polyline";
+import { decodePolyline } from "@/lib/map/polyline";
 
 const buildFocusSignature = (
   focusKey: string | number,

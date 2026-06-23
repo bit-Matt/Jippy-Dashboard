@@ -35,7 +35,7 @@ import { ClosureEditorProvider } from "@/contexts/ClosureEditorContext";
 import { RouteEditorProvider, useRouteEditor } from "@/contexts/RouteEditorContext";
 import { $fetch } from "@/lib/http/client";
 import type { IApiResponse } from "@/lib/http/ApiResponseBuilder";
-import { decodePolyline } from "@/lib/routing/polyline";
+import { decodePolyline } from "@/lib/map/polyline";
 
 import RouteMapComponent from "./MapComponent";
 

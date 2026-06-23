@@ -164,6 +164,8 @@ services:
        - NEXT_PUBLIC_TILESERVER_URL=${NEXT_PUBLIC_TILESERVER_URL}
        - NEXT_PUBLIC_TURNSTILE_SITE_KEY=${NEXT_PUBLIC_TURNSTILE_SITE_KEY}
     restart: unless-stopped
+    volumes:
+      - ./.osm-data/uploads:/app/uploads
     environment:
       BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET}
       BETTER_AUTH_URL: ${BETTER_AUTH_URL}
