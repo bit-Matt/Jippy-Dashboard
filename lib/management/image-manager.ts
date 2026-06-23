@@ -131,7 +131,7 @@ export async function validateAndSaveImage(
     const storedFilename = `${id}.${storedExt}`;
 
     await ensureUploadsDir();
-    await fs.writeFile(path.join(UPLOADS_DIR, storedFilename), buffer);
+    await fs.writeFile(path.join(/* webpackIgnore: true */ /* turbopackIgnore: true */ UPLOADS_DIR, storedFilename), buffer);
 
     const [inserted] = await db
       .insert(routeSnapshotImages)
@@ -147,7 +147,7 @@ export async function validateAndSaveImage(
       .returning();
 
     if (!inserted) {
-      await fs.unlink(path.join(UPLOADS_DIR, storedFilename)).catch(() => undefined);
+      await fs.unlink(path.join(/* webpackIgnore: true */ /* turbopackIgnore: true */ UPLOADS_DIR, storedFilename)).catch(() => undefined);
       return new Failure(ErrorCodes.Fatal, "Failed to save image metadata.", { snapshotId });
     }
 
@@ -225,7 +225,7 @@ export async function deleteImage(
     }
 
     await db.delete(routeSnapshotImages).where(eq(routeSnapshotImages.id, imageId));
-    await fs.unlink(path.join(UPLOADS_DIR, record.storedFilename)).catch(() => undefined);
+    await fs.unlink(path.join(/* webpackIgnore: true */ /* turbopackIgnore: true */ UPLOADS_DIR, record.storedFilename)).catch(() => undefined);
 
     return new Success(undefined);
   } catch (error) {
@@ -255,7 +255,7 @@ export async function copyImagesForSnapshot(
       const storedExt = path.extname(image.storedFilename).slice(1);
       const newStoredFilename = `${newId}.${storedExt}`;
       const sourcePath = path.join(UPLOADS_DIR, image.storedFilename);
-      const destinationPath = path.join(UPLOADS_DIR, newStoredFilename);
+      const destinationPath = path.join(/* webpackIgnore: true */ /* turbopackIgnore: true */ UPLOADS_DIR, newStoredFilename);
 
       await fs.copyFile(sourcePath, destinationPath);
 
