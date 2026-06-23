@@ -8,6 +8,7 @@ import { z } from "zod";
 import { Card, CardContent, CardHeader} from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { ColorWheelPicker } from "@/components/color-wheel-picker";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import {
@@ -51,19 +52,6 @@ const routePayloadSchema = z.object({
   message: "Route availability is invalid. Ensure Available From is earlier than or equal to Available To.",
   path: ["availableFrom"],
 });
-
-const ROUTE_COLORS = [
-  { label: "Sun Yellow", value: "#fff100" },
-  { label: "Orange", value: "#ff8c00" },
-  { label: "Red", value: "#e81123" },
-  { label: "Magenta", value: "#ec008c" },
-  { label: "Purple", value: "#68217a" },
-  { label: "Navy", value: "#00188f" },
-  { label: "Sky", value: "#00bcf2" },
-  { label: "Teal", value: "#00b294" },
-  { label: "Green", value: "#009e49" },
-  { label: "Lime", value: "#bad80a" },
-];
 
 export default function RouteEditor({
   editingRoute,
@@ -550,25 +538,11 @@ export default function RouteEditor({
 
               <div className="space-y-2">
                 <Label>Route Color</Label>
-                <Select value={selectedColor} onValueChange={setSelectedColor}>
-                  <SelectTrigger className="w-full">
-                    <SelectValue placeholder="Select route color" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {ROUTE_COLORS.map((color) => (
-                      <SelectItem key={color.value} value={color.value}>
-                        <span className="flex items-center gap-2">
-                          <span
-                            aria-hidden="true"
-                            className="h-2.5 w-2.5 rounded-full"
-                            style={{ backgroundColor: color.value }}
-                          />
-                          {color.label}
-                        </span>
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <ColorWheelPicker
+                  variant="popover"
+                  value={selectedColor}
+                  onChange={setSelectedColor}
+                />
               </div>
 
               <div className="space-y-2">

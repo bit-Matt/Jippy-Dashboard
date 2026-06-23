@@ -8,6 +8,7 @@ import { z } from "zod";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
+import { ColorWheelPicker } from "@/components/color-wheel-picker";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -35,19 +36,6 @@ const regionSaveSchema = z.object({
     }),
   ),
 });
-
-const REGION_COLORS = [
-  { label: "Sun Yellow", value: "#fff100" },
-  { label: "Orange", value: "#ff8c00" },
-  { label: "Red", value: "#e81123" },
-  { label: "Magenta", value: "#ec008c" },
-  { label: "Purple", value: "#68217a" },
-  { label: "Navy", value: "#00188f" },
-  { label: "Sky", value: "#00bcf2" },
-  { label: "Teal", value: "#00b294" },
-  { label: "Green", value: "#009e49" },
-  { label: "Lime", value: "#bad80a" },
-];
 
 export default function RegionEditor() {
   const [stationAddresses, setStationAddresses] = useState<Record<number, string>>({});
@@ -301,25 +289,11 @@ export default function RegionEditor() {
 
               <div className="space-y-2">
                 <Label>Region Color</Label>
-                <Select value={regionColor} onValueChange={setRegionColor}>
-                  <SelectTrigger className="w-full">
-                    <SelectValue placeholder="Select region color" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {REGION_COLORS.map((color) => (
-                      <SelectItem key={color.value} value={color.value}>
-                        <span className="flex items-center gap-2">
-                          <span
-                            aria-hidden="true"
-                            className="h-2.5 w-2.5 rounded-full"
-                            style={{ backgroundColor: color.value }}
-                          />
-                          {color.label}
-                        </span>
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <ColorWheelPicker
+                  variant="popover"
+                  value={regionColor}
+                  onChange={setRegionColor}
+                />
               </div>
 
               <div className="space-y-2">

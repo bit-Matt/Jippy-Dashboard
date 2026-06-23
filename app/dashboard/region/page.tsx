@@ -257,8 +257,13 @@ function RegionDashboardContent() {
     if (!selectedRegion) return;
 
     const selectedSnapshot = snapshots.find((snapshot) => snapshot.id === snapshotId);
-    const isAdminEditingReady = selectedSnapshot?.state === "ready" && userRole === "administrator_user" && !selectedRegionIsPublic;
-    if (!selectedSnapshot || (selectedSnapshot.state === "ready" && !isAdminEditingReady)) return;
+    if (!selectedSnapshot) return;
+    if (selectedRegionIsPublic) {
+      if (snapshotId === activeRegionSnapshotId) return;
+    } else {
+      const isAdminEditingReady = selectedSnapshot.state === "ready" && userRole === "administrator_user";
+      if (selectedSnapshot.state === "ready" && !isAdminEditingReady) return;
+    }
 
     setIsSnapshotActing(true);
     const snapshotRegion = await fetchRegionSnapshot(selectedRegion.id, snapshotId);
@@ -348,7 +353,12 @@ function RegionDashboardContent() {
     if (!selectedRegion) return;
 
     const selectedSnapshot = snapshots.find((snapshot) => snapshot.id === snapshotId);
-    if (!selectedSnapshot || selectedSnapshot.state === "ready") return;
+    if (!selectedSnapshot) return;
+    if (selectedRegionIsPublic) {
+      if (snapshotId === activeRegionSnapshotId) return;
+    } else {
+      if (selectedSnapshot.state === "ready") return;
+    }
 
     const shouldDelete = window.confirm(`Delete snapshot \"${selectedSnapshot.name}\"? This action cannot be undone.`);
     if (!shouldDelete) return;

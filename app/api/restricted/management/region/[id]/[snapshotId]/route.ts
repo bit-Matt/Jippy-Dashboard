@@ -200,17 +200,16 @@ export async function PATCH(
       .build();
   }
 
+  const regionInfo = await unwrap(region.getRegionById(id));
+
   let bypassReadyCheck = false;
   if (currentSession.user?.role === "administrator_user") {
-    const isPublished = await unwrap(region.isRegionPublished(id));
-    if (isPublished) {
-      return ApiResponseBuilder.createError(StatusCodes.Status403Forbidden, [{ message: "Cannot modify a ready snapshot of a published region." }])
+    if (regionInfo.isPublic && regionInfo.activeSnapshotId === snapshotId) {
+      return ApiResponseBuilder.createError(StatusCodes.Status403Forbidden, [{ message: "Cannot modify the active snapshot of a published region." }])
         .build();
     }
     bypassReadyCheck = true;
   }
-
-  const regionInfo = await unwrap(region.getRegionById(id));
 
   const result = await region.updateRegionSnapshot(id, snapshotId, data, bypassReadyCheck);
   return oneOf(result).match(

@@ -505,18 +505,18 @@ export async function deleteSnapshot(regionId: string, snapshotId: string): Prom
       return new Failure(ErrorCodes.ResourceExpired, "No snapshot found", { regionId, snapshotId });
     }
 
-    if (snapshot.state === "ready") {
-      return new Failure(ErrorCodes.ValidationFailure, "You cannot delete this snapshot", { regionId, snapshotId });
-    }
-
-    // Prevent deleting the active snapshot
     const [parentRegion] = await db
-      .select({ activeSnapshotId: region.activeSnapshotId })
+      .select({ activeSnapshotId: region.activeSnapshotId, isPublic: region.isPublic })
       .from(region)
       .where(eq(region.id, regionId))
       .limit(1);
+
     if (parentRegion && parentRegion.activeSnapshotId === snapshotId) {
       return new Failure(ErrorCodes.ValidationFailure, "Cannot delete the active snapshot", { regionId, snapshotId });
+    }
+
+    if (snapshot.state === "ready" && !parentRegion?.isPublic) {
+      return new Failure(ErrorCodes.ValidationFailure, "You cannot delete this snapshot", { regionId, snapshotId });
     }
 
     await db.delete(regionSnapshots)
