@@ -1,18 +1,17 @@
 namespace JippyServices.Algorithm.Navigator;
 
 // -------------------------------------------------------------------------
-// Main routing orchestrator — multi-suggestion with weight profiles.
-// Ported from lib/routing/index.ts
+// Main routing orchestrator — transfer-based multi-suggestion routing.
 // -------------------------------------------------------------------------
 
 public sealed class NavigationService(
     GraphBuilder graphBuilder,
     LegAssembler legAssembler,
-    WeightsManager weightsManager,
-    ILogger<NavigationService> logger)
+    WeightsManager weightsManager)
 {
     /// <summary>
     /// Compute multi-suggestion transit routing from start to end.
+    /// Suggestions are enumerated per nearby starting route, ranked by transfer count.
     /// </summary>
     public async Task<MultiNavigateResponse> ComputeRouteAsync(
         LatLng start, LatLng end, RoutingConfig? config = null)
@@ -23,7 +22,7 @@ public sealed class NavigationService(
         if (straightLineDistance < config.WalkOnlyThresholdMeters)
         {
             var walkOnly = AssembleResponse(await legAssembler.BuildWalkOnlyRouteAsync(start, end));
-            return new MultiNavigateResponse { Suggestions = [new RouteSuggestion { Label = SuggestionLabel.Fastest, Route = walkOnly }] };
+            return new MultiNavigateResponse { Suggestions = [new RouteSuggestion { Label = TransferCountToLabel(0), Route = walkOnly }] };
         }
 
         var now = DateTime.UtcNow;
@@ -31,131 +30,199 @@ public sealed class NavigationService(
         if (result == null)
         {
             var walkOnly = AssembleResponse(await legAssembler.BuildWalkOnlyRouteAsync(start, end));
-            return new MultiNavigateResponse { Suggestions = [new RouteSuggestion { Label = SuggestionLabel.Fastest, Route = walkOnly }] };
+            return new MultiNavigateResponse { Suggestions = [new RouteSuggestion { Label = TransferCountToLabel(0), Route = walkOnly }] };
         }
 
-        var (baseGraph, transitData) = result.Value;
+        var (baseGraph, _) = result.Value;
 
         if (!baseGraph.HasAccessEdges || !baseGraph.HasEgressEdges)
         {
             var walkOnly = AssembleResponse(await legAssembler.BuildWalkOnlyRouteAsync(start, end));
-            return new MultiNavigateResponse { Suggestions = [new RouteSuggestion { Label = SuggestionLabel.Fastest, Route = walkOnly }] };
+            return new MultiNavigateResponse { Suggestions = [new RouteSuggestion { Label = TransferCountToLabel(0), Route = walkOnly }] };
         }
 
-        // Run 3 profiles in parallel (pure computation on shared base graph)
-        var profileTasks = new[]
-        {
-            RunProfileAsync(SuggestionLabel.Fastest, config.ToFastestProfile(), baseGraph, config),
-            RunProfileAsync(SuggestionLabel.LeastWalking, config.ToLeastWalkingProfile(), baseGraph, config),
-            RunProfileAsync(SuggestionLabel.Simplest, config.ToSimplestProfile(), baseGraph, config),
-        };
-        var profileResults = await Task.WhenAll(profileTasks);
+        var startingRouteIds = GetNearbyStartingRoutes(baseGraph)
+            .Take(config.MaxStartingRoutes);
 
-        var suggestions = profileResults.Where(s => s != null).Cast<RouteSuggestion>().ToList();
-
-        // Explorer: penalise fastest route's transit lines
-        var fastest = suggestions.Find(s => s.Label == SuggestionLabel.Fastest);
-        if (fastest != null)
+        var allSuggestions = new List<RouteSuggestion>();
+        foreach (var routeId in startingRouteIds)
         {
-            var explorer = await RunExplorerProfileAsync(fastest.Route, baseGraph, transitData, config);
-            if (explorer != null) suggestions.Add(explorer);
+            var routeSuggestions = await EnumerateStartingRouteSuggestionsAsync(
+                routeId, baseGraph, config);
+            allSuggestions.AddRange(routeSuggestions);
         }
 
-        var deduped = DeduplicateSuggestions(suggestions);
+        var sorted = allSuggestions
+            .OrderBy(s => s.Route.TotalTransfers)
+            .ThenBy(s => TotalWalkDistance(s.Route.Legs))
+            .ThenBy(s => s.Route.TotalDuration)
+            .ToList();
+
+        var deduped = DeduplicateSuggestions(sorted);
+        var pruned = RemoveDominatedSuggestions(deduped);
+        pruned = RemoveWalkDominatedSuggestions(pruned);
 
         // Drop suggestions with a long mid-route walk unless that leaves us empty
-        var filtered = deduped.Where(s => !HasLongMidRouteWalk(s.Route.Legs, config)).ToList();
-        var final = filtered.Count > 0 ? filtered : deduped;
+        var filtered = pruned.Where(s => !HasLongMidRouteWalk(s.Route.Legs, config)).ToList();
+        var final = filtered.Count > 0 ? filtered : pruned;
 
         if (final.Count == 0)
         {
             var walkOnly = AssembleResponse(await legAssembler.BuildWalkOnlyRouteAsync(start, end));
-            return new MultiNavigateResponse { Suggestions = [new RouteSuggestion { Label = SuggestionLabel.Fastest, Route = walkOnly }] };
+            return new MultiNavigateResponse { Suggestions = [new RouteSuggestion { Label = TransferCountToLabel(0), Route = walkOnly }] };
         }
 
-        return new MultiNavigateResponse { Suggestions = final };
-    }
-
-    // =====================================================================
-    // Run a single weight profile
-    // =====================================================================
-
-    private async Task<RouteSuggestion?> RunProfileAsync(
-        SuggestionLabel label, WeightProfile profile, BaseGraph baseGraph, RoutingConfig config)
-    {
-        var adjacency = GraphBuilder.BuildCostedAdjacency(
-            baseGraph.BaseEdges, baseGraph.RawBoardingCosts,
-            baseGraph.AccessWalkDistances, baseGraph.EgressWalkDistances,
-            baseGraph.Nodes, profile, baseGraph.StopRestrictedNodes, config);
-
-        var graph = new Graph { Nodes = baseGraph.Nodes, Edges = adjacency };
-        var nodePath = AStarPathfinder.FindOptimalPath(
-            graph, RoutingConstants.VirtualStartId, RoutingConstants.VirtualEndId, profile);
-        if (nodePath is not { Count: >= 2 }) return null;
-
-        var legs = await AssembleLegsAsync(nodePath, graph, config);
-        if (legs == null) return null;
-
-        return new RouteSuggestion { Label = label, Route = AssembleResponse(legs) };
-    }
-
-    // =====================================================================
-    // Explorer route — topologically diverse alternative
-    // =====================================================================
-
-    private async Task<RouteSuggestion?> RunExplorerProfileAsync(
-        NavigateResponse fastestResponse, BaseGraph baseGraph, TransitData transitData, RoutingConfig config)
-    {
-        var fastestRouteIds = new HashSet<string>();
-        foreach (var leg in fastestResponse.Legs)
+        var labeled = final.Select(s => new RouteSuggestion
         {
-            if (leg.Type == LegType.Jeepney && leg.RouteName != null)
+            Label = TransferCountToLabel(s.Route.TotalTransfers),
+            Route = s.Route,
+        }).ToList();
+
+        return new MultiNavigateResponse { Suggestions = labeled };
+    }
+
+    // =====================================================================
+    // Per-starting-route enumeration
+    // =====================================================================
+
+    private static List<string> GetNearbyStartingRoutes(BaseGraph baseGraph)
+    {
+        var closestAccessPerRoute = new Dictionary<string, double>();
+
+        foreach (var (nodeId, dist) in baseGraph.AccessWalkDistances)
+        {
+            if (!baseGraph.Nodes.TryGetValue(nodeId, out var node)) continue;
+
+            if (!closestAccessPerRoute.TryGetValue(node.RouteId, out var best) || dist < best)
+                closestAccessPerRoute[node.RouteId] = dist;
+        }
+
+        return closestAccessPerRoute
+            .OrderBy(kv => kv.Value)
+            .Select(kv => kv.Key)
+            .ToList();
+    }
+
+    private async Task<List<RouteSuggestion>> EnumerateStartingRouteSuggestionsAsync(
+        string startingRouteId, BaseGraph baseGraph, RoutingConfig config)
+    {
+        var results = new List<RouteSuggestion>();
+        var penalizedRouteIds = new HashSet<string>();
+        var accessDistances = FilterAccessWalkDistancesToRoute(baseGraph, startingRouteId);
+
+        if (accessDistances.Count == 0) return results;
+
+        for (var i = 0; i < config.MaxSuggestionsPerStartRoute; i++)
+        {
+            var profile = i == 0
+                ? config.ToBaseProfile()
+                : BuildDiversityProfile(config.ToBaseProfile(), penalizedRouteIds, config);
+
+            var adjacency = GraphBuilder.BuildCostedAdjacency(
+                baseGraph.BaseEdges, baseGraph.RawBoardingCosts,
+                accessDistances, baseGraph.EgressWalkDistances,
+                baseGraph.Nodes, profile, baseGraph.StopRestrictedNodes, config);
+
+            var graph = new Graph { Nodes = baseGraph.Nodes, Edges = adjacency };
+            var nodePath = AStarPathfinder.FindOptimalPath(
+                graph, RoutingConstants.VirtualStartId, RoutingConstants.VirtualEndId, profile);
+            if (nodePath is not { Count: >= 2 }) break;
+
+            var legs = await AssembleLegsAsync(nodePath, graph, config);
+            if (legs == null) break;
+
+            var response = AssembleResponse(legs);
+            if (response.TotalTransfers > config.MaxTransfersToShow) break;
+
+            results.Add(new RouteSuggestion
             {
-                foreach (var route in transitData.Routes)
-                {
-                    if (route.RouteName == leg.RouteName)
-                        fastestRouteIds.Add(route.Id);
-                }
-            }
+                Label = TransferCountToLabel(response.TotalTransfers),
+                Route = response,
+            });
+
+            foreach (var routeId in ExtractRouteIdsFromPath(nodePath, baseGraph.Nodes))
+                penalizedRouteIds.Add(routeId);
         }
-        if (fastestRouteIds.Count == 0) return null;
 
-        var fastestProfile = config.ToFastestProfile();
-        var explorerProfile = new WeightProfile
-        {
-            WalkPenaltyMultiplier = fastestProfile.WalkPenaltyMultiplier,
-            WalkComfortMeters = fastestProfile.WalkComfortMeters,
-            WalkEscalationRate = fastestProfile.WalkEscalationRate,
-            TransitCostFactor = fastestProfile.TransitCostFactor,
-            TransferPenaltyMeters = fastestProfile.TransferPenaltyMeters,
-            BoardingCostFactor = fastestProfile.BoardingCostFactor,
-            ClosurePenaltyMultiplier = fastestProfile.ClosurePenaltyMultiplier,
-            PenalizedRouteIds = fastestRouteIds,
-            DiversityPenalty = config.ExplorerDiversityPenalty,
-            MaxTransfers = config.ExplorerMaxTransfers,
-        };
-
-        var adjacency = GraphBuilder.BuildCostedAdjacency(
-            baseGraph.BaseEdges, baseGraph.RawBoardingCosts,
-            baseGraph.AccessWalkDistances, baseGraph.EgressWalkDistances,
-            baseGraph.Nodes, explorerProfile, baseGraph.StopRestrictedNodes, config);
-
-        var graph = new Graph { Nodes = baseGraph.Nodes, Edges = adjacency };
-        var nodePath = AStarPathfinder.FindOptimalPath(
-            graph, RoutingConstants.VirtualStartId, RoutingConstants.VirtualEndId, explorerProfile);
-        if (nodePath is not { Count: >= 2 }) return null;
-
-        var legs = await AssembleLegsAsync(nodePath, graph, config);
-        if (legs == null) return null;
-
-        var explorerResponse = AssembleResponse(legs);
-
-        // Time cap: discard if significantly slower than fastest
-        if (explorerResponse.TotalDuration > fastestResponse.TotalDuration * config.ExplorerDurationCap)
-            return null;
-
-        return new RouteSuggestion { Label = SuggestionLabel.Explorer, Route = explorerResponse };
+        return results;
     }
+
+    private static Dictionary<string, double> FilterAccessWalkDistancesToRoute(
+        BaseGraph baseGraph, string routeId)
+    {
+        var filtered = new Dictionary<string, double>();
+
+        foreach (var (nodeId, dist) in baseGraph.AccessWalkDistances)
+        {
+            if (baseGraph.Nodes.TryGetValue(nodeId, out var node) && node.RouteId == routeId)
+                filtered[nodeId] = dist;
+        }
+
+        return filtered;
+    }
+
+    private static WeightProfile BuildDiversityProfile(
+        WeightProfile baseProfile, HashSet<string> penalizedRouteIds, RoutingConfig config)
+    {
+        return new WeightProfile
+        {
+            WalkPenaltyMultiplier = baseProfile.WalkPenaltyMultiplier,
+            WalkComfortMeters = baseProfile.WalkComfortMeters,
+            WalkEscalationRate = baseProfile.WalkEscalationRate,
+            TransitCostFactor = baseProfile.TransitCostFactor,
+            TransferPenaltyMeters = baseProfile.TransferPenaltyMeters,
+            BoardingCostFactor = baseProfile.BoardingCostFactor,
+            ClosurePenaltyMultiplier = baseProfile.ClosurePenaltyMultiplier,
+            PenalizedRouteIds = penalizedRouteIds,
+            DiversityPenalty = config.TransferDiversityPenalty,
+            MaxTransfers = config.MaxTransfersToShow,
+        };
+    }
+
+    private static HashSet<string> ExtractRouteIdsFromPath(
+        List<string> nodePath, Dictionary<string, GraphNode> nodes)
+    {
+        var routeIds = new HashSet<string>();
+
+        foreach (var nodeId in nodePath)
+        {
+            if (nodes.TryGetValue(nodeId, out var node) && node.RouteId != "__virtual__")
+                routeIds.Add(node.RouteId);
+        }
+
+        return routeIds;
+    }
+
+    private static int CountTransitTransfers(IReadOnlyList<RouteLeg> legs)
+    {
+        var transfers = 0;
+        string? previousTransitKey = null;
+
+        foreach (var leg in legs)
+        {
+            if (leg.Type is not LegType.Jeepney and not LegType.Tricycle)
+                continue;
+
+            var transitKey = leg.RouteName ?? leg.Type.ToString();
+
+            if (previousTransitKey != null
+                && !string.Equals(transitKey, previousTransitKey, StringComparison.Ordinal))
+            {
+                transfers++;
+            }
+
+            previousTransitKey = transitKey;
+        }
+
+        return transfers;
+    }
+
+    private static string TransferCountToLabel(int transferCount) => transferCount switch
+    {
+        0 => "Direct",
+        1 => "1 Transfer",
+        _ => $"{transferCount} Transfers",
+    };
 
     // =====================================================================
     // Shared leg assembly from A* path
@@ -202,6 +269,99 @@ public sealed class NavigationService(
 
         return result;
     }
+
+    /// <summary>
+    /// Drop suggestions whose jeepney route set is a strict superset of a simpler
+    /// suggestion with fewer/equal transfers and comparable distance.
+    /// </summary>
+    private static List<RouteSuggestion> RemoveDominatedSuggestions(List<RouteSuggestion> suggestions)
+    {
+        if (suggestions.Count <= 1) return suggestions;
+
+        var routeSets = suggestions
+            .Select(s => new HashSet<string>(
+                s.Route.Legs
+                    .Where(l => l.Type == LegType.Jeepney && l.RouteName != null)
+                    .Select(l => l.RouteName!),
+                StringComparer.Ordinal))
+            .ToList();
+
+        var dominated = new bool[suggestions.Count];
+
+        for (var i = 0; i < suggestions.Count; i++)
+        {
+            if (dominated[i]) continue;
+
+            for (var j = 0; j < suggestions.Count; j++)
+            {
+                if (i == j || dominated[j]) continue;
+
+                var simpler = suggestions[i];
+                var complex = suggestions[j];
+
+                if (simpler.Route.TotalTransfers > complex.Route.TotalTransfers) continue;
+                if (simpler.Route.TotalDistance > complex.Route.TotalDistance * 1.15) continue;
+                if (!routeSets[i].IsProperSubsetOf(routeSets[j])) continue;
+
+                dominated[j] = true;
+            }
+        }
+
+        var result = new List<RouteSuggestion>();
+        for (var k = 0; k < suggestions.Count; k++)
+        {
+            if (!dominated[k]) result.Add(suggestions[k]);
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// Drop suggestions that require substantially more walking than another
+    /// option at the same transfer tier (e.g. two walk legs totalling ~900 m
+    /// when a direct route needs only ~500 m).
+    /// </summary>
+    private static List<RouteSuggestion> RemoveWalkDominatedSuggestions(List<RouteSuggestion> suggestions)
+    {
+        if (suggestions.Count <= 1) return suggestions;
+
+        const double walkDominanceGapMeters = 300;
+
+        var walkDistances = suggestions
+            .Select(s => TotalWalkDistance(s.Route.Legs))
+            .ToList();
+
+        var dominated = new bool[suggestions.Count];
+
+        for (var i = 0; i < suggestions.Count; i++)
+        {
+            if (dominated[i]) continue;
+
+            for (var j = 0; j < suggestions.Count; j++)
+            {
+                if (i == j || dominated[j]) continue;
+
+                var lessWalk = suggestions[i];
+                var moreWalk = suggestions[j];
+
+                if (lessWalk.Route.TotalTransfers != moreWalk.Route.TotalTransfers) continue;
+                if (walkDistances[i] + walkDominanceGapMeters >= walkDistances[j]) continue;
+
+                dominated[j] = true;
+            }
+        }
+
+        var result = new List<RouteSuggestion>();
+        for (var k = 0; k < suggestions.Count; k++)
+        {
+            if (!dominated[k]) result.Add(suggestions[k]);
+        }
+
+        return result;
+    }
+
+    private static double TotalWalkDistance(IReadOnlyList<RouteLeg> legs)
+        => legs.Where(l => l.Type == LegType.Walk).Sum(l => l.Distance);
 
     // =====================================================================
     // Merge + filter helpers
@@ -265,7 +425,7 @@ public sealed class NavigationService(
     {
         double totalDistance = 0;
         double totalDuration = 0;
-        var totalTransfers = 0;
+        var totalTransfers = CountTransitTransfers(legs);
 
         var minLng = double.MaxValue;
         var minLat = double.MaxValue;
@@ -277,13 +437,6 @@ public sealed class NavigationService(
             var leg = legs[i];
             totalDistance += leg.Distance;
             totalDuration += leg.Duration;
-
-            if (i > 0
-                && (leg.Type is LegType.Jeepney or LegType.Tricycle)
-                && (legs[i - 1].Type is LegType.Jeepney or LegType.Tricycle))
-            {
-                totalTransfers++;
-            }
 
             if (leg.Bbox.Length >= 4)
             {

@@ -32,9 +32,10 @@ export type SimulationOverrides = {
   longWalkThresholdMeters?: number;
   stationUnavailabilityThreshold?: number;
   stopProximityMeters?: number;
-  explorerDiversityPenalty?: number;
-  explorerMaxTransfers?: number;
-  explorerDurationCap?: number;
+  maxStartingRoutes?: number;
+  maxSuggestionsPerStartRoute?: number;
+  maxTransfersToShow?: number;
+  transferDiversityPenalty?: number;
   accessCandidatesPerDirection?: number;
   maxAccessQueries?: number;
   egressCandidatesPerDirection?: number;
@@ -48,12 +49,12 @@ export const ALGORITHM_WEIGHT_DEFAULTS: AlgorithmWeights = {
   walkPenaltyMultiplier: 2.0,
   walkComfortMeters: 150,
   walkEscalationRate: 0.008,
-  transferPenaltyMeters: 120,
+  transferPenaltyMeters: 1000,
   closurePenaltyMultiplier: 5.0,
-  boardingCostFactor: 0.25,
+  boardingCostFactor: 0.5,
   transferProximityMeters: 100,
   transitCostFactor: 0.5,
-  minTransitRideMeters: 300,
+  minTransitRideMeters: 500,
   walkOnlyThresholdMeters: 200,
   maxTransitProximityMeters: 5_000,
   walkSpeedKmh: 4.25,
@@ -74,9 +75,10 @@ export const ALGORITHM_WEIGHT_DEFAULTS: AlgorithmWeights = {
   longWalkThresholdMeters: 1_000,
   stationUnavailabilityThreshold: 0.9,
   stopProximityMeters: 30,
-  explorerDiversityPenalty: 5.0,
-  explorerMaxTransfers: 2,
-  explorerDurationCap: 1.5,
+  maxStartingRoutes: 4,
+  maxSuggestionsPerStartRoute: 3,
+  maxTransfersToShow: 3,
+  transferDiversityPenalty: 3.0,
   accessCandidatesPerDirection: 16,
   maxAccessQueries: 30,
   egressCandidatesPerDirection: 16,

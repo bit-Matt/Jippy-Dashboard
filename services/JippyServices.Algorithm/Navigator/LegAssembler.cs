@@ -270,9 +270,9 @@ public sealed class LegAssembler(
     /// <summary>
     /// After leg assembly, detect cases where the end of one leg does not
     /// connect to the start of the next (OSRM road-snapping causes
-    /// this). When a gap > 10 m is found, a bridging WALK is inserted via
-    /// OSRM foot. If the following leg is already a WALK, the two walks
-    /// are merged to avoid WALK→WALK.
+    /// this). When a gap > 10 m is found, a bridging walk is computed via
+    /// OSRM foot and folded into an adjacent WALK leg so access walks do
+    /// not appear as a separate leg before boarding.
     /// </summary>
     private async Task<List<RouteLeg>> FillLegGapsAsync(List<RouteLeg> legs, RoutingConfig config)
     {
@@ -335,35 +335,69 @@ public sealed class LegAssembler(
                 ];
             }
 
+            var filteredGlue = glueInstructions
+                .Where(ins => ins.ManeuverType != ManeuverType.Arrive)
+                .ToList();
+
             if (leg.Type == LegType.Walk)
             {
-                // Merge glue walk with the existing walk leg to avoid WALK→WALK.
-                var lastGlue = glueCoords[^1];
-                var startSlice = GeoUtils.HaversineMeters(lastGlue, currCoords[0]) < 5 ? 1 : 0;
-                var mergedCoords = glueCoords.Concat(currCoords.Skip(startSlice)).ToList();
+                var mergedCoords = prevLeg.Type == LegType.Walk
+                    ? JoinPolylines(JoinPolylines(prevCoords, glueCoords), currCoords)
+                    : JoinPolylines(glueCoords, currCoords);
 
-                // Drop the "arrive" instruction from the glue before prepending.
-                var filteredGlue = glueInstructions
-                    .Where(ins => ins.ManeuverType != ManeuverType.Arrive)
-                    .ToList();
+                var mergedInstructions = prevLeg.Type == LegType.Walk
+                    ? prevLeg.Instructions
+                        .Where(ins => ins.ManeuverType != ManeuverType.Arrive)
+                        .Concat(filteredGlue)
+                        .Concat(leg.Instructions)
+                        .ToList()
+                    : [.. filteredGlue, .. leg.Instructions];
 
-                var glueBbox = GeoUtils.ComputeBbox(glueCoords);
+                var mergedBbox = prevLeg.Type == LegType.Walk
+                    ? GeoUtils.MergeBbox(GeoUtils.MergeBbox(prevLeg.Bbox, GeoUtils.ComputeBbox(glueCoords)), leg.Bbox)
+                    : GeoUtils.MergeBbox(GeoUtils.ComputeBbox(glueCoords), leg.Bbox);
 
-                result.Add(new RouteLeg
+                var mergedWalk = new RouteLeg
                 {
                     Type = LegType.Walk,
                     RouteName = null,
                     Polyline = PolylineCodec.Encode(mergedCoords),
                     Color = null,
-                    Distance = glueDistance + leg.Distance,
-                    Duration = glueDuration + leg.Duration,
-                    Instructions = [.. filteredGlue, .. leg.Instructions],
-                    Bbox = GeoUtils.MergeBbox(glueBbox, leg.Bbox),
-                });
+                    Distance = (prevLeg.Type == LegType.Walk ? prevLeg.Distance : 0) + glueDistance + leg.Distance,
+                    Duration = (prevLeg.Type == LegType.Walk ? prevLeg.Duration : 0) + glueDuration + leg.Duration,
+                    Instructions = mergedInstructions,
+                    Bbox = mergedBbox,
+                };
+
+                if (prevLeg.Type == LegType.Walk)
+                    result[^1] = mergedWalk;
+                else
+                    result.Add(mergedWalk);
+            }
+            else if (prevLeg.Type == LegType.Walk)
+            {
+                // Fold the glue walk into the access leg before boarding transit.
+                var mergedCoords = JoinPolylines(prevCoords, glueCoords);
+                var mergedInstructions = prevLeg.Instructions
+                    .Where(ins => ins.ManeuverType != ManeuverType.Arrive)
+                    .Concat(filteredGlue)
+                    .ToList();
+
+                result[^1] = new RouteLeg
+                {
+                    Type = LegType.Walk,
+                    RouteName = null,
+                    Polyline = PolylineCodec.Encode(mergedCoords),
+                    Color = null,
+                    Distance = prevLeg.Distance + glueDistance,
+                    Duration = prevLeg.Duration + glueDuration,
+                    Instructions = mergedInstructions,
+                    Bbox = GeoUtils.MergeBbox(prevLeg.Bbox, GeoUtils.ComputeBbox(glueCoords)),
+                };
+                result.Add(leg);
             }
             else
             {
-                // Insert a separate WALK leg before the current leg.
                 var glueBbox = GeoUtils.ComputeBbox(glueCoords);
                 result.Add(new RouteLeg
                 {
@@ -381,6 +415,14 @@ public sealed class LegAssembler(
         }
 
         return result;
+    }
+
+    private static List<LatLng> JoinPolylines(List<LatLng> a, List<LatLng> b)
+    {
+        if (a.Count == 0) return b;
+        if (b.Count == 0) return a;
+        var startSlice = GeoUtils.HaversineMeters(a[^1], b[0]) < 5 ? 1 : 0;
+        return a.Concat(b.Skip(startSlice)).ToList();
     }
 
     // =====================================================================

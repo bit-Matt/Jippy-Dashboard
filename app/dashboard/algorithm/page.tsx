@@ -128,11 +128,12 @@ const WEIGHT_SECTIONS: Array<{
     ],
   },
   {
-    title: "Explorer",
+    title: "Suggestions",
     fields: [
-      { label: "Diversity penalty", field: "explorerDiversityPenalty" },
-      { label: "Max transfers", field: "explorerMaxTransfers", step: "1" },
-      { label: "Duration cap", field: "explorerDurationCap" },
+      { label: "Max starting routes", field: "maxStartingRoutes", step: "1" },
+      { label: "Max suggestions per route", field: "maxSuggestionsPerStartRoute", step: "1" },
+      { label: "Max transfers to show", field: "maxTransfersToShow", step: "1" },
+      { label: "Transfer diversity penalty", field: "transferDiversityPenalty" },
     ],
   },
   {

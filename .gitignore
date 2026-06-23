@@ -266,3 +266,7 @@ FakesAssemblies/
 # JetBrains Rider
 services/**/.idea
 *.sln.iml
+
+# Other
+.ctx-clues
+_diag_out/

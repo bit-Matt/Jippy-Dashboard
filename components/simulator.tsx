@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { z } from "zod";
 import { AlertCircle, Bike, Bus, Footprints, MapPin } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -20,12 +20,17 @@ import {
 } from "@/components/ui/native-select";
 import { Separator } from "@/components/ui/separator";
 import { Input } from "@/components/ui/input";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import type {
   MultiNavigateRouteResponse,
   NavigateRouteLeg,
   NavigateRouteSuggestion,
-  NavigateSuggestionLabel,
 } from "@/contracts/responses";
 import type { SimulationOverrides } from "@/lib/routing-fast";
 import { SIMULATION_OVERRIDE_DEFAULTS } from "@/lib/routing-fast";
@@ -43,13 +48,39 @@ const LEG_ICONS: Record<string, React.ReactNode> = {
   TRICYCLE: <Bike className="h-3 w-3" />,
 };
 
-const LABEL_DISPLAY: Record<NavigateSuggestionLabel, string> = {
-  fastest: "Fastest",
-  least_walking: "Less Walk",
-  simplest: "Simplest",
-  explorer: "Explorer",
-  tricycle: "Tricycle",
-};
+function formatSuggestionLabel(label: string, totalTransfers?: number): string {
+  if (totalTransfers != null) {
+    if (totalTransfers === 0) return "Direct";
+    if (totalTransfers === 1) return "1 Transfer";
+    return `${totalTransfers} Transfers`;
+  }
+  if (label === "direct") return "Direct";
+  if (label === "1_transfer") return "1 Transfer";
+  const transfersMatch = label.match(/^(\d+)_transfers$/);
+  if (transfersMatch) {
+    const count = Number(transfersMatch[1]);
+    return `${count} Transfers`;
+  }
+  // Legacy v1 preset labels
+  const legacy: Record<string, string> = {
+    fastest: "Fastest",
+    least_walking: "Less Walk",
+    simplest: "Simplest",
+    explorer: "Explorer",
+    tricycle: "Tricycle",
+  };
+  return legacy[label] ?? label;
+}
+
+function formatSuggestionOptionLabel(
+  suggestion: NavigateRouteSuggestion,
+  suggestions: NavigateRouteSuggestion[],
+): string {
+  const base = formatSuggestionLabel(suggestion.label, suggestion.route.total_transfers);
+  const hasDuplicateLabel = suggestions.filter((s) => s.label === suggestion.label).length > 1;
+  if (!hasDuplicateLabel) return base;
+  return `${base} · ${formatDuration(suggestion.route.total_duration)} · ${formatDistance(suggestion.route.total_distance)}`;
+}
 
 function formatDistance(meters: number): string {
   if (meters < 1000) return `${Math.round(meters)} m`;
@@ -209,11 +240,12 @@ function WeightOverridesPanel({
         </fieldset>
 
         <fieldset className="space-y-2">
-          <legend className="text-xs font-semibold text-muted-foreground">Profile</legend>
+          <legend className="text-xs font-semibold text-muted-foreground">Suggestions</legend>
           <div className="grid grid-cols-2 gap-2">
-            <OverrideField label="Explorer diversity penalty" field="explorerDiversityPenalty" value={overrides.explorerDiversityPenalty} defaultValue={defaults.explorerDiversityPenalty} onChange={setOverride} />
-            <OverrideField label="Explorer max transfers" field="explorerMaxTransfers" value={overrides.explorerMaxTransfers} defaultValue={defaults.explorerMaxTransfers} onChange={setOverride} step="1" />
-            <OverrideField label="Explorer duration cap" field="explorerDurationCap" value={overrides.explorerDurationCap} defaultValue={defaults.explorerDurationCap} onChange={setOverride} />
+            <OverrideField label="Max starting routes" field="maxStartingRoutes" value={overrides.maxStartingRoutes} defaultValue={defaults.maxStartingRoutes} onChange={setOverride} step="1" />
+            <OverrideField label="Max suggestions per route" field="maxSuggestionsPerStartRoute" value={overrides.maxSuggestionsPerStartRoute} defaultValue={defaults.maxSuggestionsPerStartRoute} onChange={setOverride} step="1" />
+            <OverrideField label="Max transfers to show" field="maxTransfersToShow" value={overrides.maxTransfersToShow} defaultValue={defaults.maxTransfersToShow} onChange={setOverride} step="1" />
+            <OverrideField label="Transfer diversity penalty" field="transferDiversityPenalty" value={overrides.transferDiversityPenalty} defaultValue={defaults.transferDiversityPenalty} onChange={setOverride} />
           </div>
         </fieldset>
 
@@ -262,16 +294,11 @@ export interface SimulatorProps {
   result: MultiNavigateRouteResponse | null;
   error: string | null;
   overrides: SimulationOverrides;
-  isAdmin?: boolean;
-  isApplyingWeights?: boolean;
-  applyMessage?: string | null;
-  applyError?: string | null;
   onApiVersionChange: (version: "v1" | "v2") => void;
   onPickingModeChange: (mode: "start" | "end" | null) => void;
   onSimulate: () => void;
   onSuggestionChange: (suggestion: NavigateRouteSuggestion | null) => void;
   onOverridesChange: (overrides: SimulationOverrides) => void;
-  onApplyWeights?: () => void;
 }
 
 export default function Simulator({
@@ -285,18 +312,28 @@ export default function Simulator({
   result,
   error,
   overrides,
-  isAdmin = false,
-  isApplyingWeights = false,
-  applyMessage = null,
-  applyError = null,
   onApiVersionChange,
   onPickingModeChange,
   onSimulate,
   onSuggestionChange,
   onOverridesChange,
-  onApplyWeights,
 }: SimulatorProps) {
-  const [activeTab, setActiveTab] = useState<string>("");
+  const [activeSuggestionIndex, setActiveSuggestionIndex] = useState<string>("");
+  const [prevResult, setPrevResult] = useState(result);
+
+  if (result !== prevResult) {
+    setPrevResult(result);
+    if (!result?.suggestions.length) {
+      setActiveSuggestionIndex("");
+    } else {
+      setActiveSuggestionIndex((current) => {
+        const index = Number(current);
+        return Number.isInteger(index) && index >= 0 && index < result.suggestions.length
+          ? current
+          : "0";
+      });
+    }
+  }
 
   const validation = SimulateSchema.safeParse({ start: startPoint, end: endPoint });
   const canSimulate = validation.success && !isSimulating;
@@ -309,24 +346,13 @@ export default function Simulator({
     onPickingModeChange(pickingMode === "end" ? null : "end");
   };
 
-  const handleTabChange = (label: string) => {
-    setActiveTab(label);
-    const suggestion = result?.suggestions.find((s) => s.label === label) ?? null;
+  const handleSuggestionIndexChange = (index: string) => {
+    setActiveSuggestionIndex(index);
+    const suggestion = result?.suggestions[Number(index)] ?? null;
     onSuggestionChange(suggestion);
   };
 
-  // When a new result arrives, sync the active tab with the first suggestion
-  useEffect(() => {
-    if (!result?.suggestions.length) {
-      setActiveTab("");
-      return;
-    }
-    setActiveTab((current) =>
-      result.suggestions.some((s) => s.label === current)
-        ? current
-        : result.suggestions[0].label,
-    );
-  }, [result]);
+  const activeSuggestion = result?.suggestions[Number(activeSuggestionIndex)];
 
   return (
     <div className="absolute top-2 left-6 z-99999 w-80 max-h-[calc(100vh-2rem)] overflow-y-auto">
@@ -405,26 +431,6 @@ export default function Simulator({
             />
           )}
 
-          {apiVersion === "v2" && isAdmin && onApplyWeights && (
-            <div className="space-y-2">
-              <Button
-                type="button"
-                variant="secondary"
-                className="w-full"
-                onClick={onApplyWeights}
-                disabled={isApplyingWeights || isSimulating}
-              >
-                {isApplyingWeights ? "Applying..." : "Apply to Algorithm"}
-              </Button>
-              {applyMessage && (
-                <p className="text-xs text-muted-foreground">{applyMessage}</p>
-              )}
-              {applyError && (
-                <p className="text-xs text-destructive">{applyError}</p>
-              )}
-            </div>
-          )}
-
           <Button
             className="w-full"
             onClick={onSimulate}
@@ -443,20 +449,24 @@ export default function Simulator({
           {result && result.suggestions.length > 0 && (
             <>
               <Separator />
-              <Tabs value={activeTab} onValueChange={handleTabChange}>
-                <TabsList className="w-full">
-                  {result.suggestions.map((s) => (
-                    <TabsTrigger key={s.label} value={s.label} className="flex-1 text-xs">
-                      {LABEL_DISPLAY[s.label] ?? s.label}
-                    </TabsTrigger>
-                  ))}
-                </TabsList>
-                {result.suggestions.map((s) => (
-                  <TabsContent key={s.label} value={s.label} className="mt-3">
-                    <SuggestionPanel suggestion={s} />
-                  </TabsContent>
-                ))}
-              </Tabs>
+              <div className="space-y-3">
+                <Select
+                  value={activeSuggestionIndex}
+                  onValueChange={handleSuggestionIndexChange}
+                >
+                  <SelectTrigger className="w-full">
+                    <SelectValue placeholder="Select route" />
+                  </SelectTrigger>
+                  <SelectContent position="popper" sideOffset={4} className="z-[100000]">
+                    {result.suggestions.map((s, i) => (
+                      <SelectItem key={i} value={String(i)}>
+                        {formatSuggestionOptionLabel(s, result.suggestions)}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {activeSuggestion && <SuggestionPanel suggestion={activeSuggestion} />}
+              </div>
             </>
           )}
         </CardContent>

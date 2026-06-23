@@ -194,7 +194,8 @@ export interface NavigateRouteResponse {
   global_bbox: [number, number, number, number];
 }
 
-export type NavigateSuggestionLabel = "fastest" | "least_walking" | "simplest" | "explorer" | "tricycle";
+/** Transfer-based: "direct", "1_transfer", "2_transfers", etc. Legacy v1 may still return preset labels. */
+export type NavigateSuggestionLabel = string;
 
 export interface NavigateRouteSuggestion {
   label: NavigateSuggestionLabel;

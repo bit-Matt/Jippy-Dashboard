@@ -22,10 +22,10 @@ public sealed class AlgorithmWeights
     public double TransitCostFactor { get; init; } = 0.5;
 
     [JsonPropertyName("transferPenaltyMeters")]
-    public double TransferPenaltyMeters { get; init; } = 120;
+    public double TransferPenaltyMeters { get; init; } = 1000;
 
     [JsonPropertyName("minTransitRideMeters")]
-    public double MinTransitRideMeters { get; init; } = 300;
+    public double MinTransitRideMeters { get; init; } = 500;
 
     [JsonPropertyName("closurePenaltyMultiplier")]
     public double ClosurePenaltyMultiplier { get; init; } = 5.0;
@@ -95,34 +95,37 @@ public sealed class AlgorithmWeights
 
     // Boarding cost
     [JsonPropertyName("boardingCostFactor")]
-    public double BoardingCostFactor { get; init; } = 0.25;
+    public double BoardingCostFactor { get; init; } = 0.5;
 
     // Stop zones
     [JsonPropertyName("stopProximityMeters")]
     public double StopProximityMeters { get; init; } = 30;
 
-    // Explorer profile
-    [JsonPropertyName("explorerDiversityPenalty")]
-    public double ExplorerDiversityPenalty { get; init; } = 5.0;
+    // Transfer-based suggestion enumeration
+    [JsonPropertyName("maxStartingRoutes")]
+    public int MaxStartingRoutes { get; init; } = 4;
 
-    [JsonPropertyName("explorerMaxTransfers")]
-    public int ExplorerMaxTransfers { get; init; } = 2;
+    [JsonPropertyName("maxSuggestionsPerStartRoute")]
+    public int MaxSuggestionsPerStartRoute { get; init; } = 3;
 
-    [JsonPropertyName("explorerDurationCap")]
-    public double ExplorerDurationCap { get; init; } = 1.5;
+    [JsonPropertyName("maxTransfersToShow")]
+    public int MaxTransfersToShow { get; init; } = 3;
+
+    [JsonPropertyName("transferDiversityPenalty")]
+    public double TransferDiversityPenalty { get; init; } = 3.0;
 
     // Graph builder internals
     [JsonPropertyName("accessCandidatesPerDirection")]
-    public int AccessCandidatesPerDirection { get; init; } = 16;
+    public int AccessCandidatesPerDirection { get; init; } = 128;
 
     [JsonPropertyName("maxAccessQueries")]
-    public int MaxAccessQueries { get; init; } = 30;
+    public int MaxAccessQueries { get; init; } = 128;
 
     [JsonPropertyName("egressCandidatesPerDirection")]
-    public int EgressCandidatesPerDirection { get; init; } = 16;
+    public int EgressCandidatesPerDirection { get; init; } = 128;
 
     [JsonPropertyName("maxEgressQueries")]
-    public int MaxEgressQueries { get; init; } = 30;
+    public int MaxEgressQueries { get; init; } = 128;
 
     public static AlgorithmWeights Defaults { get; } = new();
 }

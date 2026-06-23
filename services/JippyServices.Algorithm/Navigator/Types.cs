@@ -258,10 +258,11 @@ public sealed class SimulationOverrides
     [JsonPropertyName("stationUnavailabilityThreshold")] public double? StationUnavailabilityThreshold { get; init; }
     [JsonPropertyName("stopProximityMeters")] public double? StopProximityMeters { get; init; }
 
-    // Profile
-    [JsonPropertyName("explorerDiversityPenalty")] public double? ExplorerDiversityPenalty { get; init; }
-    [JsonPropertyName("explorerMaxTransfers")] public int? ExplorerMaxTransfers { get; init; }
-    [JsonPropertyName("explorerDurationCap")] public double? ExplorerDurationCap { get; init; }
+    // Transfer-based suggestion enumeration
+    [JsonPropertyName("maxStartingRoutes")] public int? MaxStartingRoutes { get; init; }
+    [JsonPropertyName("maxSuggestionsPerStartRoute")] public int? MaxSuggestionsPerStartRoute { get; init; }
+    [JsonPropertyName("maxTransfersToShow")] public int? MaxTransfersToShow { get; init; }
+    [JsonPropertyName("transferDiversityPenalty")] public double? TransferDiversityPenalty { get; init; }
 
     // Graph builder
     [JsonPropertyName("accessCandidatesPerDirection")] public int? AccessCandidatesPerDirection { get; init; }
@@ -304,9 +305,10 @@ public sealed class RoutingConfig
     public double LongWalkThresholdMeters { get; init; }
     public double StationUnavailabilityThreshold { get; init; }
     public double StopProximityMeters { get; init; }
-    public double ExplorerDiversityPenalty { get; init; }
-    public int ExplorerMaxTransfers { get; init; }
-    public double ExplorerDurationCap { get; init; }
+    public int MaxStartingRoutes { get; init; }
+    public int MaxSuggestionsPerStartRoute { get; init; }
+    public int MaxTransfersToShow { get; init; }
+    public double TransferDiversityPenalty { get; init; }
     public int AccessCandidatesPerDirection { get; init; }
     public int MaxAccessQueries { get; init; }
     public int EgressCandidatesPerDirection { get; init; }
@@ -343,9 +345,10 @@ public sealed class RoutingConfig
         LongWalkThresholdMeters = weights.LongWalkThresholdMeters,
         StationUnavailabilityThreshold = weights.StationUnavailabilityThreshold,
         StopProximityMeters = weights.StopProximityMeters,
-        ExplorerDiversityPenalty = weights.ExplorerDiversityPenalty,
-        ExplorerMaxTransfers = weights.ExplorerMaxTransfers,
-        ExplorerDurationCap = weights.ExplorerDurationCap,
+        MaxStartingRoutes = weights.MaxStartingRoutes,
+        MaxSuggestionsPerStartRoute = weights.MaxSuggestionsPerStartRoute,
+        MaxTransfersToShow = weights.MaxTransfersToShow,
+        TransferDiversityPenalty = weights.TransferDiversityPenalty,
         AccessCandidatesPerDirection = weights.AccessCandidatesPerDirection,
         MaxAccessQueries = weights.MaxAccessQueries,
         EgressCandidatesPerDirection = weights.EgressCandidatesPerDirection,
@@ -387,9 +390,10 @@ public sealed class RoutingConfig
             LongWalkThresholdMeters = overrides.LongWalkThresholdMeters ?? LongWalkThresholdMeters,
             StationUnavailabilityThreshold = overrides.StationUnavailabilityThreshold ?? StationUnavailabilityThreshold,
             StopProximityMeters = overrides.StopProximityMeters ?? StopProximityMeters,
-            ExplorerDiversityPenalty = overrides.ExplorerDiversityPenalty ?? ExplorerDiversityPenalty,
-            ExplorerMaxTransfers = overrides.ExplorerMaxTransfers ?? ExplorerMaxTransfers,
-            ExplorerDurationCap = overrides.ExplorerDurationCap ?? ExplorerDurationCap,
+            MaxStartingRoutes = overrides.MaxStartingRoutes ?? MaxStartingRoutes,
+            MaxSuggestionsPerStartRoute = overrides.MaxSuggestionsPerStartRoute ?? MaxSuggestionsPerStartRoute,
+            MaxTransfersToShow = overrides.MaxTransfersToShow ?? MaxTransfersToShow,
+            TransferDiversityPenalty = overrides.TransferDiversityPenalty ?? TransferDiversityPenalty,
             AccessCandidatesPerDirection = overrides.AccessCandidatesPerDirection ?? AccessCandidatesPerDirection,
             MaxAccessQueries = overrides.MaxAccessQueries ?? MaxAccessQueries,
             EgressCandidatesPerDirection = overrides.EgressCandidatesPerDirection ?? EgressCandidatesPerDirection,
@@ -397,7 +401,7 @@ public sealed class RoutingConfig
         };
     }
 
-    public WeightProfile ToFastestProfile() => new()
+    public WeightProfile ToBaseProfile() => new()
     {
         WalkPenaltyMultiplier = WalkPenaltyMultiplier,
         WalkComfortMeters = WalkComfortMeters,
@@ -406,28 +410,7 @@ public sealed class RoutingConfig
         TransferPenaltyMeters = TransferPenaltyMeters,
         BoardingCostFactor = BoardingCostFactor,
         ClosurePenaltyMultiplier = ClosurePenaltyMultiplier,
-    };
-
-    public WeightProfile ToLeastWalkingProfile() => new()
-    {
-        WalkPenaltyMultiplier = WalkPenaltyMultiplier * 2.5,
-        WalkComfortMeters = WalkComfortMeters,
-        WalkEscalationRate = WalkEscalationRate * 2.5,
-        TransitCostFactor = TransitCostFactor,
-        TransferPenaltyMeters = TransferPenaltyMeters,
-        BoardingCostFactor = BoardingCostFactor,
-        ClosurePenaltyMultiplier = ClosurePenaltyMultiplier,
-    };
-
-    public WeightProfile ToSimplestProfile() => new()
-    {
-        WalkPenaltyMultiplier = WalkPenaltyMultiplier,
-        WalkComfortMeters = WalkComfortMeters,
-        WalkEscalationRate = WalkEscalationRate,
-        TransitCostFactor = TransitCostFactor,
-        TransferPenaltyMeters = TransferPenaltyMeters * 15,
-        BoardingCostFactor = BoardingCostFactor,
-        ClosurePenaltyMultiplier = ClosurePenaltyMultiplier,
+        MaxTransfers = MaxTransfersToShow,
     };
 }
 
@@ -535,15 +518,6 @@ public sealed class RouteLeg
     public required double[] Bbox { get; init; }
 }
 
-[JsonConverter(typeof(JsonStringEnumConverter<SuggestionLabel>))]
-public enum SuggestionLabel
-{
-    [JsonStringEnumMemberName("fastest")] Fastest,
-    [JsonStringEnumMemberName("least_walking")] LeastWalking,
-    [JsonStringEnumMemberName("simplest")] Simplest,
-    [JsonStringEnumMemberName("explorer")] Explorer,
-}
-
 public sealed class NavigateResponse
 {
     [JsonPropertyName("legs")]
@@ -565,8 +539,9 @@ public sealed class NavigateResponse
 
 public sealed class RouteSuggestion
 {
+    /// <summary>Transfer-based label: "Direct", "1 Transfer", "2 Transfers", etc.</summary>
     [JsonPropertyName("label")]
-    public required SuggestionLabel Label { get; init; }
+    public required string Label { get; init; }
 
     [JsonPropertyName("route")]
     public required NavigateResponse Route { get; init; }

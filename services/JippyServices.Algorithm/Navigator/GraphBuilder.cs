@@ -903,9 +903,6 @@ public sealed class GraphBuilder(DataContext db, OsrmWalkClient osrmWalk, Transi
             PolylineIndex = -1,
         };
 
-        var abLat = end.Lat - start.Lat;
-        var abLng = end.Lng - start.Lng;
-
         // --- ACCESS candidates ---
         var accessDegThreshold = config.MaxTransitProximityMeters / 111_320.0;
         var candidatesByGroup = new Dictionary<string, List<(string NodeId, double GeoDist)>>();
@@ -918,16 +915,6 @@ public sealed class GraphBuilder(DataContext db, OsrmWalkClient osrmWalk, Transi
 
             var dist = GeoUtils.HaversineMeters(new LatLng(node.Lat, node.Lng), start);
             if (dist > config.MaxTransitProximityMeters) continue;
-
-            var route = routes.Find(r => r.Id == node.RouteId);
-            if (route == null) continue;
-
-            var coords = node.Direction == RouteDirection.GoingTo ? route.DecodedGoingTo : route.DecodedGoingBack;
-            if (coords.Count < 2) continue;
-
-            var routeDir = GeoUtils.GetRouteDirection(coords, node.PolylineIndex);
-            var dotProduct = routeDir.dLat * abLat + routeDir.dLng * abLng;
-            if (dotProduct <= 0) continue;
 
             var dirStr = node.Direction == RouteDirection.GoingTo ? "goingTo" : "goingBack";
             var groupKey = $"{node.RouteId}:{dirStr}";
