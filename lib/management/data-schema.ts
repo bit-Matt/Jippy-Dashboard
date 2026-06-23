@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+import { AlgorithmWeightsSchema } from "@/lib/management/algorithm-weights-schema";
+
 const LatLngTuple = z.tuple([z.number(), z.number()]);
 
 const SnapshotStateEnum = z.enum(["ready", "wip", "for_approval"]);
@@ -144,11 +146,16 @@ export const ImportPayloadSchema = z.object({
   closures: z.array(ClosureExportSchema),
   stops: z.array(StopExportSchema),
   restrictedBoardingZones: z.array(RestrictedBoardingZoneExportSchema).default([]),
+  algorithmWeights: AlgorithmWeightsSchema.optional(),
   orphanedSnapshots: OrphanedSnapshotsSchema.optional(),
 });
 
 export type ImportPayload = z.infer<typeof ImportPayloadSchema>;
-export type ExportPayload = ImportPayload & { exportedAt: string; orphanedSnapshots: z.infer<typeof OrphanedSnapshotsSchema> };
+export type ExportPayload = ImportPayload & {
+  exportedAt: string;
+  orphanedSnapshots: z.infer<typeof OrphanedSnapshotsSchema>;
+  algorithmWeights: z.infer<typeof AlgorithmWeightsSchema>;
+};
 
 export {
   SnapshotStateEnum,

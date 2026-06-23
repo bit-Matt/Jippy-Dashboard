@@ -56,6 +56,7 @@ type ImportSummary = {
   closures: number;
   stops: number;
   restrictedBoardingZones: number;
+  algorithmWeightsImported: boolean;
 };
 
 type ImportPreview = {
@@ -65,6 +66,7 @@ type ImportPreview = {
   closures: number;
   stops: number;
   restrictedBoardingZones: number;
+  algorithmWeightsIncluded: boolean;
   orphanedRouteSnapshots: number;
   orphanedRegionSnapshots: number;
 };
@@ -77,6 +79,7 @@ function getImportPreview(payload: ImportPayload): ImportPreview {
     closures: payload.closures.length,
     stops: payload.stops.length,
     restrictedBoardingZones: payload.restrictedBoardingZones.length,
+    algorithmWeightsIncluded: payload.algorithmWeights !== undefined,
     orphanedRouteSnapshots: payload.orphanedSnapshots?.routes.length ?? 0,
     orphanedRegionSnapshots: payload.orphanedSnapshots?.regions.length ?? 0,
   };
@@ -173,7 +176,7 @@ export default function DataManagementPage() {
     const summary = data.data;
     setImportPayload(null);
     setStatusMessage(
-      `Import complete: ${summary.routes} routes, ${summary.regions} regions, ${summary.closures} closures, ${summary.stops} stops, ${summary.restrictedBoardingZones} restricted boarding zones.`,
+      `Import complete: ${summary.routes} routes, ${summary.regions} regions, ${summary.closures} closures, ${summary.stops} stops, ${summary.restrictedBoardingZones} restricted boarding zones${summary.algorithmWeightsImported ? ", algorithm weights" : ""}.`,
     );
     setIsImporting(false);
     await mutateStats();
@@ -233,7 +236,7 @@ export default function DataManagementPage() {
                 <CardHeader>
                   <CardTitle>Export Data</CardTitle>
                   <CardDescription>
-                    Download all routes, regions, closures, stops, restricted boarding zones, vehicle types, and snapshots as JSON.
+                    Download all routes, regions, closures, stops, restricted boarding zones, algorithm weights, vehicle types, and snapshots as JSON.
                     Orphaned snapshots are included in the export.
                   </CardDescription>
                 </CardHeader>
@@ -272,6 +275,7 @@ export default function DataManagementPage() {
                         <p>Closures: {importPreview.closures}</p>
                         <p>Stops: {importPreview.stops}</p>
                         <p>Restricted boarding zones: {importPreview.restrictedBoardingZones}</p>
+                        <p>Algorithm weights: {importPreview.algorithmWeightsIncluded ? "included" : "not included"}</p>
                         <p>Orphaned route snapshots (ignored): {importPreview.orphanedRouteSnapshots}</p>
                         <p>Orphaned region snapshots (ignored): {importPreview.orphanedRegionSnapshots}</p>
                       </div>

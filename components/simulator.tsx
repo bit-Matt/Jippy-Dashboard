@@ -109,7 +109,10 @@ function LegCard({ leg }: { leg: NavigateRouteLeg }) {
             {leg.type}
           </Badge>
           {leg.route_name && (
-            <span className="text-sm font-medium">{leg.route_name}</span>
+            <span className="text-sm font-medium">
+              {leg.route_number ? `${leg.route_number} — ` : ""}
+              {leg.route_name}
+            </span>
           )}
         </div>
         <div className="flex gap-3 text-xs text-muted-foreground">

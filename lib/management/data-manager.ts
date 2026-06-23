@@ -21,7 +21,9 @@ import type * as GeoJSON from "@/lib/db/postgis-extension/geojsonTypes";
 import type { ExportPayload, ImportPayload } from "@/lib/management/data-schema";
 import { polygonToPointObjects, pointsToPolygon } from "@/lib/management/closure-manager";
 import { lineStringToRbzPoints, pointsToLineString } from "@/lib/management/restricted-boarding-zone-manager";
+import { unwrap } from "@/lib/one-of";
 import { ErrorCodes, Failure, Result, Success } from "@/lib/one-of/types";
+import { getWeights, updateWeights } from "@/lib/routing-fast";
 
 type LatLng = [number, number];
 
@@ -329,6 +331,7 @@ export async function exportAllData(): Promise<Result<ExportPayload>> {
       closureRows,
       stopRows,
       rbzRows,
+      algorithmWeights,
     ] = await Promise.all([
       db.select({
         id: vehicleTypes.id,
@@ -409,6 +412,8 @@ export async function exportAllData(): Promise<Result<ExportPayload>> {
           restrictedBordingZone.isPublic,
           restrictedBordingZone.points,
         ),
+
+      unwrap(getWeights()),
     ]);
 
     const [routeSnapshotsByRouteId, regionSnapshotsByRegionId, orphanedRouteSnapshots, orphanedRegionSnapshots] = await Promise.all([
@@ -463,6 +468,7 @@ export async function exportAllData(): Promise<Result<ExportPayload>> {
           point,
         })),
       })),
+      algorithmWeights,
       orphanedSnapshots: {
         routes: orphanedRouteSnapshots,
         regions: orphanedRegionSnapshots,
@@ -482,6 +488,7 @@ export interface ImportSummary {
   closures: number;
   stops: number;
   restrictedBoardingZones: number;
+  algorithmWeightsImported: boolean;
 }
 
 export async function importData(payload: ImportPayload, ownerId: string): Promise<Result<ImportSummary>> {
@@ -727,10 +734,21 @@ export async function importData(payload: ImportPayload, ownerId: string): Promi
         closures: payload.closures.length,
         stops: payload.stops.length,
         restrictedBoardingZones: payload.restrictedBoardingZones.length,
+        algorithmWeightsImported: false,
       } satisfies ImportSummary;
     });
 
-    return new Success(summary);
+    if (payload.algorithmWeights) {
+      const weightsResult = await updateWeights(payload.algorithmWeights);
+      if (weightsResult instanceof Failure) {
+        return weightsResult;
+      }
+    }
+
+    return new Success({
+      ...summary,
+      algorithmWeightsImported: Boolean(payload.algorithmWeights),
+    });
   } catch (e) {
     return new Failure(ErrorCodes.Fatal, "Failed to import data.", {}, e);
   }

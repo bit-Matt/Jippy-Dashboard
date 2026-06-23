@@ -125,6 +125,8 @@ export type LegType = "WALK" | "TRICYCLE" | "JEEPNEY";
 export interface RouteLeg {
   type: LegType;
   route_name: string | null;
+  route_id: string | null;
+  route_number: string | null;
   polyline: string;
   color: string | null;
   distance: number;

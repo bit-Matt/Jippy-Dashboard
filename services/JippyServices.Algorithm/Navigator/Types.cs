@@ -24,6 +24,7 @@ public sealed class GraphNode
     public required double Lng { get; init; }
     public required string RouteId { get; init; }
     public required string RouteName { get; init; }
+    public required string RouteNumber { get; init; }
     public required string RouteColor { get; init; }
     public required RouteDirection Direction { get; init; }
     public required int PolylineIndex { get; init; }
@@ -497,6 +498,12 @@ public sealed class RouteLeg
 
     [JsonPropertyName("route_name")]
     public required string? RouteName { get; init; }
+
+    [JsonPropertyName("route_id")]
+    public required string? RouteId { get; init; }
+
+    [JsonPropertyName("route_number")]
+    public required string? RouteNumber { get; init; }
 
     [JsonPropertyName("polyline")]
     public required string Polyline { get; init; }

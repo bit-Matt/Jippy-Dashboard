@@ -178,6 +178,8 @@ export interface NavigateInstruction {
 export interface NavigateRouteLeg {
   type: NavigateLegType;
   route_name: string | null;
+  route_id: string | null;
+  route_number: string | null;
   polyline: string;
   color: string | null;
   distance: number;

@@ -42,7 +42,7 @@ export async function POST(request: NextRequest) {
         actorRole: currentSession.user!.role,
         category: "write_operation",
         action: "data_imported",
-        summary: `Imported ${summary.routes} routes, ${summary.regions} regions, ${summary.closures} closures, ${summary.stops} stops, ${summary.restrictedBoardingZones} restricted boarding zones`,
+        summary: `Imported ${summary.routes} routes, ${summary.regions} regions, ${summary.closures} closures, ${summary.stops} stops, ${summary.restrictedBoardingZones} restricted boarding zones${summary.algorithmWeightsImported ? ", algorithm weights" : ""}`,
         routePath: "/api/restricted/management/data/import",
         httpMethod: "POST",
         statusCode: StatusCodes.Status201Created,

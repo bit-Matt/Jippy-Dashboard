@@ -12,6 +12,8 @@ import {
   utils as httpUtils,
 } from "@/lib/http";
 import { validator } from "@/lib/validator";
+import { oneOf } from "@/lib/one-of";
+import * as turnstile from "@/lib/turnstile";
 
 export async function POST(req: NextRequest) {
   const body = await httpUtils.tryParseJson<SignInRequest>(req);
@@ -25,8 +27,9 @@ export async function POST(req: NextRequest) {
       email: { type: "string", formatter: "email" },
       password: { type: "string", formatter: "non-empty-string" },
       rememberMe: { type: "boolean" },
+      token: { type: "string", formatter: "non-empty-string" },
     },
-    requiredProperties: ["email", "password"],
+    requiredProperties: ["email", "password", "token"],
     allowUnvalidatedProperties: false,
   });
   if (!validation.ok) {
@@ -35,6 +38,19 @@ export async function POST(req: NextRequest) {
   }
 
   try {
+    // Verify turnstile
+    const turnstileRawResult = await turnstile.validate(body.token);
+    const turnstileResult = oneOf(turnstileRawResult).match(
+      s => s,
+      () => false,
+    );
+
+    if (!turnstileResult) {
+      return ApiResponseBuilder
+        .createError(StatusCodes.Status401Unauthorized, "Invalid Token!")
+        .build();
+    }
+
     await auth.api.signInEmail({
       body: {
         email: body.email,
@@ -76,4 +92,5 @@ type SignInRequest = {
   email: string;
   password: string;
   rememberMe?: boolean;
+  token: string;
 }

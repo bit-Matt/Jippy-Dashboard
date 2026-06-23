@@ -26,6 +26,8 @@ public sealed class LegAssembler(
         {
             Type = LegType.Walk,
             RouteName = null,
+            RouteId = null,
+            RouteNumber = null,
             Polyline = walk.Polyline,
             Color = null,
             Distance = walk.Distance,
@@ -139,6 +141,8 @@ public sealed class LegAssembler(
                     {
                         Type = LegType.Walk,
                         RouteName = null,
+                        RouteId = null,
+                        RouteNumber = null,
                         Polyline = walkRoute.Polyline,
                         Color = null,
                         Distance = walkRoute.Distance,
@@ -182,6 +186,8 @@ public sealed class LegAssembler(
                                 {
                                     Type = LegType.Walk,
                                     RouteName = null,
+                                    RouteId = null,
+                                    RouteNumber = null,
                                     Polyline = walkRoute.Polyline,
                                     Color = null,
                                     Distance = walkRoute.Distance,
@@ -196,6 +202,8 @@ public sealed class LegAssembler(
                                 {
                                     Type = LegType.Walk,
                                     RouteName = null,
+                                    RouteId = null,
+                                    RouteNumber = null,
                                     Polyline = PolylineCodec.Encode([from, stationPt]),
                                     Color = null,
                                     Distance = walkToStation * 1.2,
@@ -248,6 +256,8 @@ public sealed class LegAssembler(
                     {
                         Type = LegType.Jeepney,
                         RouteName = transit.RouteName,
+                        RouteId = transit.RouteId,
+                        RouteNumber = transit.Nodes[0].RouteNumber,
                         Polyline = polyline,
                         Color = transit.RouteColor,
                         Distance = distance,
@@ -361,6 +371,8 @@ public sealed class LegAssembler(
                 {
                     Type = LegType.Walk,
                     RouteName = null,
+                    RouteId = null,
+                    RouteNumber = null,
                     Polyline = PolylineCodec.Encode(mergedCoords),
                     Color = null,
                     Distance = (prevLeg.Type == LegType.Walk ? prevLeg.Distance : 0) + glueDistance + leg.Distance,
@@ -387,6 +399,8 @@ public sealed class LegAssembler(
                 {
                     Type = LegType.Walk,
                     RouteName = null,
+                    RouteId = null,
+                    RouteNumber = null,
                     Polyline = PolylineCodec.Encode(mergedCoords),
                     Color = null,
                     Distance = prevLeg.Distance + glueDistance,
@@ -403,6 +417,8 @@ public sealed class LegAssembler(
                 {
                     Type = LegType.Walk,
                     RouteName = null,
+                    RouteId = null,
+                    RouteNumber = null,
                     Polyline = PolylineCodec.Encode(glueCoords),
                     Color = null,
                     Distance = glueDistance,
@@ -455,6 +471,8 @@ public sealed class LegAssembler(
         {
             Type = LegType.Tricycle,
             RouteName = stationName,
+            RouteId = null,
+            RouteNumber = null,
             Polyline = polyline,
             Color = null,
             Distance = distance,
@@ -507,6 +525,8 @@ public sealed class LegAssembler(
         {
             Type = LegType.Tricycle,
             RouteName = stationName,
+            RouteId = null,
+            RouteNumber = null,
             Polyline = polyline,
             Color = null,
             Distance = distance,

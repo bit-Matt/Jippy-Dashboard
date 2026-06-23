@@ -1,20 +1,23 @@
 "use client";
 
-import {Check, X} from "lucide-react";
-import {type ComponentProps, type SyntheticEvent, useMemo, useState} from "react";
-import {redirect, RedirectType, useSearchParams} from "next/navigation";
+import { Check, X } from "lucide-react";
+import { type ComponentProps, type SyntheticEvent, useMemo, useState, useRef } from "react";
+import { redirect, RedirectType, useSearchParams } from "next/navigation";
+import { Turnstile, TurnstileInstance } from "@marsidev/react-turnstile";
 import useSWR from "swr";
 
-import {Button} from "@/components/ui/button";
-import {Card, CardContent, CardDescription, CardHeader, CardTitle} from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import ErrorTextRenderer from "@/components/error-text-renderer";
-import {Field, FieldDescription, FieldGroup, FieldLabel} from "@/components/ui/field";
-import {Input} from "@/components/ui/input";
+import { Field, FieldDescription, FieldGroup, FieldLabel } from "@/components/ui/field";
+import { Input } from "@/components/ui/input";
 
-import {$fetch, BetterFetchResponse} from "@/lib/http/client";
-import {type UserCredentials} from "@/lib/accounts";
+import { $fetch, BetterFetchResponse } from "@/lib/http/client";
+import { type UserCredentials } from "@/lib/accounts";
 
 export function SignupForm({ ...props }: ComponentProps<typeof Card>) {
+  const turnstileComponent = useRef<TurnstileInstance | null>(null);
+
   const searchParams = useSearchParams();
   const eligibilityToken = searchParams.get("token");
 
@@ -94,16 +97,27 @@ export function SignupForm({ ...props }: ComponentProps<typeof Card>) {
   const submitForm = async (e: SyntheticEvent) => {
     e.preventDefault();
 
+    const widget = turnstileComponent.current;
+    if (!widget) {
+      return;
+    }
+
+    if (widget.isExpired()) {
+      return;
+    }
+
     const result = await $fetch("/api/auth/sign-up", {
       method: "POST",
       body: {
         fullName: form.fullName,
         password: form.password,
         token: data?.data?.data.token || "",
+        turnstileToken: widget.getResponse(),
       },
     });
     if (result.error) {
       alert("Failed to enroll. Please try again.");
+      widget.reset();
       return;
     }
 
@@ -200,6 +214,12 @@ export function SignupForm({ ...props }: ComponentProps<typeof Card>) {
               />
               <FieldDescription>Please confirm your password.</FieldDescription>
             </Field>
+            <div className="gap-2 w-full">
+              <Turnstile
+                ref={turnstileComponent}
+                siteKey={process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY!}
+              />
+            </div>
             <FieldGroup>
               <Field>
                 <Button type="submit">Create Account</Button>
