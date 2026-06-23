@@ -205,7 +205,7 @@ if (-not $Cloudflare_Turnstile_Public_Key) {
 }
 
 # BetterAuth Configuration
-$Better_Auth_Secret = New-SecurePassword -Length 32 -AdditionalCharacters "!#%&()*+,/:;<=>?@[]^`{|}"
+$Better_Auth_Secret = $envHash.BETTER_AUTH_SECRET ? $envHash.BETTER_AUTH_SECRET : (New-SecurePassword -Length 32 -AdditionalCharacters "!#%&()*+,/:;<=>?@[]^`{|}")
 $Better_Auth_URL    = $envHash.BETTER_AUTH_URL ? $envHash.BETTER_AUTH_URL : (Read-Host -Prompt "Deployment Host (Default: http://localhost:6769)")
 if (-not ($Better_Auth_URL)) {
   $Better_Auth_URL  = "http://localhost:6769"

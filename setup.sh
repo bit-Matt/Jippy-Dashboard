@@ -211,7 +211,11 @@ if [[ -z "$NEXT_PUBLIC_TURNSTILE_SITE_KEY" ]]; then
   exit 1
 fi
 
-BETTER_AUTH_SECRET="$(new_secure_password 32)"
+if [[ -n "${ENV_HASH[BETTER_AUTH_SECRET]:-}" ]]; then
+  BETTER_AUTH_SECRET="${ENV_HASH[BETTER_AUTH_SECRET]}"
+else
+  BETTER_AUTH_SECRET="$(new_secure_password 32)"
+fi
 if [[ -n "${ENV_HASH[BETTER_AUTH_URL]:-}" ]]; then
   BETTER_AUTH_URL="${ENV_HASH[BETTER_AUTH_URL]}"
 else
