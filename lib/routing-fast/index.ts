@@ -20,6 +20,7 @@ export type SimulationOverrides = {
   tricycleRideCostFactor?: number;
   stationWaitPenaltyMeters?: number;
   hailingWaitPenaltyMeters?: number;
+  midRouteTricyclePenaltyMeters?: number;
   maxTricycleStationWalkMeters?: number;
   minTricycleRideMeters?: number;
   backtrackPenaltyMultiplier?: number;
@@ -63,6 +64,7 @@ export const ALGORITHM_WEIGHT_DEFAULTS: AlgorithmWeights = {
   tricycleRideCostFactor: 0.3,
   stationWaitPenaltyMeters: 350,
   hailingWaitPenaltyMeters: 525,
+  midRouteTricyclePenaltyMeters: 3_500,
   maxTricycleStationWalkMeters: 1_000,
   minTricycleRideMeters: 150,
   backtrackPenaltyMultiplier: 2.0,
@@ -76,13 +78,13 @@ export const ALGORITHM_WEIGHT_DEFAULTS: AlgorithmWeights = {
   stationUnavailabilityThreshold: 0.9,
   stopProximityMeters: 30,
   maxStartingRoutes: 4,
-  maxSuggestionsPerStartRoute: 3,
+  maxSuggestionsPerStartRoute: 5,
   maxTransfersToShow: 3,
   transferDiversityPenalty: 3.0,
-  accessCandidatesPerDirection: 16,
-  maxAccessQueries: 30,
-  egressCandidatesPerDirection: 16,
-  maxEgressQueries: 30,
+  accessCandidatesPerDirection: 128,
+  maxAccessQueries: 128,
+  egressCandidatesPerDirection: 128,
+  maxEgressQueries: 128,
 };
 
 /** @deprecated Use ALGORITHM_WEIGHT_DEFAULTS */
