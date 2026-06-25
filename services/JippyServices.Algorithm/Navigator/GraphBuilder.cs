@@ -685,80 +685,64 @@ public sealed class GraphBuilder(DataContext db, OsrmWalkClient osrmWalk, Transi
                     });
                 }
 
-                // --- Hail edges: nearby jeepney node → station (mid-route tricycle transfer) ---
-                // Only for nodes where the walk to the station is within the hail cap.
-                // Also store the walk distance so the costing model accounts for the
-                // WALK leg the leg assembler will emit from the alight point to the station.
-                foreach (var jeepNodeId in nearbyJeepNodes)
+            }
+
+            // --- First-mile: direct tricycle hail from origin (if inside region) ---
+            // Tricycles can be hailed from any point inside the region — no walk to a station
+            // is required. Edges connect __start__ directly to boundary exits (for jeepneys
+            // outside the region) and to jeepney nodes inside the region. StationPoint is
+            // intentionally omitted so LegAssembler routes the tricycle from the actual origin
+            // rather than injecting a walk-to-station leg before the ride.
+            if (startInRegion && (boundaryExitNodes.Count > 0 || jeepneyNodesInRegion.Count > 0))
+            {
+                if (!baseEdges.TryGetValue(RoutingConstants.VirtualStartId, out var fmEdges))
                 {
-                    var jeepNode = nodes[jeepNodeId];
-                    var walkToStation = GeoUtils.HaversineMeters(
-                        new LatLng(jeepNode.Lat, jeepNode.Lng), station.Point);
+                    fmEdges = [];
+                    baseEdges[RoutingConstants.VirtualStartId] = fmEdges;
+                }
 
-                    // Skip if walk to station is too far — same cap as direct hail edges
-                    if (walkToStation > config.MaxDirectWalkInsteadOfHailMeters) continue;
+                TransitStation? nearestToStart = null;
+                var nearestToStartDist = double.MaxValue;
+                foreach (var s in availableStations)
+                {
+                    var d = GeoUtils.HaversineMeters(start, s.Point);
+                    if (d < nearestToStartDist) { nearestToStart = s; nearestToStartDist = d; }
+                }
 
-                    var hailRideDist = walkToStation * config.TricycleDetourFactor;
-
-                    if (!baseEdges.TryGetValue(jeepNodeId, out var jeepEdges))
+                // __start__ → boundary exit (hail from origin, no StationPoint)
+                foreach (var (exitId, exitPt) in boundaryExitNodes)
+                {
+                    var rideDist = GeoUtils.HaversineMeters(start, exitPt) * config.TricycleDetourFactor;
+                    fmEdges.Add(new BaseEdge
                     {
-                        jeepEdges = [];
-                        baseEdges[jeepNodeId] = jeepEdges;
-                    }
-
-                    jeepEdges.Add(new BaseEdge
-                    {
-                        From = jeepNodeId,
-                        To = stationNodeId,
-                        Distance = hailRideDist,
+                        From = RoutingConstants.VirtualStartId,
+                        To = exitId,
+                        Distance = rideDist,
                         Type = EdgeType.Tricycle,
-                        StationId = station.Id,
-                        StationName = station.Address,
-                        StationPoint = station.Point,
                         RegionId = region.Id,
                         IsHail = true,
-                        // The leg assembler emits a WALK from the alight point to the station.
-                        // Include this cost so A* does not underestimate the true path cost.
-                        WalkToStationDist = walkToStation * config.WalkDetourFactor,
+                        StationId = nearestToStart?.Id,
+                        StationName = nearestToStart?.Address,
                     });
                 }
 
-                // --- VIRTUAL_START → station (walk + hail, if start inside region) ---
-                if (startInRegion)
+                // __start__ → jeepney node inside region (short hail only)
+                foreach (var jeepNodeId in jeepneyNodesInRegion)
                 {
-                    var walkDist = GeoUtils.HaversineMeters(start, station.Point);
-                    if (!(walkDist <= config.MaxTricycleStationWalkMeters)) continue;
-                    if (!baseEdges.TryGetValue(RoutingConstants.VirtualStartId, out var startEdges))
-                    {
-                        startEdges = [];
-                        baseEdges[RoutingConstants.VirtualStartId] = startEdges;
-                    }
-
-                    // Walk to station
-                    startEdges.Add(new BaseEdge
+                    var jeepNode = nodes[jeepNodeId];
+                    var rideDist = GeoUtils.HaversineMeters(start, new LatLng(jeepNode.Lat, jeepNode.Lng))
+                        * config.TricycleDetourFactor;
+                    if (rideDist > config.MaxTricycleRideToTransitMeters) continue;
+                    fmEdges.Add(new BaseEdge
                     {
                         From = RoutingConstants.VirtualStartId,
-                        To = stationNodeId,
-                        Distance = walkDist,
-                        Type = EdgeType.Walk,
-                        StationId = station.Id,
-                        StationName = station.Address,
-                        RegionId = region.Id,
-                    });
-
-                    // Hail from start
-                    var hailDist = walkDist * config.TricycleDetourFactor;
-                    startEdges.Add(new BaseEdge
-                    {
-                        From = RoutingConstants.VirtualStartId,
-                        To = stationNodeId,
-                        Distance = hailDist,
+                        To = jeepNodeId,
+                        Distance = rideDist,
                         Type = EdgeType.Tricycle,
-                        StationId = station.Id,
-                        StationName = station.Address,
-                        StationPoint = station.Point,
                         RegionId = region.Id,
                         IsHail = true,
+                        StationId = nearestToStart?.Id,
+                        StationName = nearestToStart?.Address,
                     });
                 }
             }
@@ -857,7 +841,6 @@ public sealed class GraphBuilder(DataContext db, OsrmWalkClient osrmWalk, Transi
                         Type = EdgeType.Tricycle,
                         StationId = nearestStation.Id,
                         StationName = nearestStation.Address,
-                        StationPoint = nearestStation.Point,
                         RegionId = region.Id,
                         IsHail = true,
                     });
@@ -1071,6 +1054,12 @@ public sealed class GraphBuilder(DataContext db, OsrmWalkClient osrmWalk, Transi
                         if (baseEdge.WalkToStationDist.HasValue)
                             cost += GeoUtils.ProfileWalkCost(baseEdge.WalkToStationDist.Value, profile);
 
+                        if (baseEdge is { IsHail: true, From: not RoutingConstants.VirtualStartId }
+                            && baseEdge.To.StartsWith("tricycle:", StringComparison.Ordinal))
+                        {
+                            cost += cfg.MidRouteTricyclePenaltyMeters;
+                        }
+
                         if (baseEdge is { RouteId: not null, IsHail: false })
                         {
                             rawBoardingCosts.TryGetValue(baseEdge.RouteId, out var bc);
@@ -1119,6 +1108,8 @@ public sealed class GraphBuilder(DataContext db, OsrmWalkClient osrmWalk, Transi
             if (!nodes.TryGetValue(nodeId, out var node)) continue;
             // Skip boarding at stop-restricted nodes
             if (stopRestrictedNodes.Contains(nodeId)) continue;
+            // Skip tricycle infrastructure — reached via tricycle edges, not walk
+            if (node.RouteId.StartsWith("__tricycle_region__:", StringComparison.Ordinal)) continue;
             var walkCost = GeoUtils.ProfileWalkCost(rawDist, profile);
             rawBoardingCosts.TryGetValue(node.RouteId, out var bc);
             var boardingCost = bc * profile.BoardingCostFactor;
@@ -1139,6 +1130,9 @@ public sealed class GraphBuilder(DataContext db, OsrmWalkClient osrmWalk, Transi
         {
             // Skip alighting at stop-restricted nodes
             if (stopRestrictedNodes.Contains(nodeId)) continue;
+            // Skip tricycle infrastructure — it connects to __end__ via tricycle edges
+            if (nodes.TryGetValue(nodeId, out var egressNode)
+                && egressNode.RouteId.StartsWith("__tricycle_region__:", StringComparison.Ordinal)) continue;
             var walkCost = GeoUtils.ProfileWalkCost(rawDist, profile);
             if (!adjacency.TryGetValue(nodeId, out var nodeEdges))
             {

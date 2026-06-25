@@ -48,7 +48,7 @@ public sealed class NavigationService(
         foreach (var routeId in startingRouteIds)
         {
             var routeSuggestions = await EnumerateStartingRouteSuggestionsAsync(
-                routeId, baseGraph, config);
+                routeId, baseGraph, config, straightLineDistance);
             allSuggestions.AddRange(routeSuggestions);
         }
 
@@ -61,6 +61,7 @@ public sealed class NavigationService(
         var deduped = DeduplicateSuggestions(sorted);
         var pruned = RemoveDominatedSuggestions(deduped);
         pruned = RemoveWalkDominatedSuggestions(pruned);
+        pruned = RemoveJeepneySandwichedTricycleSuggestions(pruned);
 
         // Drop suggestions with a long mid-route walk unless that leaves us empty
         var filtered = pruned.Where(s => !HasLongMidRouteWalk(s.Route.Legs, config)).ToList();
@@ -104,7 +105,7 @@ public sealed class NavigationService(
     }
 
     private async Task<List<RouteSuggestion>> EnumerateStartingRouteSuggestionsAsync(
-        string startingRouteId, BaseGraph baseGraph, RoutingConfig config)
+        string startingRouteId, BaseGraph baseGraph, RoutingConfig config, double odDistanceMeters)
     {
         var results = new List<RouteSuggestion>();
         var penalizedRouteIds = new HashSet<string>();
@@ -128,7 +129,7 @@ public sealed class NavigationService(
                 graph, RoutingConstants.VirtualStartId, RoutingConstants.VirtualEndId, profile);
             if (nodePath is not { Count: >= 2 }) break;
 
-            var legs = await AssembleLegsAsync(nodePath, graph, config);
+            var legs = await AssembleLegsAsync(nodePath, graph, config, odDistanceMeters);
             if (legs == null) break;
 
             var response = AssembleResponse(legs);
@@ -140,8 +141,13 @@ public sealed class NavigationService(
                 Route = response,
             });
 
+            // Keep the starting route unpenalized so later iterations can still
+            // surface alternate second legs (e.g. R3→R55 after R3→R11).
             foreach (var routeId in ExtractRouteIdsFromPath(nodePath, baseGraph.Nodes))
+            {
+                if (routeId == startingRouteId) continue;
                 penalizedRouteIds.Add(routeId);
+            }
         }
 
         return results;
@@ -229,7 +235,7 @@ public sealed class NavigationService(
     // =====================================================================
 
     private async Task<List<RouteLeg>?> AssembleLegsAsync(
-        List<string> nodePath, Graph graph, RoutingConfig config)
+        List<string> nodePath, Graph graph, RoutingConfig config, double odDistanceMeters)
     {
         var sections = LegAssembler.AnalyzeNodePath(nodePath, graph);
         if (sections.Count == 0) return null;
@@ -238,7 +244,7 @@ public sealed class NavigationService(
         sections = MergeSameRouteSections(sections);
 
         // Filter short transit sections
-        sections = FilterShortTransitSections(sections, config);
+        sections = FilterShortTransitSections(sections, config, odDistanceMeters);
         if (sections.Count == 0) return null;
 
         var legs = await legAssembler.BuildLegsFromSectionsAsync(sections, config);
@@ -363,6 +369,58 @@ public sealed class NavigationService(
     private static double TotalWalkDistance(IReadOnlyList<RouteLeg> legs)
         => legs.Where(l => l.Type == LegType.Walk).Sum(l => l.Distance);
 
+    /// <summary>
+    /// Safety-net post-processor: drop routes that use tricycle between jeepney
+    /// legs when a jeepney-only option exists with fewer transfers.
+    /// A* already enforces this constraint at search time via the HasUsedJeepney
+    /// composite state — this filter guards against any edge cases that slip through
+    /// (e.g. multi-region graphs where two A* runs are stitched together).
+    /// </summary>
+    private static List<RouteSuggestion> RemoveJeepneySandwichedTricycleSuggestions(
+        List<RouteSuggestion> suggestions)
+    {
+        if (suggestions.Count <= 1) return suggestions;
+
+        var jeepneyOnly = suggestions
+            .Where(s => !HasTricycleBetweenJeepneys(s.Route.Legs))
+            .ToList();
+
+        if (jeepneyOnly.Count == 0) return suggestions;
+
+        var minJeepneyOnlyTransfers = jeepneyOnly.Min(s => s.Route.TotalTransfers);
+
+        return suggestions
+            .Where(s =>
+            {
+                if (!HasTricycleBetweenJeepneys(s.Route.Legs)) return true;
+                if (s.Route.TotalTransfers > minJeepneyOnlyTransfers) return false;
+                return !jeepneyOnly.Any(o => o.Route.TotalTransfers == s.Route.TotalTransfers);
+            })
+            .ToList();
+    }
+
+    private static bool HasTricycleBetweenJeepneys(IReadOnlyList<RouteLeg> legs)
+    {
+        var firstJeepney = -1;
+        var lastJeepney = -1;
+
+        for (var i = 0; i < legs.Count; i++)
+        {
+            if (legs[i].Type != LegType.Jeepney) continue;
+            if (firstJeepney < 0) firstJeepney = i;
+            lastJeepney = i;
+        }
+
+        if (firstJeepney < 0 || lastJeepney <= firstJeepney) return false;
+
+        for (var i = firstJeepney + 1; i < lastJeepney; i++)
+        {
+            if (legs[i].Type == LegType.Tricycle) return true;
+        }
+
+        return false;
+    }
+
     // =====================================================================
     // Merge + filter helpers
     // =====================================================================
@@ -390,9 +448,22 @@ public sealed class NavigationService(
         return merged;
     }
 
-    private static List<PathSection> FilterShortTransitSections(
-        List<PathSection> sections, RoutingConfig config)
+    /// <summary>
+    /// For short O/D pairs the configured minimum can exceed the only viable jeepney
+    /// segment, leaving tricycle-only paths. Scale down with trip length but keep the
+    /// configured floor for longer rides.
+    /// </summary>
+    private static double EffectiveMinTransitRideMeters(double odDistanceMeters, RoutingConfig config)
     {
+        var scaled = odDistanceMeters * 0.5;
+        return Math.Min(config.MinTransitRideMeters, Math.Max(config.MinTricycleRideMeters, scaled));
+    }
+
+    private static List<PathSection> FilterShortTransitSections(
+        List<PathSection> sections, RoutingConfig config, double odDistanceMeters)
+    {
+        var minRideMeters = EffectiveMinTransitRideMeters(odDistanceMeters, config);
+
         return sections.Where(sec =>
         {
             if (sec is not TransitSection ts) return true;
@@ -403,7 +474,7 @@ public sealed class NavigationService(
                 var b = ts.Nodes[i + 1];
                 dist += GeoUtils.HaversineMeters(new LatLng(a.Lat, a.Lng), new LatLng(b.Lat, b.Lng));
             }
-            return dist >= config.MinTransitRideMeters;
+            return dist >= minRideMeters;
         }).ToList();
     }
 

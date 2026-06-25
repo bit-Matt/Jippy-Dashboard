@@ -60,6 +60,13 @@ public sealed class AlgorithmWeights
     [JsonPropertyName("hailingWaitPenaltyMeters")]
     public double HailingWaitPenaltyMeters { get; init; } = 525;
 
+    /// <summary>
+    /// Extra cost added when hailing a tricycle from a mid-route jeepney alight
+    /// point to a station, so jeepney-to-jeepney transfers are preferred.
+    /// </summary>
+    [JsonPropertyName("midRouteTricyclePenaltyMeters")]
+    public double MidRouteTricyclePenaltyMeters { get; init; } = 3_500;
+
     [JsonPropertyName("maxTricycleStationWalkMeters")]
     public double MaxTricycleStationWalkMeters { get; init; } = 1_000;
 
@@ -106,7 +113,7 @@ public sealed class AlgorithmWeights
     public int MaxStartingRoutes { get; init; } = 4;
 
     [JsonPropertyName("maxSuggestionsPerStartRoute")]
-    public int MaxSuggestionsPerStartRoute { get; init; } = 3;
+    public int MaxSuggestionsPerStartRoute { get; init; } = 5;
 
     [JsonPropertyName("maxTransfersToShow")]
     public int MaxTransfersToShow { get; init; } = 3;

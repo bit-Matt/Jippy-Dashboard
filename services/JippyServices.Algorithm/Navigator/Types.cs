@@ -246,6 +246,7 @@ public sealed class SimulationOverrides
     [JsonPropertyName("tricycleRideCostFactor")] public double? TricycleRideCostFactor { get; init; }
     [JsonPropertyName("stationWaitPenaltyMeters")] public double? StationWaitPenaltyMeters { get; init; }
     [JsonPropertyName("hailingWaitPenaltyMeters")] public double? HailingWaitPenaltyMeters { get; init; }
+    [JsonPropertyName("midRouteTricyclePenaltyMeters")] public double? MidRouteTricyclePenaltyMeters { get; init; }
     [JsonPropertyName("maxTricycleStationWalkMeters")] public double? MaxTricycleStationWalkMeters { get; init; }
     [JsonPropertyName("minTricycleRideMeters")] public double? MinTricycleRideMeters { get; init; }
     [JsonPropertyName("backtrackPenaltyMultiplier")] public double? BacktrackPenaltyMultiplier { get; init; }
@@ -294,6 +295,7 @@ public sealed class RoutingConfig
     public double TricycleRideCostFactor { get; init; }
     public double StationWaitPenaltyMeters { get; init; }
     public double HailingWaitPenaltyMeters { get; init; }
+    public double MidRouteTricyclePenaltyMeters { get; init; }
     public double MaxTricycleStationWalkMeters { get; init; }
     public double MinTricycleRideMeters { get; init; }
     public double BacktrackPenaltyMultiplier { get; init; }
@@ -334,6 +336,7 @@ public sealed class RoutingConfig
         TricycleRideCostFactor = weights.TricycleRideCostFactor,
         StationWaitPenaltyMeters = weights.StationWaitPenaltyMeters,
         HailingWaitPenaltyMeters = weights.HailingWaitPenaltyMeters,
+        MidRouteTricyclePenaltyMeters = weights.MidRouteTricyclePenaltyMeters,
         MaxTricycleStationWalkMeters = weights.MaxTricycleStationWalkMeters,
         MinTricycleRideMeters = weights.MinTricycleRideMeters,
         BacktrackPenaltyMultiplier = weights.BacktrackPenaltyMultiplier,
@@ -379,6 +382,7 @@ public sealed class RoutingConfig
             TricycleRideCostFactor = overrides.TricycleRideCostFactor ?? TricycleRideCostFactor,
             StationWaitPenaltyMeters = overrides.StationWaitPenaltyMeters ?? StationWaitPenaltyMeters,
             HailingWaitPenaltyMeters = overrides.HailingWaitPenaltyMeters ?? HailingWaitPenaltyMeters,
+            MidRouteTricyclePenaltyMeters = overrides.MidRouteTricyclePenaltyMeters ?? MidRouteTricyclePenaltyMeters,
             MaxTricycleStationWalkMeters = overrides.MaxTricycleStationWalkMeters ?? MaxTricycleStationWalkMeters,
             MinTricycleRideMeters = overrides.MinTricycleRideMeters ?? MinTricycleRideMeters,
             BacktrackPenaltyMultiplier = overrides.BacktrackPenaltyMultiplier ?? BacktrackPenaltyMultiplier,

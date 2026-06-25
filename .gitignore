@@ -270,4 +270,4 @@ services/**/.idea
 # Other
 .ctx-clues
 _diag_out/
-_verify_out/
+_verify_out*/

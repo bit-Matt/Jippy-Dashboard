@@ -2,15 +2,24 @@ namespace JippyServices.Algorithm.Navigator;
 
 // -------------------------------------------------------------------------
 // A* pathfinding over the transit graph.
-// Ported from lib/routing/astar.ts
+// Ported from lib/routing/astar.ts, extended with composite state tracking
+// to enforce strict tricycle routing rules (Rule 4: no mid-route tricycle).
 // -------------------------------------------------------------------------
+
+/// <summary>
+/// Composite A* search state. Tracks whether a jeepney has been used on
+/// the current path so that tricycle edges can be pruned once the user has
+/// boarded a jeepney — preventing the Jeepney → Tricycle → Jeepney pattern.
+/// </summary>
+public readonly record struct AStarState(string NodeId, bool HasUsedJeepney);
 
 public static class AStarPathfinder
 {
     /// <summary>
     /// Find the optimal path from <paramref name="startId"/> to
     /// <paramref name="endId"/> in the given graph using A*.
-    /// Optionally enforces a maximum number of vehicle transfers.
+    /// Enforces Rule 4: once a jeepney has been used, any tricycle edge
+    /// must terminate at the virtual end node (last-mile only).
     /// Returns ordered list of node IDs, or null if no path.
     /// </summary>
     public static List<string>? FindOptimalPath(
@@ -24,70 +33,82 @@ public static class AStarPathfinder
         var maxTransfers = profile?.MaxTransfers;
         var heuristicFactor = profile?.TransitCostFactor ?? 0.5;
         var endLatLng = new LatLng(endNode.Lat, endNode.Lng);
-
         var trackTransfers = maxTransfers.HasValue;
 
-        var gScore = new Dictionary<string, double>();
-        var cameFrom = new Dictionary<string, string>();
-        var closedSet = new HashSet<string>();
-        var transferCount = new Dictionary<string, int>();
-        var arrivalRouteId = new Dictionary<string, string>();
+        var gScore = new Dictionary<AStarState, double>();
+        var cameFrom = new Dictionary<AStarState, AStarState>();
+        var closedSet = new HashSet<AStarState>();
+        var transferCount = new Dictionary<AStarState, int>();
 
-        gScore[startId] = 0;
-        transferCount[startId] = 0;
-        arrivalRouteId[startId] = "__virtual__";
+        var startState = new AStarState(startId, HasUsedJeepney: false);
+        gScore[startState] = 0;
+        transferCount[startState] = 0;
 
         var startNode = graph.Nodes.GetValueOrDefault(startId);
         var initialF = startNode != null ? Heuristic(startNode, endLatLng, heuristicFactor) : 0;
 
-        var openSet = new MinHeap();
-        openSet.Insert(startId, initialF);
+        // PriorityQueue with lazy deletion via closedSet
+        var openSet = new PriorityQueue<AStarState, double>();
+        openSet.Enqueue(startState, initialF);
 
         var iterations = 0;
 
-        while (openSet.Size > 0)
+        while (openSet.Count > 0)
         {
             if (++iterations > RoutingConstants.MaxAStarIterations) return null;
 
-            var current = openSet.ExtractMin()!.Value;
-            var currentId = current.NodeId;
+            var currentState = openSet.Dequeue();
 
-            if (currentId == endId)
-                return ReconstructNodePath(cameFrom, endId);
+            // Lazy deletion: skip stale duplicates
+            if (closedSet.Contains(currentState)) continue;
 
-            closedSet.Add(currentId);
+            if (currentState.NodeId == endId)
+                return ReconstructNodePath(cameFrom, currentState);
 
-            if (!graph.Edges.TryGetValue(currentId, out var edges)) continue;
+            closedSet.Add(currentState);
 
-            var currentG = gScore.GetValueOrDefault(currentId, double.PositiveInfinity);
-            var currentTransfers = transferCount.GetValueOrDefault(currentId, 0);
+            if (!graph.Edges.TryGetValue(currentState.NodeId, out var edges)) continue;
+
+            var currentG = gScore.GetValueOrDefault(currentState, double.PositiveInfinity);
+            var currentTransfers = transferCount.GetValueOrDefault(currentState, 0);
 
             foreach (var edge in edges)
             {
-                if (closedSet.Contains(edge.To)) continue;
+                // Rule 4 — strict enforcement: once a jeepney has been used,
+                // a tricycle edge may only lead to the virtual end node (last-mile).
+                if (currentState.HasUsedJeepney
+                    && edge.Type == EdgeType.Tricycle
+                    && edge.To != RoutingConstants.VirtualEndId)
+                    continue;
 
-                // Count transfers
+                // Propagate jeepney-used flag: Transit and Transfer edges mean a
+                // jeepney has been (or is being) boarded; Walk/Tricycle propagate
+                // the current value unchanged.
+                var nextHasUsedJeepney = currentState.HasUsedJeepney
+                    || edge.Type == EdgeType.Transit
+                    || edge.Type == EdgeType.Transfer;
+
+                var nextState = new AStarState(edge.To, nextHasUsedJeepney);
+
+                if (closedSet.Contains(nextState)) continue;
+
                 var newTransfers = currentTransfers;
                 if (edge.Type == EdgeType.Transfer) newTransfers++;
 
-                // Prune if exceeds max transfers
                 if (trackTransfers && newTransfers > maxTransfers!.Value) continue;
 
                 var tentativeG = currentG + edge.Cost;
-                var existingG = gScore.GetValueOrDefault(edge.To, double.PositiveInfinity);
+                var existingG = gScore.GetValueOrDefault(nextState, double.PositiveInfinity);
 
                 if (tentativeG < existingG)
                 {
-                    cameFrom[edge.To] = currentId;
-                    gScore[edge.To] = tentativeG;
-                    transferCount[edge.To] = newTransfers;
-                    arrivalRouteId[edge.To] = edge.RouteId ?? arrivalRouteId.GetValueOrDefault(currentId, "__virtual__");
+                    cameFrom[nextState] = currentState;
+                    gScore[nextState] = tentativeG;
+                    transferCount[nextState] = newTransfers;
 
                     var neighbor = graph.Nodes.GetValueOrDefault(edge.To);
                     var h = neighbor != null ? Heuristic(neighbor, endLatLng, heuristicFactor) : 0;
-                    var f = tentativeG + h;
-
-                    openSet.Insert(edge.To, f);
+                    openSet.Enqueue(nextState, tentativeG + h);
                 }
             }
         }
@@ -98,17 +119,16 @@ public static class AStarPathfinder
     private static double Heuristic(GraphNode node, LatLng target, double transitCostFactor)
         => GeoUtils.HaversineMeters(new LatLng(node.Lat, node.Lng), target) * transitCostFactor;
 
-    private static List<string> ReconstructNodePath(Dictionary<string, string> cameFrom, string endId)
+    private static List<string> ReconstructNodePath(
+        Dictionary<AStarState, AStarState> cameFrom, AStarState goalState)
     {
-        var path = new List<string> { endId };
-        var current = endId;
-
+        var path = new List<string> { goalState.NodeId };
+        var current = goalState;
         while (cameFrom.TryGetValue(current, out var prev))
         {
-            path.Add(prev);
+            path.Add(prev.NodeId);
             current = prev;
         }
-
         path.Reverse();
         return path;
     }
