@@ -122,8 +122,31 @@ const VectorTileLayer = () => {
   return null;
 };
 
+type RoutingControlWithLine = L.Control &
+  L.Evented & {
+    _line?: L.LayerGroup;
+  };
+
+const applyRoutingLineColor = (line: L.LayerGroup | undefined, nextColor: string) => {
+  if (!line) {
+    return;
+  }
+
+  line.eachLayer((layer) => {
+    if (layer instanceof L.Path) {
+      layer.setStyle({ color: nextColor, weight: 4 });
+    }
+  });
+};
+
 const RoutingMachine = ({ waypoints, color, onRouteCoordinatesChange }: RoutingMachineProps) => {
   const map = useMap();
+  const colorRef = useRef(color);
+  const onRouteCoordinatesChangeRef = useRef(onRouteCoordinatesChange);
+  const controlRef = useRef<RoutingControlWithLine | null>(null);
+
+  colorRef.current = color;
+  onRouteCoordinatesChangeRef.current = onRouteCoordinatesChange;
 
   useEffect(() => {
     if (!map || waypoints.length < 2) return;
@@ -141,7 +164,7 @@ const RoutingMachine = ({ waypoints, color, onRouteCoordinatesChange }: RoutingM
       // @ts-expect-error createMarker is required but not used with custom markers
       createMarker: () => null,
       lineOptions: {
-        styles: [{ color, weight: 4 }],
+        styles: [{ color: colorRef.current, weight: 4 }],
         extendToWaypoints: true,
         missingRouteTolerance: 0,
       },
@@ -149,15 +172,25 @@ const RoutingMachine = ({ waypoints, color, onRouteCoordinatesChange }: RoutingM
       addWaypoints: false,
       fitSelectedRoutes: false,
       showAlternatives: false,
-    }).addTo(map) as unknown as L.Control & L.Evented;
+    }).addTo(map) as RoutingControlWithLine;
+
+    controlRef.current = routingControl;
+
+    const applyLineColor = () => {
+      applyRoutingLineColor(routingControl._line, colorRef.current);
+    };
 
     const handleRoutesFound: L.LeafletEventHandlerFn = (event) => {
-      if (!onRouteCoordinatesChange) return;
+      applyLineColor();
+
+      const callback = onRouteCoordinatesChangeRef.current;
+      if (!callback) return;
+
       const routeEvent = event as L.LeafletEvent & {
         routes?: Array<{ coordinates?: L.LatLng[] }>;
       };
       const coordinates = routeEvent.routes?.[0]?.coordinates ?? [];
-      onRouteCoordinatesChange(coordinates.map((point) => [point.lat, point.lng] as [number, number]));
+      callback(coordinates.map((point) => [point.lat, point.lng] as [number, number]));
     };
 
     routingControl.on("routesfound", handleRoutesFound);
@@ -165,8 +198,13 @@ const RoutingMachine = ({ waypoints, color, onRouteCoordinatesChange }: RoutingM
     return () => {
       routingControl.off("routesfound", handleRoutesFound);
       map.removeControl(routingControl);
+      controlRef.current = null;
     };
-  }, [map, waypoints, color, onRouteCoordinatesChange]);
+  }, [map, waypoints]);
+
+  useEffect(() => {
+    applyRoutingLineColor(controlRef.current?._line, color);
+  }, [color]);
 
   return null;
 };
