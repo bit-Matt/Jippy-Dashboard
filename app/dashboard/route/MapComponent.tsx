@@ -122,10 +122,14 @@ const VectorTileLayer = () => {
   return null;
 };
 
-type RoutingControlWithLine = L.Control &
-  L.Evented & {
-    _line?: L.LayerGroup;
-  };
+type LeafletRoutingControl = L.Control & {
+  _line?: L.LayerGroup;
+  on: (type: string, fn: L.LeafletEventHandlerFn) => LeafletRoutingControl;
+  off: (type: string, fn: L.LeafletEventHandlerFn) => LeafletRoutingControl;
+};
+
+const asRoutingControl = (control: L.Control): LeafletRoutingControl =>
+  control as unknown as LeafletRoutingControl;
 
 const applyRoutingLineColor = (line: L.LayerGroup | undefined, nextColor: string) => {
   if (!line) {
@@ -143,7 +147,7 @@ const RoutingMachine = ({ waypoints, color, onRouteCoordinatesChange }: RoutingM
   const map = useMap();
   const colorRef = useRef(color);
   const onRouteCoordinatesChangeRef = useRef(onRouteCoordinatesChange);
-  const controlRef = useRef<RoutingControlWithLine | null>(null);
+  const controlRef = useRef<LeafletRoutingControl | null>(null);
 
   colorRef.current = color;
   onRouteCoordinatesChangeRef.current = onRouteCoordinatesChange;
@@ -156,7 +160,7 @@ const RoutingMachine = ({ waypoints, color, onRouteCoordinatesChange }: RoutingM
       profile: "driving",
     });
 
-    const routingControl = L.Routing.control({
+    const routingControl = asRoutingControl(L.Routing.control({
       router: osrmRouter,
       formatter: new L.Routing.Formatter(),
       waypoints: waypoints.map(([lat, lng]) => L.latLng(lat, lng)),
@@ -172,7 +176,7 @@ const RoutingMachine = ({ waypoints, color, onRouteCoordinatesChange }: RoutingM
       addWaypoints: false,
       fitSelectedRoutes: false,
       showAlternatives: false,
-    }).addTo(map) as RoutingControlWithLine;
+    }).addTo(map));
 
     controlRef.current = routingControl;
 
