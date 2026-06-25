@@ -1,10 +1,17 @@
 // ReSharper disable ClassNeverInstantiated.Global
 
 using JippyServices.Algorithm.Data;
-using JippyServices.Algorithm.Navigator;
-using JippyServices.Algorithm.Navigator.Clients;
 using Microsoft.EntityFrameworkCore;
-using System.Text.Json.Serialization;
+using JippyServices.Algorithm.Api;
+using JippyServices.Algorithm.Clients;
+using JippyServices.Algorithm.Contracts.V2.Requests;
+using JippyServices.Algorithm.Navigator;
+using JippyServices.Algorithm.Navigator.Cache;
+using JippyServices.Algorithm.Navigator.Common.Types;
+using JippyServices.Algorithm.Navigator.V2;
+using JippyServices.Algorithm.Navigator.V2MarkTwo;
+using JippyServices.Algorithm.Weights;
+using Refit;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -23,47 +30,121 @@ builder.Services.AddStackExchangeRedisCache(options =>
     options.InstanceName = "Jippy_Algorithm_";
 });
 
+// Request clients
+builder.Services
+    .AddRefitClient<INominatimClient>()
+    .ConfigureHttpClient(c =>
+    {
+        var url = builder.Configuration["Services:Nominatim"];
+
+        // Url not configured.
+        if (string.IsNullOrEmpty(url))
+        {
+            throw new InvalidOperationException("Services:Nominatim not configured.");
+        }
+
+        c.BaseAddress = new(url);
+    });
+
+builder.Services
+    .AddKeyedRefitClient<IOSRMApiClient>("bicycle")
+    .ConfigureHttpClient(c =>
+    {
+        var url = builder.Configuration["Services:OSRM:Bicycle"];
+
+        if (string.IsNullOrEmpty(url))
+        {
+            throw new InvalidOperationException("Services:OSRM:Bicycle not configured.");
+        }
+        
+        c.BaseAddress = new(url);
+    });
+
+builder.Services
+    .AddKeyedRefitClient<IOSRMApiClient>("foot")
+    .ConfigureHttpClient(c =>
+    {
+        var url = builder.Configuration["Services:OSRM:Foot"];
+
+        if (string.IsNullOrEmpty(url))
+        {
+            throw new InvalidOperationException("Services:OSRM:Foot not configured.");
+        }
+
+        c.BaseAddress = new(url);
+    });
+
 // In-process memory cache for the static transit graph.
 builder.Services.AddMemoryCache();
 
-// HTTP clients for external routing services
-builder.Services.AddHttpClient<OsrmWalkClient>();
-builder.Services.AddHttpClient<OsrmClient>();
-builder.Services.AddHttpClient<NominatimClient>();
+// Service Clients
+builder.Services.AddSingleton<INominatimServiceClient, NominatimServiceClient>();
+builder.Services.AddSingleton<IWeightsManager, WeightsManager>();
+builder.Services.AddKeyedSingleton<IOSRMClient, OSRMBicycleClient>("osrm_bicycle");
+builder.Services.AddKeyedSingleton<IOSRMClient, OSRMWalkClient>("osrm_foot");
+builder.Services.AddSingleton<ITransitDataCache, TransitDataCache>();
 
-// Navigator services
-builder.Services.AddSingleton<WeightsManager>();
-builder.Services.AddSingleton<TransitDataCache>();
-builder.Services.AddScoped<GraphBuilder>();
-builder.Services.AddScoped<InstructionGenerator>();
-builder.Services.AddScoped<LegAssembler>();
-builder.Services.AddScoped<NavigationService>();
+// Navigators
+builder.Services.AddKeyedScoped<INavigator, NavigatorV2>("navigator_v2");
+builder.Services.AddKeyedScoped<INavigator, NavigatorV2MarkTwo>("navigator_v2MarkII");
 
 var app = builder.Build();
 
-app.MapPost("/navigate", async (NavigationRequest request, NavigationService nav, WeightsManager weights) =>
+app.MapPost("/navigate/v2", async (
+    NavigationRequest request, 
+    [FromKeyedServices("navigator_v2")] INavigator navigator,
+    IWeightsManager weights) =>
 {
     var start = new LatLng(request.Start.Lat, request.Start.Lng);
     var end = new LatLng(request.End.Lat, request.End.Lng);
     var config = weights.GetConfig();
 
-    var result = await nav.ComputeRouteAsync(start, end, config);
+    var result = await navigator.ComputeRouteAsync(start, end, config);
     return Results.Ok(result);
 });
 
-app.MapPost("/navigate/simulate", async (SimulationRequest request, NavigationService nav, WeightsManager weights) =>
+app.MapPost("/navigate/v2/simulate", async (
+    SimulationRequest request,
+    [FromKeyedServices("navigator_v2")] INavigator navigator,
+    IWeightsManager weights) =>
 {
     var start = new LatLng(request.Start.Lat, request.Start.Lng);
     var end = new LatLng(request.End.Lat, request.End.Lng);
     var config = weights.GetConfig().WithOverrides(request.Overrides);
 
-    var result = await nav.ComputeRouteAsync(start, end, config);
+    var result = await navigator.ComputeRouteAsync(start, end, config);
     return Results.Ok(result);
 });
 
-app.MapGet("/weights", (WeightsManager weights) => Results.Ok(weights.Current));
+app.MapPost("/navigate/v2.5", async (
+    NavigationRequest request, 
+    [FromKeyedServices("navigator_v2MarkII")] INavigator navigator,
+    IWeightsManager weights) =>
+{
+    var start = new LatLng(request.Start.Lat, request.Start.Lng);
+    var end = new LatLng(request.End.Lat, request.End.Lng);
+    var config = weights.GetConfig();
 
-app.MapPut("/weights", async (AlgorithmWeights body, WeightsManager weights, TransitDataCache transitCache) =>
+    var result = await navigator.ComputeRouteAsync(start, end, config);
+    return Results.Ok(result);
+});
+
+app.MapPost("/navigate/v2.5/simulate", async (
+    SimulationRequest request,
+    [FromKeyedServices("navigator_v2MarkII")] INavigator navigator,
+    IWeightsManager weights) =>
+{
+    var start = new LatLng(request.Start.Lat, request.Start.Lng);
+    var end = new LatLng(request.End.Lat, request.End.Lng);
+    var config = weights.GetConfig().WithOverrides(request.Overrides);
+
+    var result = await navigator.ComputeRouteAsync(start, end, config);
+    return Results.Ok(result);
+});
+
+app.MapGet("/weights", (IWeightsManager weights) => Results.Ok(weights.Current));
+
+app.MapPut("/weights", async (AlgorithmWeights body, IWeightsManager weights, ITransitDataCache transitCache) =>
 {
     weights.Update(body);
     await transitCache.InvalidateAsync();
@@ -71,40 +152,10 @@ app.MapPut("/weights", async (AlgorithmWeights body, WeightsManager weights, Tra
 });
 
 // Called by the dashboard when routes/regions/closures are edited
-app.MapPost("/cache/invalidate", async (TransitDataCache transitCache) =>
+app.MapPost("/cache/invalidate", async (ITransitDataCache transitCache) =>
 {
     await transitCache.InvalidateAsync();
     return Results.Ok(new { message = "Transit cache invalidated" });
 });
 
 await app.RunAsync();
-
-internal sealed class NavigationRequest
-{
-    [JsonPropertyName("start")]
-    public LatLngObject Start { get; init; } = null!;
-
-    [JsonPropertyName("end")]
-    public LatLngObject End { get; init; } = null!;
-}
-
-internal sealed class SimulationRequest
-{
-    [JsonPropertyName("start")]
-    public LatLngObject Start { get; init; } = null!;
-
-    [JsonPropertyName("end")]
-    public LatLngObject End { get; init; } = null!;
-
-    [JsonPropertyName("overrides")]
-    public SimulationOverrides? Overrides { get; init; }
-}
-
-internal sealed class LatLngObject
-{
-    [JsonPropertyName("lat")]
-    public double Lat { get; init; }
-
-    [JsonPropertyName("lng")]
-    public double Lng { get; init; }
-}

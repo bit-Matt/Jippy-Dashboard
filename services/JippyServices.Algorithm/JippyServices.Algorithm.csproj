@@ -18,20 +18,21 @@
         <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.6" />
         <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.1" />
         <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL.NetTopologySuite" Version="10.0.1" />
+        <PackageReference Include="Refit" Version="12.0.0" />
+        <PackageReference Include="Refit.HttpClientFactory" Version="12.0.0" />
     </ItemGroup>
 
     <ItemGroup>
       <Content Include="..\.dockerignore">
         <Link>.dockerignore</Link>
       </Content>
-      <Content Update="Navigator\weights.json">
+      <Content Update="weights.json">
         <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       </Content>
     </ItemGroup>
 
     <ItemGroup>
       <Folder Include="Data\Models\" />
-      <Folder Include="Navigator\" />
     </ItemGroup>
 
 </Project>
