@@ -45,7 +45,7 @@ export async function POST(request: NextRequest) {
   }
 
   // Verify turnstile
-  const turnstileRawResult = await turnstile.validate(body.token);
+  const turnstileRawResult = await turnstile.validate(body.turnstileToken);
   const turnstileResult = oneOf(turnstileRawResult).match(
     s => s,
     () => false,
