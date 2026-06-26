@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+import { ALGORITHM_WEIGHT_DEFAULTS } from "@/lib/routing-fast";
+
 export const AlgorithmWeightsSchema = z.object({
   walkPenaltyMultiplier: z.number(),
   walkComfortMeters: z.number(),
@@ -48,3 +50,11 @@ export const AlgorithmWeightsSchema = z.object({
 });
 
 export type AlgorithmWeightsPayload = z.infer<typeof AlgorithmWeightsSchema>;
+
+/** Accepts partial weight objects from export files and fills missing keys from defaults. */
+export const AlgorithmWeightsImportSchema = AlgorithmWeightsSchema
+  .partial()
+  .transform(weights => ({
+    ...ALGORITHM_WEIGHT_DEFAULTS,
+    ...weights,
+  }));
