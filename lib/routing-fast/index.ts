@@ -21,6 +21,7 @@ export type SimulationOverrides = {
   stationWaitPenaltyMeters?: number;
   hailingWaitPenaltyMeters?: number;
   midRouteTricyclePenaltyMeters?: number;
+  shortTricyclePenaltyMeters?: number;
   maxTricycleStationWalkMeters?: number;
   minTricycleRideMeters?: number;
   backtrackPenaltyMultiplier?: number;
@@ -70,6 +71,7 @@ export const ALGORITHM_WEIGHT_DEFAULTS: AlgorithmWeights = {
   stationWaitPenaltyMeters: 350,
   hailingWaitPenaltyMeters: 525,
   midRouteTricyclePenaltyMeters: 3_500,
+  shortTricyclePenaltyMeters: 2_500,
   maxTricycleStationWalkMeters: 1_000,
   minTricycleRideMeters: 150,
   backtrackPenaltyMultiplier: 2.0,

@@ -121,6 +121,14 @@ internal sealed class AlgorithmWeights
     public double MidRouteTricyclePenaltyMeters { get; init; } = 3_500;
 
     /// <summary>
+    /// Fixed penalty in metres added to tricycle edges whose ride distance is shorter than
+    /// <see cref="WalkComfortMeters"/>. At such distances walking is a comfortable alternative,
+    /// so tricycle rides are discouraged unless they provide clear value.
+    /// </summary>
+    [JsonPropertyName("shortTricyclePenaltyMeters")]
+    public double ShortTricyclePenaltyMeters { get; init; } = 2_500;
+
+    /// <summary>
     /// Maximum walk distance in metres from the user's position to a tricycle station
     /// before the station is excluded from the graph. Stations farther than this are unreachable on foot.
     /// </summary>

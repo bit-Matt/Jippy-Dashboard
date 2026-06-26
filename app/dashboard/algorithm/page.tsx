@@ -117,6 +117,7 @@ const WEIGHT_SECTIONS: Array<{
       { label: "Station wait (m)", field: "stationWaitPenaltyMeters" },
       { label: "Hailing wait (m)", field: "hailingWaitPenaltyMeters" },
       { label: "Mid-route tricycle penalty (m)", field: "midRouteTricyclePenaltyMeters" },
+      { label: "Short tricycle penalty (m)", field: "shortTricyclePenaltyMeters" },
       { label: "Max station walk (m)", field: "maxTricycleStationWalkMeters" },
       { label: "Min ride (m)", field: "minTricycleRideMeters" },
       { label: "Backtrack multiplier", field: "backtrackPenaltyMultiplier" },

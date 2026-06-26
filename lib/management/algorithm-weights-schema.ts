@@ -18,6 +18,7 @@ export const AlgorithmWeightsSchema = z.object({
   stationWaitPenaltyMeters: z.number(),
   hailingWaitPenaltyMeters: z.number(),
   midRouteTricyclePenaltyMeters: z.number(),
+  shortTricyclePenaltyMeters: z.number(),
   maxTricycleStationWalkMeters: z.number(),
   minTricycleRideMeters: z.number(),
   backtrackPenaltyMultiplier: z.number(),

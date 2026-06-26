@@ -22,14 +22,14 @@ internal sealed class GraphBuilder
     private readonly ITransitDataCache _cache;
     private readonly IWeightsManager _weights;
 
-    public GraphBuilder(DataContext db, IOSRMClient walk, ITransitDataCache cache, IWeightsManager weights) 
+    public GraphBuilder(DataContext db, IOSRMClient walk, ITransitDataCache cache, IWeightsManager weights)
     {
         _db = db;
         _walk = walk;
         _cache = cache;
         _weights = weights;
     }
-    
+
     /// <summary>
     /// Query the database for all active public transit data: routes, tricycle regions
     /// (with their stations), road closures, and boarding restriction zones.
@@ -44,6 +44,7 @@ internal sealed class GraphBuilder
         var dbRoutes = await _db.Routes
             .AsNoTracking()
             .Where(r => r.IsPublic && r.ActiveSnapshotId != null)
+            .OrderBy(r => r.Id)
             .ToListAsync();
 
         var routes = dbRoutes.Select(r => new TransitRoute
@@ -63,6 +64,7 @@ internal sealed class GraphBuilder
         var dbRegions = await _db.RegionMarkers
             .AsNoTracking()
             .Where(r => r.IsPublic && r.ActiveSnapshotId != null)
+            .OrderBy(r => r.Id)
             .ToListAsync();
 
         var activeSnapshotIds = dbRegions
@@ -75,6 +77,7 @@ internal sealed class GraphBuilder
             .Where(rs => activeSnapshotIds.Contains(rs.Id))
             .Include(rs => rs.Sequences)
             .Include(rs => rs.Stations)
+            .OrderBy(rs => rs.Id)
             .ToListAsync();
 
         var snapshotMap = snapshots.ToDictionary(s => s.Id);
@@ -113,6 +116,7 @@ internal sealed class GraphBuilder
         var dbClosures = await _db.RoadClosures
             .AsNoTracking()
             .Where(c => c.IsPublic && (c.EndDate == null || c.EndDate > DateTime.UtcNow))
+            .OrderBy(c => c.Id)
             .ToListAsync();
 
         var closures = dbClosures
@@ -142,6 +146,7 @@ internal sealed class GraphBuilder
             .AsNoTracking()
             .Where(s => s.IsPublic && s.Polyline != string.Empty)
             .Include(s => s.Routes)
+            .OrderBy(s => s.Id)
             .ToListAsync();
 
         var stops = dbStops
@@ -993,7 +998,11 @@ internal sealed class GraphBuilder
             group.Sort((a, b) => a.GeoDist.CompareTo(b.GeoDist));
             accessCandidates.AddRange(group.Take(config.AccessCandidatesPerDirection));
         }
-        accessCandidates.Sort((a, b) => a.GeoDist.CompareTo(b.GeoDist));
+        accessCandidates.Sort((a, b) =>
+        {
+            var c = a.GeoDist.CompareTo(b.GeoDist);
+            return c != 0 ? c : string.Compare(a.NodeId, b.NodeId, StringComparison.Ordinal);
+        });
         var cappedAccess = accessCandidates.Take(config.MaxAccessQueries).ToList();
 
         // Query OSRM foot in parallel
@@ -1041,7 +1050,11 @@ internal sealed class GraphBuilder
             group.Sort((a, b) => a.GeoDist.CompareTo(b.GeoDist));
             egressCandidates.AddRange(group.Take(config.EgressCandidatesPerDirection));
         }
-        egressCandidates.Sort((a, b) => a.GeoDist.CompareTo(b.GeoDist));
+        egressCandidates.Sort((a, b) =>
+        {
+            var c = a.GeoDist.CompareTo(b.GeoDist);
+            return c != 0 ? c : string.Compare(a.NodeId, b.NodeId, StringComparison.Ordinal);
+        });
         var cappedEgress = egressCandidates.Take(config.MaxEgressQueries).ToList();
 
         var egressTasks = cappedEgress.Select(async c =>
@@ -1070,7 +1083,7 @@ internal sealed class GraphBuilder
     ///   <item><description><see cref="EdgeType.Transit"/>: distance × <see cref="WeightProfile.TransitCostFactor"/> + marginal distance fare.</description></item>
     ///   <item><description><see cref="EdgeType.Transfer"/>: walk-distance penalty + transfer flat penalty + jeepney boarding base fare.</description></item>
     ///   <item><description><see cref="EdgeType.Walk"/>: progressive walk cost (linear below comfort threshold, quadratic above).</description></item>
-    ///   <item><description><see cref="EdgeType.Tricycle"/>: ride cost + wait penalty + flat tricycle fare.</description></item>
+    ///   <item><description><see cref="EdgeType.Tricycle"/>: ride cost + wait penalty + flat tricycle fare; extra penalty when ride distance is below <see cref="RoutingConfig.WalkComfortMeters"/>.</description></item>
     /// </list>
     /// Also injects virtual access edges (start → boarding nodes) and egress edges
     /// (alighting nodes → end). Stop-restricted nodes are skipped for boarding, alighting,
@@ -1146,6 +1159,9 @@ internal sealed class GraphBuilder
                         {
                             cost += cfg.MidRouteTricyclePenaltyMeters;
                         }
+
+                        if (baseEdge.Distance < cfg.WalkComfortMeters)
+                            cost += cfg.ShortTricyclePenaltyMeters;
 
                         if (baseEdge is { RouteId: not null, IsHail: false })
                         {
@@ -1243,10 +1259,6 @@ internal sealed class GraphBuilder
 
         return adjacency;
     }
-
-    // =====================================================================
-    // 8. Full base-graph builder (single entry point for orchestrator)
-    // =====================================================================
 
     /// <summary>
     /// Build the static portion of the graph from DB (or Redis cache).

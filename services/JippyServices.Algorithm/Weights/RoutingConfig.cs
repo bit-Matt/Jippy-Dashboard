@@ -28,6 +28,7 @@ internal sealed class RoutingConfig
     public double StationWaitPenaltyMeters { get; init; }
     public double HailingWaitPenaltyMeters { get; init; }
     public double MidRouteTricyclePenaltyMeters { get; init; }
+    public double ShortTricyclePenaltyMeters { get; init; }
     public double MaxTricycleStationWalkMeters { get; init; }
     public double MinTricycleRideMeters { get; init; }
     public double BacktrackPenaltyMultiplier { get; init; }
@@ -78,6 +79,7 @@ internal sealed class RoutingConfig
         StationWaitPenaltyMeters = weights.StationWaitPenaltyMeters,
         HailingWaitPenaltyMeters = weights.HailingWaitPenaltyMeters,
         MidRouteTricyclePenaltyMeters = weights.MidRouteTricyclePenaltyMeters,
+        ShortTricyclePenaltyMeters = weights.ShortTricyclePenaltyMeters,
         MaxTricycleStationWalkMeters = weights.MaxTricycleStationWalkMeters,
         MinTricycleRideMeters = weights.MinTricycleRideMeters,
         BacktrackPenaltyMultiplier = weights.BacktrackPenaltyMultiplier,
@@ -136,6 +138,7 @@ internal sealed class RoutingConfig
             StationWaitPenaltyMeters = overrides.StationWaitPenaltyMeters ?? StationWaitPenaltyMeters,
             HailingWaitPenaltyMeters = overrides.HailingWaitPenaltyMeters ?? HailingWaitPenaltyMeters,
             MidRouteTricyclePenaltyMeters = overrides.MidRouteTricyclePenaltyMeters ?? MidRouteTricyclePenaltyMeters,
+            ShortTricyclePenaltyMeters = overrides.ShortTricyclePenaltyMeters ?? ShortTricyclePenaltyMeters,
             MaxTricycleStationWalkMeters = overrides.MaxTricycleStationWalkMeters ?? MaxTricycleStationWalkMeters,
             MinTricycleRideMeters = overrides.MinTricycleRideMeters ?? MinTricycleRideMeters,
             BacktrackPenaltyMultiplier = overrides.BacktrackPenaltyMultiplier ?? BacktrackPenaltyMultiplier,

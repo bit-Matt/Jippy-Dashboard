@@ -1,4 +1,4 @@
-﻿using JippyServices.Algorithm.Clients;
+using JippyServices.Algorithm.Clients;
 using JippyServices.Algorithm.Contracts.V2.Responses;
 using JippyServices.Algorithm.Data;
 using JippyServices.Algorithm.Navigator.Cache;
@@ -94,6 +94,7 @@ internal sealed class NavigatorV2 : INavigator
         var pruned = RemoveDominatedSuggestions(deduped);
         pruned = RemoveWalkDominatedSuggestions(pruned);
         pruned = RemoveJeepneySandwichedTricycleSuggestions(pruned);
+        pruned = RemoveTricycleWhenDirectJeepneyAvailable(pruned);
 
         // Drop suggestions with a long mid-route walk unless that leaves us empty
         var filtered = pruned.Where(s => !HasLongMidRouteWalk(s.Route.Legs, config)).ToList();
@@ -451,6 +452,31 @@ internal sealed class NavigatorV2 : INavigator
         }
 
         return false;
+    }
+
+    /// <summary>
+    /// When a direct jeepney-only option exists (walk → jeepney → walk, 0 transfers),
+    /// drop every suggestion that includes a tricycle leg. Tricycle regions add hail
+    /// edges from origins inside the polygon; those paths often surface as poor
+    /// walk → tricycle → long-walk "Direct" routes or tricycle → jeepney transfers
+    /// even though walking to a nearby jeepney stop is clearly better.
+    /// Mirrors the result set produced when no tricycle region is active in the graph.
+    /// </summary>
+    private static List<RouteSuggestion> RemoveTricycleWhenDirectJeepneyAvailable(
+        List<RouteSuggestion> suggestions)
+    {
+        if (suggestions.Count == 0) return suggestions;
+
+        var hasDirectJeepneyOnly = suggestions.Any(s =>
+            s.Route.TotalTransfers == 0
+            && s.Route.Legs.Any(l => l.Type == LegType.Jeepney)
+            && s.Route.Legs.All(l => l.Type != LegType.Tricycle));
+
+        if (!hasDirectJeepneyOnly) return suggestions;
+
+        return suggestions
+            .Where(s => s.Route.Legs.All(l => l.Type != LegType.Tricycle))
+            .ToList();
     }
 
     // =====================================================================

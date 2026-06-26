@@ -237,6 +237,7 @@ function WeightOverridesPanel({
             <OverrideField label="Station wait (m)" field="stationWaitPenaltyMeters" value={overrides.stationWaitPenaltyMeters} defaultValue={defaults.stationWaitPenaltyMeters} onChange={setOverride} />
             <OverrideField label="Hailing wait (m)" field="hailingWaitPenaltyMeters" value={overrides.hailingWaitPenaltyMeters} defaultValue={defaults.hailingWaitPenaltyMeters} onChange={setOverride} />
             <OverrideField label="Mid-route tricycle penalty (m)" field="midRouteTricyclePenaltyMeters" value={overrides.midRouteTricyclePenaltyMeters} defaultValue={defaults.midRouteTricyclePenaltyMeters} onChange={setOverride} />
+            <OverrideField label="Short tricycle penalty (m)" field="shortTricyclePenaltyMeters" value={overrides.shortTricyclePenaltyMeters} defaultValue={defaults.shortTricyclePenaltyMeters} onChange={setOverride} />
             <OverrideField label="Max station walk (m)" field="maxTricycleStationWalkMeters" value={overrides.maxTricycleStationWalkMeters} defaultValue={defaults.maxTricycleStationWalkMeters} onChange={setOverride} />
             <OverrideField label="Min ride (m)" field="minTricycleRideMeters" value={overrides.minTricycleRideMeters} defaultValue={defaults.minTricycleRideMeters} onChange={setOverride} />
             <OverrideField label="Backtrack multiplier" field="backtrackPenaltyMultiplier" value={overrides.backtrackPenaltyMultiplier} defaultValue={defaults.backtrackPenaltyMultiplier} onChange={setOverride} />

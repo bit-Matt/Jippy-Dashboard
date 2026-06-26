@@ -53,6 +53,8 @@ internal sealed class SimulationOverrides
     public double? HailingWaitPenaltyMeters { get; init; }
     [JsonPropertyName("midRouteTricyclePenaltyMeters")]
     public double? MidRouteTricyclePenaltyMeters { get; init; }
+    [JsonPropertyName("shortTricyclePenaltyMeters")]
+    public double? ShortTricyclePenaltyMeters { get; init; }
     [JsonPropertyName("maxTricycleStationWalkMeters")]
     public double? MaxTricycleStationWalkMeters { get; init; }
     [JsonPropertyName("minTricycleRideMeters")]
