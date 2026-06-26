@@ -70,13 +70,8 @@ export default function SimulatorPage() {
     setResult(null);
     setActiveSuggestion(null);
 
-    const endpoint =
-      apiVersion === "v2" ? "/api/restricted/navigate/simulate" : "/api/public/navigate/v3";
-
-    const body =
-      apiVersion === "v2"
-        ? JSON.stringify({ start: startPoint, end: endPoint, overrides })
-        : JSON.stringify({ start: startPoint, end: endPoint });
+    const endpoint = `/api/restricted/navigate/${apiVersion}/simulate`;
+    const body = JSON.stringify({ start: startPoint, end: endPoint, overrides });
 
     const { data, error: fetchError } = await $fetch<IApiResponse<MultiNavigateRouteResponse>>(
       endpoint,

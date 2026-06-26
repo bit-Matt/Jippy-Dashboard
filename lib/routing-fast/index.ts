@@ -102,6 +102,22 @@ export const ALGORITHM_WEIGHT_DEFAULTS: AlgorithmWeights = {
 /** @deprecated Use ALGORITHM_WEIGHT_DEFAULTS */
 export const SIMULATION_OVERRIDE_DEFAULTS = ALGORITHM_WEIGHT_DEFAULTS;
 
+export async function routeV2(start: LatLng, end: LatLng): Promise<Result<MultiNavigateResponse>> {
+  return await route("v2", start, end);
+}
+
+export async function routeV2MarkII(start: LatLng, end: LatLng): Promise<Result<MultiNavigateResponse>> {
+  return await route("v2.5", start, end);
+}
+
+export async function simulateV2(start: LatLng, end: LatLng, overrides: SimulationOverrides): Promise<Result<MultiNavigateResponse>> {
+  return await simulate("v2", start, end, overrides);
+}
+
+export async function simulateV2MarkII(start: LatLng, end: LatLng, overrides: SimulationOverrides): Promise<Result<MultiNavigateResponse>> {
+  return await simulate("v2.5", start, end, overrides);
+}
+
 export function mergeWeightsWithOverrides(
   base: AlgorithmWeights,
   overrides: SimulationOverrides,
@@ -114,14 +130,14 @@ export function mergeWeightsWithOverrides(
   } as AlgorithmWeights;
 }
 
-export async function route(start: LatLng, end: LatLng): Promise<Result<MultiNavigateResponse>> {
+async function route(version: Version, start: LatLng, end: LatLng): Promise<Result<MultiNavigateResponse>> {
   try {
     const algorithmUrl = process.env.ALGORITHM_URL;
     if (!utils.isExisty(algorithmUrl)) {
       return new Failure(ErrorCodes.Fatal, "Configuration error.", { algorithmUrl: "Not set" });
     }
 
-    const url = new URL("/navigate/v2", algorithmUrl!);
+    const url = new URL(`/navigate/${version}`, algorithmUrl!);
     const request = await fetch(url.toString(), {
       method: "POST",
       headers: {
@@ -148,7 +164,8 @@ export async function route(start: LatLng, end: LatLng): Promise<Result<MultiNav
   }
 }
 
-export async function simulate(
+async function simulate(
+  version: Version,
   start: LatLng,
   end: LatLng,
   overrides: SimulationOverrides,
@@ -159,7 +176,7 @@ export async function simulate(
       return new Failure(ErrorCodes.Fatal, "Configuration error.", { algorithmUrl: "Not set" });
     }
 
-    const url = new URL("/navigate/v2/simulate", algorithmUrl!);
+    const url = new URL(`/navigate/${version}/simulate`, algorithmUrl!);
     const request = await fetch(url.toString(), {
       method: "POST",
       headers: {
@@ -275,3 +292,5 @@ export async function invalidate(): Promise<Result<undefined>> {
 }
 
 type LatLng = { lat: number, lng: number };
+
+type Version = "v2" | "v2.5";

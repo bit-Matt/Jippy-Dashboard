@@ -40,13 +40,14 @@ const SimulateSchema = z.object({
   end: z.tuple([z.number(), z.number()]),
 });
 
-export type SimulatorApiVersion = "v2" | "v3";
+export type SimulatorApiVersion = "v2" | "v2.5" | "v3";
 
 export const SIMULATOR_API_VERSION_OPTIONS: {
   value: SimulatorApiVersion;
   label: string;
 }[] = [
   { value: "v2", label: "/api/public/navigate/v2 - Stable" },
+  { value: "v2.5", label: "/api/public/navigate/v2.5 - Alpha" },
 ];
 
 const LEG_FALLBACK_COLOR = "#6B7280";
