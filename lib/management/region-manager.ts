@@ -2,7 +2,8 @@ import {and, count, eq, sql} from "drizzle-orm";
 import { DateTime } from "luxon";
 
 import {db} from "@/lib/db";
-import {region, regionSequences, regionSnapshots, regionStations} from "@/lib/db/schema";
+import {region, regionSnapshots, regionStations} from "@/lib/db/schema";
+import {polygonToPointObjects, pointsToPolygon} from "@/lib/management/closure-manager";
 import {ErrorCodes, Failure, Result, Success} from "@/lib/one-of/types";
 import {unwrap} from "@/lib/one-of";
 
@@ -40,23 +41,7 @@ function fromUtcTime(utcTime: string): string {
  */
 export async function getAllRegions(forPublic = true): Promise<Result<RegionBaseObject[] | RegionListObject[]>> {
   try {
-    const sqlTemplates = {
-      points: sql<PointObject[]>`(
-        SELECT COALESCE(
-          json_agg(
-            json_build_object(
-              'id', ${regionSequences.id},
-              'sequence', ${regionSequences.sequenceNumber},
-              'point', json_build_array(
-                ST_Y(${regionSequences.point}),
-                ST_X(${regionSequences.point})
-              )
-            ) ORDER BY ${regionSequences.sequenceNumber} ASC
-          ), '[]'::json
-        )
-        FROM ${regionSequences}
-        WHERE ${regionSequences.regionSnapshotId} = ${region.activeSnapshotId})`,
-
+    const stationsSubquery = {
       stations: sql<StationObject[]>`(
         SELECT COALESCE(
           json_agg(
@@ -78,20 +63,25 @@ export async function getAllRegions(forPublic = true): Promise<Result<RegionBase
 
     // For public API
     if (forPublic) {
-      const result = await db
+      const rows = await db
         .select({
           id: region.id,
           regionName: region.name,
           regionColor: region.color,
           regionShape: region.shapeType,
-          ...sqlTemplates,
+          polygon: region.polygon,
+          ...stationsSubquery,
         })
         .from(region)
         .where(eq(region.isPublic, true));
 
       return new Success(
-        (result as RegionBaseObject[]).map((r) => ({
-          ...r,
+        rows.map((r) => ({
+          id: r.id,
+          regionName: r.regionName,
+          regionColor: r.regionColor,
+          regionShape: r.regionShape,
+          points: polygonToPointObjects(r.polygon, r.id),
           stations: r.stations.map((s) => ({
             ...s,
             availableFrom: fromUtcTime(s.availableFrom),
@@ -101,17 +91,25 @@ export async function getAllRegions(forPublic = true): Promise<Result<RegionBase
       );
     }
 
-    const result = await db
+    const rows = await db
       .select({
         id: region.id,
         regionName: region.name,
         regionColor: region.color,
         regionShape: region.shapeType,
-        points: sqlTemplates.points,
+        polygon: region.polygon,
       })
       .from(region);
 
-    return new Success(result satisfies RegionListObject[]);
+    return new Success(
+      rows.map((r) => ({
+        id: r.id,
+        regionName: r.regionName,
+        regionColor: r.regionColor,
+        regionShape: r.regionShape,
+        points: polygonToPointObjects(r.polygon, r.id),
+      })) satisfies RegionListObject[],
+    );
   } catch (e) {
     return new Failure(ErrorCodes.Fatal, "Failed to fetch regions.", {}, e);
   }
@@ -127,22 +125,7 @@ export async function getRegionById(regionId: string): Promise<Result<RegionObje
         regionName: region.name,
         regionColor: region.color,
         regionShape: region.shapeType,
-        points: sql<PointObject[]>`(
-          SELECT COALESCE(
-            json_agg(
-              json_build_object(
-                'id', ${regionSequences.id},
-                'sequence', ${regionSequences.sequenceNumber},
-                'point', json_build_array(
-                  ST_Y(${regionSequences.point}),
-                  ST_X(${regionSequences.point})
-                )
-              ) ORDER BY ${regionSequences.sequenceNumber} ASC
-            ), '[]'::json
-          )
-          FROM ${regionSequences}
-          WHERE ${regionSequences.regionSnapshotId} = ${region.activeSnapshotId})`,
-
+        polygon: region.polygon,
         stations: sql<StationObject[]>`(
           SELECT COALESCE(
             json_agg(
@@ -170,7 +153,13 @@ export async function getRegionById(regionId: string): Promise<Result<RegionObje
     }
 
     return new Success({
-      ...result,
+      id: result.id,
+      activeSnapshotId: result.activeSnapshotId,
+      isPublic: result.isPublic,
+      regionName: result.regionName,
+      regionColor: result.regionColor,
+      regionShape: result.regionShape,
+      points: polygonToPointObjects(result.polygon, result.id),
       stations: result.stations.map((s) => ({
         ...s,
         availableFrom: fromUtcTime(s.availableFrom),
@@ -207,23 +196,7 @@ export async function getSnapshotInformationById(regionId: string, snapshotId: s
         regionName: regionSnapshots.name,
         regionColor: regionSnapshots.color,
         regionShape: regionSnapshots.shapeType,
-
-        points: sql<PointObject[]>`(
-        SELECT COALESCE(
-          json_agg(
-            json_build_object(
-              'id', ${regionSequences.id},
-              'sequence', ${regionSequences.sequenceNumber},
-              'point', json_build_array(
-                ST_Y(${regionSequences.point}),
-                ST_X(${regionSequences.point})
-              )
-            ) ORDER BY ${regionSequences.sequenceNumber} ASC
-          ), '[]'::json
-        )
-        FROM ${regionSequences}
-        WHERE ${regionSequences.regionSnapshotId} = ${snapshotId})`,
-
+        polygon: regionSnapshots.polygon,
         stations: sql<StationObject[]>`(
         SELECT COALESCE(
           json_agg(
@@ -256,13 +229,20 @@ export async function getSnapshotInformationById(regionId: string, snapshotId: s
     }
 
     return new Success({
-      ...result,
-      stations: (result as RegionSnapshotObject).stations.map((s) => ({
+      id: result.id,
+      snapshotId: result.snapshotId,
+      snapshotName: result.snapshotName,
+      snapshotState: result.snapshotState,
+      regionName: result.regionName,
+      regionColor: result.regionColor,
+      regionShape: result.regionShape,
+      points: polygonToPointObjects(result.polygon, result.snapshotId),
+      stations: result.stations.map((s) => ({
         ...s,
         availableFrom: fromUtcTime(s.availableFrom),
         availableTo: fromUtcTime(s.availableTo),
       })),
-    } as RegionSnapshotObject);
+    } satisfies RegionSnapshotObject);
   } catch (e) {
     return new Failure(ErrorCodes.Fatal, "Failed to fetch regions.", {}, e);
   }
@@ -274,7 +254,7 @@ export async function getSnapshotInformationById(regionId: string, snapshotId: s
  * This operation runs in a transaction and performs:
  * 1. Region existence validation.
  * 2. Region snapshot insertion.
- * 3. Boundary sequence insertion.
+ * 3. Boundary polygon persistence.
  * 4. Optional station insertion.
  *
  * Coordinate mapping note:
@@ -302,6 +282,8 @@ export async function createSnapshot(regionId: string, params: RegionAddParamete
     }
 
     const transaction = await db.transaction(async tx => {
+      const boundaryPolygon = pointsToPolygon(params.points);
+
       // Create a snapshot
       const [snapshot] = await tx
         .insert(regionSnapshots)
@@ -313,21 +295,9 @@ export async function createSnapshot(regionId: string, params: RegionAddParamete
           name: params.regionName,
           color: params.regionColor,
           shapeType: params.regionShape,
+          polygon: boundaryPolygon,
         })
         .returning();
-
-      // Generate sequences
-      const sequences = await tx
-        .insert(regionSequences)
-        .values(
-          params.points.map(point => ({
-            regionSnapshotId: snapshot.id,
-            sequenceNumber: point.sequence,
-            point: [point.point[1], point.point[0]] as [number, number],
-          })),
-        )
-        .returning();
-      if (sequences.length !== params.points.length) return tx.rollback();
 
       let stations: StationObject[] = [];
       if (params.stations.length > 0) {
@@ -360,11 +330,7 @@ export async function createSnapshot(regionId: string, params: RegionAddParamete
         regionName: snapshot.name,
         regionColor: snapshot.color,
         regionShape: snapshot.shapeType,
-        points: sequences.map(x => ({
-          id: x.id,
-          sequence: x.sequenceNumber,
-          point: [x.point[1], x.point[0]],
-        })),
+        points: polygonToPointObjects(boundaryPolygon, snapshot.id),
         stations,
       } satisfies RegionSnapshotObject;
     });
@@ -380,9 +346,9 @@ export async function createSnapshot(regionId: string, params: RegionAddParamete
  *
  * The copy process:
  * 1. Validates that the source snapshot exists and belongs to the region.
- * 2. Loads all region boundary sequences and station records from the source snapshot.
+ * 2. Loads station records from the source snapshot.
  * 3. Creates a new snapshot with copied metadata and a `"(Copy)"` suffix in the version name.
- * 4. Re-inserts copied sequences and stations under the new snapshot ID.
+ * 4. Re-inserts copied stations under the new snapshot ID.
  *
  * Executed inside a database transaction to ensure atomicity.
  *
@@ -409,12 +375,6 @@ export async function copySnapshot(regionId: string, sourceSnapshotId: string, o
       return new Failure(ErrorCodes.ResourceNotFound, "Snapshot not found.", { regionId, sourceSnapshotId });
     }
 
-    // Copy the snapshot points
-    const shape = await db
-      .select()
-      .from(regionSequences)
-      .where(eq(regionSequences.regionSnapshotId, snapshot.id));
-
     const stations = await db
       .select()
       .from(regionStations)
@@ -432,19 +392,10 @@ export async function copySnapshot(regionId: string, sourceSnapshotId: string, o
           name: snapshot.name,
           color: snapshot.color,
           shapeType: snapshot.shapeType,
+          polygon: snapshot.polygon,
         })
         .returning();
       if (!newSnapshot) return tx.rollback();
-
-      if (shape.length > 0) {
-        await tx
-          .insert(regionSequences)
-          .values(shape.map(p => ({
-            sequenceNumber: p.sequenceNumber,
-            point: p.point,
-            regionSnapshotId: newSnapshot.id,
-          })));
-      }
 
       if (stations.length > 0) {
         await tx
@@ -547,12 +498,12 @@ export async function isAllContentDeletableByContributor(regionId: string): Prom
 
 /**
  * Switches a region's active snapshot to the specified snapshot and updates the region's
- * denormalized fields (`name`, `color`, `shapeType`) to match the snapshot.
+ * denormalized fields (`name`, `color`, `shapeType`, `polygon`) to match the snapshot.
  *
  * Workflow:
  * 1. Verifies the region exists.
  * 2. Verifies the target snapshot exists and is in the `"ready"` state.
- * 3. Updates the region's `activeSnapshotId`, `name`, `color`, and `shapeType`.
+ * 3. Updates the region's `activeSnapshotId`, `name`, `color`, `shapeType`, and `polygon`.
  * 4. Fetches and returns the resolved snapshot payload.
  *
  * @param regionId - The ID of the region to update.
@@ -581,6 +532,7 @@ export async function switchSnapshot(regionId: string, snapshotId: string): Prom
         name: regionSnapshots.name,
         color: regionSnapshots.color,
         shapeType: regionSnapshots.shapeType,
+        polygon: regionSnapshots.polygon,
       })
       .from(regionSnapshots)
       .where(eq(regionSnapshots.id, snapshotId))
@@ -602,6 +554,7 @@ export async function switchSnapshot(regionId: string, snapshotId: string): Prom
         name: snapshotToUse.name,
         color: snapshotToUse.color,
         shapeType: snapshotToUse.shapeType,
+        polygon: snapshotToUse.polygon,
       })
       .where(eq(region.id, regionId));
 
@@ -655,6 +608,7 @@ export async function createRegion(payload: RegionAddParameters, ownerId: string
         name: payload.regionName,
         color: payload.regionColor,
         shapeType: payload.regionShape,
+        polygon: pointsToPolygon(payload.points),
         activeSnapshotId: "00000000-0000-0000-0000-000000000000",
         ownerId,
       })
@@ -706,10 +660,10 @@ export async function removeRegion(regionId: string): Promise<Result<null>> {
 }
 
 /**
- * Updates an existing region snapshot and optionally replaces its sequence points and stations.
+ * Updates an existing region snapshot and optionally replaces its boundary polygon and stations.
  *
  * If metadata fields are provided, they are patched on the snapshot row. When `params.points`
- * is provided, all existing snapshot points are deleted and recreated. When `params.stations`
+ * is provided, the snapshot polygon is replaced. When `params.stations`
  * is provided, all existing stations are deleted and recreated. The updated snapshot is then
  * reloaded and returned with coordinates normalized into `[latitude, longitude]` format.
  *
@@ -746,48 +700,43 @@ export async function updateRegionSnapshot(
 
     // Update snapshot
     await db.transaction(async tx => {
-      // Patch to apply
-      const regionPatch = {
+      const snapshotPatch = {
         ...(params.snapshotName !== undefined && { versionName: params.snapshotName }),
         ...(params.snapshotState !== undefined && { snapshotState: params.snapshotState }),
         ...(params.regionName !== undefined && { name: params.regionName }),
         ...(params.regionColor !== undefined && { color: params.regionColor }),
         ...(params.regionShape !== undefined && { shapeType: params.regionShape }),
+        ...(params.points !== undefined && { polygon: pointsToPolygon(params.points) }),
       };
 
-      if (Object.keys(regionPatch).length > 0) {
+      const regionDenormPatch = {
+        ...(params.regionName !== undefined && { name: params.regionName }),
+        ...(params.regionColor !== undefined && { color: params.regionColor }),
+        ...(params.regionShape !== undefined && { shapeType: params.regionShape }),
+        ...(params.points !== undefined && { polygon: pointsToPolygon(params.points) }),
+      };
+
+      if (Object.keys(snapshotPatch).length > 0) {
         const [updatedRegion] = await tx
           .update(regionSnapshots)
-          .set(regionPatch)
+          .set(snapshotPatch)
           .where(eq(regionSnapshots.id, snapshotToEdit.id))
           .returning({ id: regionSnapshots.id, refRegionId: regionSnapshots.regionId });
 
         if (!updatedRegion) tx.rollback();
 
-        // There's this synchronization issue on the main region table when the snapshot is updated. This is true only
-        // for region with an active snapshot that is not marked as ready and is unpublished.
-        await tx
-          .update(region)
-          .set(regionPatch)
-          .where(
-            and(
-              eq(region.id, updatedRegion.refRegionId),
-              eq(region.activeSnapshotId, updatedRegion.id),
-            ),
-          );
-      }
-
-      if (params.points !== undefined) {
-        await tx.delete(regionSequences).where(eq(regionSequences.regionSnapshotId, snapshotToEdit.id));
-
-        if (params.points.length > 0) {
-          await tx.insert(regionSequences).values(
-            params.points.map((point) => ({
-              regionSnapshotId: snapshotToEdit.id,
-              sequenceNumber: point.sequence,
-              point: [point.point[1], point.point[0]] as [number, number],
-            })),
-          );
+        if (Object.keys(regionDenormPatch).length > 0) {
+          // There's this synchronization issue on the main region table when the snapshot is updated. This is true only
+          // for region with an active snapshot that is not marked as ready and is unpublished.
+          await tx
+            .update(region)
+            .set(regionDenormPatch)
+            .where(
+              and(
+                eq(region.id, updatedRegion.refRegionId),
+                eq(region.activeSnapshotId, updatedRegion.id),
+              ),
+            );
         }
       }
 

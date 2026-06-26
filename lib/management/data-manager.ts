@@ -5,7 +5,6 @@ import { v7 as uuidv7 } from "uuid";
 import { db } from "@/lib/db";
 import {
   region,
-  regionSequences,
   regionSnapshots,
   regionStations,
   roadClosures,
@@ -225,25 +224,10 @@ async function fetchRegionSnapshotRows(snapshotIds: string[]): Promise<RegionSna
       regionName: regionSnapshots.name,
       color: regionSnapshots.color,
       shapeType: regionSnapshots.shapeType,
-      points: sql<{ sequence: number; point: LatLng }[]>`
-        COALESCE(
-          json_agg(
-            json_build_object(
-              'sequence', ${regionSequences.sequenceNumber},
-              'point', json_build_array(
-                ST_Y(${regionSequences.point}),
-                ST_X(${regionSequences.point})
-              )
-            ) ORDER BY ${regionSequences.sequenceNumber} ASC
-          ) FILTER (WHERE ${regionSequences.id} IS NOT NULL),
-          '[]'::json
-        )
-      `,
+      polygon: regionSnapshots.polygon,
     })
     .from(regionSnapshots)
-    .leftJoin(regionSequences, eq(regionSnapshots.id, regionSequences.regionSnapshotId))
-    .where(inArray(regionSnapshots.id, snapshotIds))
-    .groupBy(regionSnapshots.id);
+    .where(inArray(regionSnapshots.id, snapshotIds));
 
   const stationRows = await db
     .select({
@@ -276,8 +260,14 @@ async function fetchRegionSnapshotRows(snapshotIds: string[]): Promise<RegionSna
   }
 
   return rows.map(row => ({
-    ...row,
-    points: row.points ?? [],
+    id: row.id,
+    regionId: row.regionId,
+    versionName: row.versionName,
+    snapshotState: row.snapshotState,
+    regionName: row.regionName,
+    color: row.color,
+    shapeType: row.shapeType,
+    points: polygonToPointObjects(row.polygon, row.id).map(({ sequence, point }) => ({ sequence, point })),
     stations: stationsBySnapshotId.get(row.id) ?? [],
   }));
 }
@@ -603,6 +593,8 @@ export async function importData(payload: ImportPayload, ownerId: string): Promi
       for (const regionRow of payload.regions) {
         const newRegionId = regionRemapper.remap(regionRow.id);
         const remappedActiveSnapshotId = regionSnapshotRemapper.remap(regionRow.activeSnapshotId);
+        const activeSnapshot = regionRow.snapshots.find(s => s.id === regionRow.activeSnapshotId);
+        const activePolygon = pointsToPolygon(activeSnapshot?.points ?? []);
 
         await tx.insert(region).values({
           id: newRegionId,
@@ -611,6 +603,7 @@ export async function importData(payload: ImportPayload, ownerId: string): Promi
           name: regionRow.regionName,
           color: regionRow.color,
           shapeType: regionRow.shapeType,
+          polygon: activePolygon,
           isPublic: regionRow.isPublic,
         });
 
@@ -626,17 +619,8 @@ export async function importData(payload: ImportPayload, ownerId: string): Promi
             name: snapshot.regionName,
             color: snapshot.color,
             shapeType: snapshot.shapeType,
+            polygon: pointsToPolygon(snapshot.points),
           });
-
-          if (snapshot.points.length > 0) {
-            await tx.insert(regionSequences).values(
-              snapshot.points.map(point => ({
-                regionSnapshotId: newSnapshotId,
-                sequenceNumber: point.sequence,
-                point: toDbPoint(point.point),
-              })),
-            );
-          }
 
           if (snapshot.stations.length > 0) {
             await tx.insert(regionStations).values(

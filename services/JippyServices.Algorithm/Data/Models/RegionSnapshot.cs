@@ -1,5 +1,6 @@
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
+using NetTopologySuite.Geometries;
 
 namespace JippyServices.Algorithm.Data.Models;
 
@@ -23,14 +24,15 @@ public class RegionSnapshot
     [Column("shape")]
     public string ShapeType { get; set; } = "";
 
+    /// <summary>PostGIS Polygon (SRID 4326) defining the region boundary.</summary>
+    [Column("polygon", TypeName = "geometry(Polygon,4326)")]
+    public Polygon Polygon { get; set; } = null!;
+
     [Column("snapshotState")]
     public string SnapshotState { get; set; } = "wip";
 
     [Column("region_id")]
     public Guid RegionId { get; set; }
-
-    /// <summary>Boundary polygon points for this snapshot.</summary>
-    public ICollection<RegionSequence> Sequences { get; set; } = [];
 
     /// <summary>Tricycle stations for this snapshot.</summary>
     public ICollection<RegionStation> Stations { get; set; } = [];

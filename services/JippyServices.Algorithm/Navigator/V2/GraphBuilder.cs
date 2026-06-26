@@ -60,8 +60,8 @@ internal sealed class GraphBuilder
             DecodedGoingBack = string.IsNullOrEmpty(r.PolylineGoingBack) ? [] : PolylineCodec.Decode(r.PolylineGoingBack),
         }).ToList();
 
-        // Regions with active snapshot, including sequences and stations
-        var dbRegions = await _db.RegionMarkers
+        // Regions with active snapshot, including boundary polygon and stations
+        var dbRegions = await _db.Regions
             .AsNoTracking()
             .Where(r => r.IsPublic && r.ActiveSnapshotId != null)
             .OrderBy(r => r.Id)
@@ -75,7 +75,6 @@ internal sealed class GraphBuilder
         var snapshots = await _db.RegionSnapshots
             .AsNoTracking()
             .Where(rs => activeSnapshotIds.Contains(rs.Id))
-            .Include(rs => rs.Sequences)
             .Include(rs => rs.Stations)
             .OrderBy(rs => rs.Id)
             .ToListAsync();
@@ -85,20 +84,24 @@ internal sealed class GraphBuilder
         var regions = dbRegions.Select(r =>
         {
             var snap = r.ActiveSnapshotId.HasValue && snapshotMap.TryGetValue(r.ActiveSnapshotId.Value, out var s) ? s : null;
+            var boundaryPolygon = snap?.Polygon ?? r.Polygon;
             return new TransitRegion
             {
                 Id = r.Id.ToString(),
                 RegionName = snap?.Name ?? r.Name,
                 RegionColor = snap?.Color ?? r.Color,
                 RegionShape = snap?.ShapeType ?? r.ShapeType,
-                Points = (snap?.Sequences ?? [])
-                    .Select(seq => new RegionPoint
-                    {
-                        Id = seq.Id.ToString(),
-                        Sequence = seq.SequenceNumber,
-                        Point = GeoUtils.ToLatLng(seq.Point),
-                    })
-                    .ToList(),
+                Points = boundaryPolygon != null && boundaryPolygon.ExteriorRing.NumPoints >= 4
+                    ? boundaryPolygon.ExteriorRing.Coordinates
+                        .Take(boundaryPolygon.ExteriorRing.Coordinates.Length - 1)
+                        .Select((coord, i) => new RegionPoint
+                        {
+                            Id = $"{r.Id}:{i + 1}",
+                            Sequence = i + 1,
+                            Point = new LatLng(coord.Y, coord.X),
+                        })
+                        .ToList()
+                    : [],
                 Stations = (snap?.Stations ?? [])
                     .Select(st => new TransitStation
                     {

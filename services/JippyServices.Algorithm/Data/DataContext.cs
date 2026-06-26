@@ -9,9 +9,8 @@ public class DataContext : DbContext
     { }
 
     public DbSet<Models.Route> Routes => Set<Models.Route>();
-    public DbSet<RegionMarker> RegionMarkers => Set<RegionMarker>();
+    public DbSet<Region> Regions => Set<Region>();
     public DbSet<RegionSnapshot> RegionSnapshots => Set<RegionSnapshot>();
-    public DbSet<RegionSequence> RegionSequences => Set<RegionSequence>();
     public DbSet<RegionStation> RegionStations => Set<RegionStation>();
     public DbSet<RoadClosure> RoadClosures => Set<RoadClosure>();
     public DbSet<RestrictedBordingZone> RestrictedBordingZones => Set<RestrictedBordingZone>();
@@ -24,13 +23,9 @@ public class DataContext : DbContext
         // Enable PostGIS extension
         modelBuilder.HasPostgresExtension("postgis");
 
-        // RegionSnapshot → sequences and stations
+        // RegionSnapshot → stations
         modelBuilder.Entity<RegionSnapshot>(e =>
         {
-            e.HasMany(rs => rs.Sequences)
-                .WithOne(seq => seq.RegionSnapshot)
-                .HasForeignKey(seq => seq.RegionSnapshotId);
-
             e.HasMany(rs => rs.Stations)
                 .WithOne(st => st.RegionSnapshot)
                 .HasForeignKey(st => st.RegionSnapshotId);

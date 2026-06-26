@@ -294,7 +294,7 @@ export const routeSnapshotImages = pgTable(
 );
 
 export const region = pgTable(
-  "region_markers",
+  "region",
   {
     id: uuid("id")
       .primaryKey()
@@ -307,6 +307,8 @@ export const region = pgTable(
       .default("#000000")
       .notNull(),
     shapeType: text("shape")
+      .notNull(),
+    polygon: polygon("polygon")
       .notNull(),
 
     // Metadata
@@ -337,6 +339,8 @@ export const regionSnapshots = pgTable(
       .notNull(),
     shapeType: text("shape")
       .notNull(),
+    polygon: polygon("polygon")
+      .notNull(),
 
     // Metadata
     snapshotState: snapshotState()
@@ -352,31 +356,6 @@ export const regionSnapshots = pgTable(
       .$onUpdate(() => new Date())
       .notNull(),
   },
-);
-
-export const regionSequences = pgTable(
-  "region_marker_sequences",
-  {
-    id: uuid("id")
-      .primaryKey()
-      .$default(() => uuidv7()),
-    regionSnapshotId: uuid("region_snapshot_id")
-      .notNull()
-      .references(() => regionSnapshots.id, { onDelete: "cascade" }),
-
-    // Region data
-    sequenceNumber: integer("sequence_number").notNull(),
-    point: geometry("point", { type: "point", mode: "tuple", srid: 4326 }).notNull(),
-    createdAt: timestamp("created_at").defaultNow().notNull(),
-    updatedAt: timestamp("updated_at")
-      .defaultNow()
-      .$onUpdate(() => new Date())
-      .notNull(),
-  },
-  (t) => [
-    index("spatial_index_region").using("gist", t.point),
-    index("region_seq_idx").on(t.regionSnapshotId, t.sequenceNumber),
-  ],
 );
 
 export const regionStations = pgTable(

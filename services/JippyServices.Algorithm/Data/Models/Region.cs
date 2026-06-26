@@ -1,14 +1,15 @@
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
+using NetTopologySuite.Geometries;
 
 namespace JippyServices.Algorithm.Data.Models;
 
 /// <summary>
-/// Maps to the "region_markers" table. Each region defines a tricycle service area.
-/// The active snapshot contains the boundary points and station list.
+/// Maps to the "region" table. Each region defines a tricycle service area.
+/// The active snapshot contains the boundary polygon and station list.
 /// </summary>
-[Table("region_markers")]
-public class RegionMarker
+[Table("region")]
+public class Region
 {
     [Key]
     [Column("id")]
@@ -22,6 +23,10 @@ public class RegionMarker
 
     [Column("shape")]
     public string ShapeType { get; set; } = "";
+
+    /// <summary>PostGIS Polygon (SRID 4326) for the active snapshot boundary.</summary>
+    [Column("polygon", TypeName = "geometry(Polygon,4326)")]
+    public Polygon Polygon { get; set; } = null!;
 
     [Column("is_public_viewable")]
     public bool IsPublic { get; set; }
