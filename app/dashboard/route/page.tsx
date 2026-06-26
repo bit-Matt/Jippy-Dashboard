@@ -8,6 +8,7 @@ import RouteItemSidebar from "@/components/route-item-sidebar";
 import RouteEditor from "@/components/route-editor";
 import RouteListCard from "@/components/route-list-card";
 import type {
+  ClosureResponse,
   ClosureResponseList,
   RouteListItemResponse,
   RouteListItemResponseList,
@@ -38,6 +39,26 @@ import type { IApiResponse } from "@/lib/http/ApiResponseBuilder";
 import { decodePolyline } from "@/lib/map/polyline";
 
 import RouteMapComponent from "./MapComponent";
+
+function isActivePublishedClosure(closure: ClosureResponse): boolean {
+  if (!closure.isPublic) return false;
+  if (closure.closureType === "indefinite") return true;
+  if (!closure.endDate) return false;
+  return new Date(closure.endDate) > new Date();
+}
+
+function filterMapClosures(
+  closures: ClosureResponseList,
+  showClosures: boolean,
+  showUnpublished: boolean,
+): ClosureResponseList {
+  if (!showClosures) return [];
+  return closures.filter((closure) => (
+    closure.isPublic
+      ? isActivePublishedClosure(closure)
+      : showUnpublished
+  ));
+}
 
 const isPointInPolygon = (point: [number, number], polygon: Array<[number, number]>): boolean => {
   const [lat, lng] = point;
@@ -149,6 +170,7 @@ function RouteDashboardContent() {
   const [routeFocusKey, setRouteFocusKey] = useState<string | number | null>(null);
   const [focusWaypoints, setFocusWaypoints] = useState<Array<[number, number]> | undefined>(undefined);
   const [showClosuresOnMap, setShowClosuresOnMap] = useState(true);
+  const [showUnpublishedClosuresOnMap, setShowUnpublishedClosuresOnMap] = useState(false);
   const [isSnapshotLoading, setIsSnapshotLoading] = useState(false);
   const [isSnapshotActing, setIsSnapshotActing] = useState(false);
   const [isDeletingRoute, setIsDeletingRoute] = useState(false);
@@ -199,12 +221,17 @@ function RouteDashboardContent() {
     ].filter((entry): entry is { color: string; polyline: string } => entry !== null);
   }, [persistedRouting, selectedRoute]);
 
+  const visibleMapClosures = useMemo(
+    () => filterMapClosures(closures, showClosuresOnMap, showUnpublishedClosuresOnMap),
+    [closures, showClosuresOnMap, showUnpublishedClosuresOnMap],
+  );
+
   const routeWarningRouteIds = useMemo(() => {
-    if (!showClosuresOnMap || closures.length === 0 || routes.length === 0) {
+    if (!showClosuresOnMap || visibleMapClosures.length === 0 || routes.length === 0) {
       return new Set<string>();
     }
 
-    const polygons = closures
+    const polygons = visibleMapClosures
       .map((closure) => [...closure.points]
         .sort((a, b) => a.sequence - b.sequence)
         .map((point) => [Number(point.point[0]), Number(point.point[1])] as [number, number])
@@ -239,7 +266,7 @@ function RouteDashboardContent() {
     }
 
     return warningIds;
-  }, [closures, routes, showClosuresOnMap]);
+  }, [visibleMapClosures, routes, showClosuresOnMap]);
 
   useEffect(() => {
     selectedRouteRef.current = selectedRoute;
@@ -628,7 +655,7 @@ function RouteDashboardContent() {
             isRoutesLoading={isRoutesLoading}
             onRoutesReadyChange={setAreRouteLayersReady}
             routing={mapRouting}
-            closures={closures}
+            closures={visibleMapClosures}
             showClosuresOnMap={showClosuresOnMap}
             focusedWaypoints={focusWaypoints}
             focusKey={routeFocusKey}
@@ -715,13 +742,28 @@ function RouteDashboardContent() {
                 <div className="space-y-1">
                   <Label htmlFor="show-road-closures">Show road closures on map</Label>
                   <p className="text-muted-foreground text-xs">
-                    Displays active, ready closures while editing this route.
+                    Displays active published closures while editing this route.
                   </p>
                 </div>
                 <Switch
                   id="show-road-closures"
                   checked={showClosuresOnMap}
                   onCheckedChange={setShowClosuresOnMap}
+                />
+              </div>
+
+              <div className="flex items-center justify-between rounded-md border border-l-2 p-3 pl-3">
+                <div className="space-y-1">
+                  <Label htmlFor="show-unpublished-road-closures">Show unpublished road closures</Label>
+                  <p className="text-muted-foreground text-xs">
+                    Also displays draft closures that are not yet published.
+                  </p>
+                </div>
+                <Switch
+                  id="show-unpublished-road-closures"
+                  checked={showUnpublishedClosuresOnMap}
+                  onCheckedChange={setShowUnpublishedClosuresOnMap}
+                  disabled={!showClosuresOnMap}
                 />
               </div>
 

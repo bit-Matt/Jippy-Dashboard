@@ -28,7 +28,7 @@ export async function GET() {
   try {
     const [allRoutes, allClosures, allStops] = await Promise.all([
       unwrap(route.getAllRoutes(false)),
-      unwrap(closure.getAllClosures(true)),
+      unwrap(closure.getAllClosures(false)),
       unwrap(restrictedBoardingZones.getAllRestrictedBoardingZones(true)),
     ]);
 

@@ -483,12 +483,20 @@ const ClosureRegionsLayer = ({ closures }: ClosureRegionsLayerProps) => {
           <Polygon
             key={closure.id}
             positions={sortedPoints}
-            pathOptions={{
-              color: "#e81123",
-              fillColor: "#e81123",
-              fillOpacity: 0.25,
-              weight: 2,
-            }}
+            pathOptions={closure.isPublic === false
+              ? {
+                color: "#f97316",
+                fillColor: "#f97316",
+                fillOpacity: 0.15,
+                weight: 2,
+                dashArray: "6 4",
+              }
+              : {
+                color: "#e81123",
+                fillColor: "#e81123",
+                fillOpacity: 0.25,
+                weight: 2,
+              }}
           >
             {closure.closureName ? (
               <Tooltip permanent direction="center" opacity={1} className="region-name-label">
@@ -674,6 +682,7 @@ export interface RouteMapProps {
   closures?: Array<{
     id: string;
     closureName: string;
+    isPublic?: boolean;
     points: Array<{
       id: string;
       sequence: number;
