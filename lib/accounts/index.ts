@@ -1,7 +1,7 @@
 import { and, eq, gt, not } from "drizzle-orm";
-import crypto from "node:crypto";
 import { DateTime } from "luxon";
 import * as Sentry from "@sentry/nextjs";
+import { v4 as uuidv4 } from "uuid";
 
 import { auth } from "@/lib/auth";
 import { cacheManager } from "@/lib/cache";
@@ -12,6 +12,8 @@ import * as mailer from "@/lib/mailer";
 import { unwrap } from "@/lib/one-of";
 import { invitations, user } from "@/lib/db/schema";
 import { utils } from "@/lib/validator";
+
+export type UserRole = "administrator_user" | "regular_user";
 
 /**
  * Retrieves a user by their unique identifier.
@@ -226,7 +228,7 @@ export async function createNewInvitation(email: string): Promise<Result<SentInv
     }
 
     // Issue a new invitation.
-    const token = generateInvitationToken();
+    const token = uuidv4();
 
     // Expire the token after 24 hours.
     const expiresAt = DateTime.utc().plus({ hours: 24 }).toJSDate();
@@ -435,7 +437,7 @@ export async function toggleBan(id: string): Promise<Result<User>> {
       .where(
         and(
           eq(user.id, id),
-          not(eq(user.email, "admin@jippy.local")), // Exclude administrators
+          not(eq(user.email, "admin@jippy.local")),
         ),
       )
       .limit(1);
@@ -459,6 +461,54 @@ export async function toggleBan(id: string): Promise<Result<User>> {
   }
 }
 
+export async function changeRole(
+  id: string,
+  newRole: UserRole,
+  actorUserId: string,
+): Promise<Result<User>> {
+  try {
+    if (actorUserId === id) {
+      return new Failure(ErrorCodes.ValidationFailure, "You cannot change your own role.", { id });
+    }
+
+    const [userSelected] = await db
+      .select({
+        id: user.id,
+        email: user.email,
+        role: user.role,
+      })
+      .from(user)
+      .where(
+        and(
+          eq(user.id, id),
+          not(eq(user.email, "admin@jippy.local")),
+        ),
+      )
+      .limit(1);
+
+    if (!userSelected) {
+      return new Failure(ErrorCodes.ResourceNotFound, "User not found.", { id });
+    }
+
+    if (userSelected.role === newRole) {
+      const u = await unwrap(getUserById(id));
+      return new Success(u);
+    }
+
+    await db
+      .update(user)
+      .set({ role: newRole })
+      .where(eq(user.id, userSelected.id));
+
+    await cacheManager.delete(`user:${id}`);
+
+    const u = await unwrap(getUserById(id));
+    return new Success(u);
+  } catch (e) {
+    return new Failure(ErrorCodes.Fatal, "An exception occurred during role change.", { id }, e);
+  }
+}
+
 export async function getAllAccounts(): Promise<Result<Array<User>>> {
   try {
     // Return
@@ -473,7 +523,7 @@ export async function getAllAccounts(): Promise<Result<Array<User>>> {
         role: user.role,
       })
       .from(user)
-      .where(not(eq(user.email, "admin@jippy.local"))); // Exclude administrators
+      .where(not(eq(user.email, "admin@jippy.local")));
 
     const mapped: Array<User> = users.map(a => ({
       id: a.id,
@@ -491,68 +541,6 @@ export async function getAllAccounts(): Promise<Result<Array<User>>> {
   } catch (e) {
     return new Failure(ErrorCodes.Fatal, "An exception occurred during user lookup.", {}, e);
   }
-}
-
-/**
- * Generates an invitation token suitable for use as a one-time code.
- *
- * The token is built from a fixed number of cryptographically-random bytes, composed of a mix of
- * lowercase letters, uppercase letters, and digits. The counts of each character class are derived
- * from random values and then the resulting bytes are shuffled to avoid predictable grouping.
- *
- * Security notes:
- * - Uses cryptographically secure randomness.
- * - Returns an ASCII string with a fixed length.
- * - Treat as a secret; store/transport it accordingly (e.g., hash at rest if appropriate).
- *
- * @returns {string} A fixed-length ASCII invitation token containing lowercase letters, uppercase letters, and digits
- *                   in randomized order.
- */
-function generateInvitationToken(): string {
-  // Allocate 32 bytes of memory for token
-  const bytes = Buffer.alloc(128);
-
-  // Number generation
-  const r32 = () => crypto.randomInt(8, 1 << 5);
-
-  let a = r32();
-  let b = r32();
-
-  let point = 0;
-
-  // Generate
-  a = (a ^ (a >> 3)) & 63;
-  for (let ai = 0; ai < a; ai++) {
-    bytes[point] = crypto.randomInt(0x61, 0x7b);
-    point++;
-  }
-
-  b = (b ^ (b >> 3)) & 63;
-  for (let bi = 0; bi < b; bi++) {
-    bytes[point] = crypto.randomInt(0x41, 0x5b);
-    point++;
-  }
-
-  const c = (128 - ((a + b) << 0)) >> 0;
-  for (let ci = 0; ci < c; ci++) {
-    bytes[point] = crypto.randomInt(0x30, 0x3a);
-    point++;
-  }
-
-  // Shuffle bytes
-  const random = new Uint8Array(128);
-  crypto.getRandomValues(random);
-
-  for (let i = bytes.length - 1; i > 0; i--) {
-    // 0 <= j <= i
-    const j = crypto.randomInt(0, i + 1);
-
-    // Swap elements
-    [bytes[i], bytes[j]] = [bytes[j], bytes[i]];
-  }
-
-  // Produce final string
-  return Buffer.from(bytes).toString("ascii");
 }
 
 export type User = {

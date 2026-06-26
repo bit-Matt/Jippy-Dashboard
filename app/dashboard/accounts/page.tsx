@@ -1,6 +1,6 @@
 "use client";
 
-import { Ban, ShieldCheck } from "lucide-react";
+import { Ban, ShieldCheck, ShieldOff } from "lucide-react";
 import { useMemo, useState } from "react";
 import useSWR from "swr";
 
@@ -65,7 +65,7 @@ export default function AccountsPage() {
         <div className="p-4 pt-4 w-full">
           <Typography variant="h3" className="mb-2">Accounts</Typography>
           <p className="mb-4 text-sm text-muted-foreground">
-            Manage account access by banning or unbanning collaborator accounts.
+            Manage account access by promoting or demoting roles, and by banning or unbanning accounts.
           </p>
 
           <Tabs
@@ -158,6 +158,10 @@ function AccountRow({
   onUserPatched: (user: Account) => void;
 }) {
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isRoleSubmitting, setIsRoleSubmitting] = useState(false);
+
+  const isAdmin = user.role === "administrator_user";
+  const targetRole = isAdmin ? "regular_user" : "administrator_user";
 
   const toggleBan = async () => {
     setIsSubmitting(true);
@@ -175,6 +179,28 @@ function AccountRow({
 
     onUserPatched(data.data);
     setIsSubmitting(false);
+  };
+
+  const changeRole = async () => {
+    setIsRoleSubmitting(true);
+
+    const { data, error } = await $fetch<PatchAccountResponse, ApiResponseException>(
+      `/api/restricted/accounts/users/${user.id}/role`,
+      {
+        method: "PATCH",
+        body: JSON.stringify({ role: targetRole }),
+        headers: { "Content-Type": "application/json" },
+      },
+    );
+
+    if (error || !data?.ok) {
+      alert(`Failed to ${isAdmin ? "demote" : "promote"} account. Try again later.`);
+      setIsRoleSubmitting(false);
+      return;
+    }
+
+    onUserPatched(data.data);
+    setIsRoleSubmitting(false);
   };
 
   return (
@@ -201,37 +227,68 @@ function AccountRow({
         )}
       </TableCell>
       <TableCell className="text-right">
-        <AlertDialog>
-          <AlertDialogTrigger asChild>
-            <Button
-              disabled={isSubmitting}
-              variant={user.banned ? "outline" : "destructive"}
-              className="w-28"
-            >
-              {isSubmitting ? <Spinner /> : user.banned ? <ShieldCheck /> : <Ban />}
-              {user.banned ? "Unban" : "Ban"}
-            </Button>
-          </AlertDialogTrigger>
-          <AlertDialogContent size="sm">
-            <AlertDialogHeader>
-              <AlertDialogTitle>{user.banned ? "Unban account?" : "Ban account?"}</AlertDialogTitle>
-              <AlertDialogDescription>
-                {user.banned
-                  ? `This will restore access for ${user.fullName} (${user.email}).`
-                  : `This will block ${user.fullName} (${user.email}) from restricted APIs and dashboard access.`}
-              </AlertDialogDescription>
-            </AlertDialogHeader>
-            <AlertDialogFooter>
-              <AlertDialogCancel>Cancel</AlertDialogCancel>
-              <AlertDialogAction
-                variant={user.banned ? "default" : "destructive"}
-                onClick={toggleBan}
+        <div className="flex justify-end gap-2">
+          <AlertDialog>
+            <AlertDialogTrigger asChild>
+              <Button
+                disabled={isRoleSubmitting}
+                variant="outline"
+                className="w-28"
               >
-                {user.banned ? "Confirm Unban" : "Confirm Ban"}
-              </AlertDialogAction>
-            </AlertDialogFooter>
-          </AlertDialogContent>
-        </AlertDialog>
+                {isRoleSubmitting ? <Spinner /> : isAdmin ? <ShieldOff /> : <ShieldCheck />}
+                {isAdmin ? "Demote" : "Promote"}
+              </Button>
+            </AlertDialogTrigger>
+            <AlertDialogContent size="sm">
+              <AlertDialogHeader>
+                <AlertDialogTitle>{isAdmin ? "Demote to collaborator?" : "Promote to administrator?"}</AlertDialogTitle>
+                <AlertDialogDescription>
+                  {isAdmin
+                    ? `This will remove administrator access for ${user.fullName} (${user.email}). They will remain a collaborator.`
+                    : `This will grant administrator access to ${user.fullName} (${user.email}), including the Administration section.`}
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                <AlertDialogAction onClick={changeRole}>
+                  {isAdmin ? "Confirm Demote" : "Confirm Promote"}
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+
+          <AlertDialog>
+            <AlertDialogTrigger asChild>
+              <Button
+                disabled={isSubmitting}
+                variant={user.banned ? "outline" : "destructive"}
+                className="w-28"
+              >
+                {isSubmitting ? <Spinner /> : user.banned ? <ShieldCheck /> : <Ban />}
+                {user.banned ? "Unban" : "Ban"}
+              </Button>
+            </AlertDialogTrigger>
+            <AlertDialogContent size="sm">
+              <AlertDialogHeader>
+                <AlertDialogTitle>{user.banned ? "Unban account?" : "Ban account?"}</AlertDialogTitle>
+                <AlertDialogDescription>
+                  {user.banned
+                    ? `This will restore access for ${user.fullName} (${user.email}).`
+                    : `This will block ${user.fullName} (${user.email}) from restricted APIs and dashboard access.`}
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                <AlertDialogAction
+                  variant={user.banned ? "default" : "destructive"}
+                  onClick={toggleBan}
+                >
+                  {user.banned ? "Confirm Unban" : "Confirm Ban"}
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+        </div>
       </TableCell>
     </TableRow>
   );
