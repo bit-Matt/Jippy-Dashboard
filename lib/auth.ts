@@ -3,9 +3,11 @@ import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { headers } from "next/headers";
 import { nextCookies } from "better-auth/next-js";
 import * as Sentry from "@sentry/nextjs";
+import { eq } from "drizzle-orm";
 import { unwrap } from "@/lib/one-of";
 
 import { db } from "@/lib/db";
+import { user as userTable } from "@/lib/db/schema";
 import { getUserById, type User } from "@/lib/accounts";
 import { logBannedAccessAttempt } from "@/lib/management/activity-logger";
 import { utils } from "./validator";
@@ -56,14 +58,20 @@ export const session = {
       // Fetch the user from the database or from cache.
       const user = await unwrap(getUserById(session.user.id));
 
+      const [banRecord] = await db
+        .select({ banned: userTable.banned })
+        .from(userTable)
+        .where(eq(userTable.id, session.user.id))
+        .limit(1);
+
       const result: SessionVerifiedResult = {
         code: SessionCode.Ok,
         session,
-        user,
+        user: banRecord ? { ...user, banned: banRecord.banned } : user,
       };
 
       // Check if the user is banned.
-      if (user.banned) {
+      if (result.user!.banned) {
         const routePath =
           nextHeaders.get("x-invoke-path")
           ?? nextHeaders.get("x-pathname")
@@ -78,8 +86,8 @@ export const session = {
           ?? "GET";
 
         void logBannedAccessAttempt({
-          actorUserId: user.id,
-          actorRole: user.role,
+          actorUserId: result.user!.id,
+          actorRole: result.user!.role,
           routePath,
           httpMethod: method,
           source: "session.verify",
@@ -91,7 +99,7 @@ export const session = {
 
       // Otherwise, check the required roles specified
       if (utils.isExisty(role)) {
-        if (role !== user.role) {
+        if (role !== result.user!.role) {
           result.code = SessionCode.InsufficientPermissions;
           result.redirectTo = "/dashboard";
         }

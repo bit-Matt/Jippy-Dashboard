@@ -1,4 +1,5 @@
 import { NextRequest } from "next/server";
+import { headers } from "next/headers";
 import * as Sentry from "@sentry/nextjs";
 import { eq } from "drizzle-orm";
 
@@ -75,6 +76,12 @@ export async function POST(req: NextRequest) {
         actorUserId: account.id,
         actorRole: account.role,
       });
+
+      await auth.api.signOut({ headers: await headers() });
+
+      return ApiResponseBuilder
+        .createError(StatusCodes.Status403Forbidden, { message: "Your account has been banned." })
+        .build();
     }
 
     return ApiResponseBuilder.create<null>(StatusCodes.Status204NoContent)

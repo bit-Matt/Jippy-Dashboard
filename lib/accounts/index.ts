@@ -449,6 +449,8 @@ export async function toggleBan(id: string): Promise<Result<User>> {
       .set({ banned: !userSelected.banned })
       .where(eq(user.id, userSelected.id));
 
+    await cacheManager.delete(`user:${id}`);
+
     // Refetch for final output
     const u = await unwrap(getUserById(id));
     return new Success(u);
