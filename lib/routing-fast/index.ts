@@ -109,7 +109,7 @@ export async function route(start: LatLng, end: LatLng): Promise<Result<MultiNav
       return new Failure(ErrorCodes.Fatal, "Configuration error.", { algorithmUrl: "Not set" });
     }
 
-    const url = new URL("/navigate", algorithmUrl!);
+    const url = new URL("/navigate/v2", algorithmUrl!);
     const request = await fetch(url.toString(), {
       method: "POST",
       headers: {
@@ -147,7 +147,7 @@ export async function simulate(
       return new Failure(ErrorCodes.Fatal, "Configuration error.", { algorithmUrl: "Not set" });
     }
 
-    const url = new URL("/navigate/simulate", algorithmUrl!);
+    const url = new URL("/navigate/v2/simulate", algorithmUrl!);
     const request = await fetch(url.toString(), {
       method: "POST",
       headers: {
