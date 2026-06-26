@@ -36,5 +36,10 @@
   "accessCandidatesPerDirection": 128,
   "maxAccessQueries": 128,
   "egressCandidatesPerDirection": 128,
-  "maxEgressQueries": 128
+  "maxEgressQueries": 128,
+  "jeepneyBaseFare": 15.0,
+  "jeepneyBaseKm": 4.0,
+  "jeepneyFarePerKm": 1.50,
+  "tricycleFlatFare": 25.0,
+  "fareCostWeight": 50.0
 }

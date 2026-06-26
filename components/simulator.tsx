@@ -96,6 +96,10 @@ function formatDuration(seconds: number): string {
   return m > 0 ? `${h}h ${m}m` : `${h}h`;
 }
 
+function formatFare(pesos: number): string {
+  return `₱${pesos.toFixed(2)}`;
+}
+
 function LegCard({ leg }: { leg: NavigateRouteLeg }) {
   const color = leg.color ?? LEG_FALLBACK_COLOR;
   return (
@@ -119,6 +123,7 @@ function LegCard({ leg }: { leg: NavigateRouteLeg }) {
         <div className="flex gap-3 text-xs text-muted-foreground">
           <span>{formatDistance(leg.distance)}</span>
           <span>{formatDuration(leg.duration)}</span>
+          <span>{formatFare(leg.fare ?? 0)}</span>
         </div>
         {leg.instructions.length > 0 && (
           <ol className="space-y-1 list-none pl-0">
@@ -245,6 +250,17 @@ function WeightOverridesPanel({
         </fieldset>
 
         <fieldset className="space-y-2">
+          <legend className="text-xs font-semibold text-muted-foreground">Pricing</legend>
+          <div className="grid grid-cols-2 gap-2">
+            <OverrideField label="Jeepney base fare (₱)" field="jeepneyBaseFare" value={overrides.jeepneyBaseFare} defaultValue={defaults.jeepneyBaseFare} onChange={setOverride} />
+            <OverrideField label="Jeepney base km" field="jeepneyBaseKm" value={overrides.jeepneyBaseKm} defaultValue={defaults.jeepneyBaseKm} onChange={setOverride} />
+            <OverrideField label="Jeepney fare per km (₱)" field="jeepneyFarePerKm" value={overrides.jeepneyFarePerKm} defaultValue={defaults.jeepneyFarePerKm} onChange={setOverride} />
+            <OverrideField label="Tricycle flat fare (₱)" field="tricycleFlatFare" value={overrides.tricycleFlatFare} defaultValue={defaults.tricycleFlatFare} onChange={setOverride} />
+            <OverrideField label="Fare cost weight" field="fareCostWeight" value={overrides.fareCostWeight} defaultValue={defaults.fareCostWeight} onChange={setOverride} />
+          </div>
+        </fieldset>
+
+        <fieldset className="space-y-2">
           <legend className="text-xs font-semibold text-muted-foreground">Suggestions</legend>
           <div className="grid grid-cols-2 gap-2">
             <OverrideField label="Max starting routes" field="maxStartingRoutes" value={overrides.maxStartingRoutes} defaultValue={defaults.maxStartingRoutes} onChange={setOverride} step="1" />
@@ -275,6 +291,7 @@ function SuggestionPanel({ suggestion }: { suggestion: NavigateRouteSuggestion }
       <div className="flex gap-4 text-sm text-muted-foreground">
         <span>{formatDistance(route.total_distance)}</span>
         <span>{formatDuration(route.total_duration)}</span>
+        <span>{formatFare(route.total_fare ?? route.legs.reduce((sum, leg) => sum + (leg.fare ?? 0), 0))}</span>
         <span>
           {route.total_transfers} transfer{route.total_transfers !== 1 ? "s" : ""}
         </span>

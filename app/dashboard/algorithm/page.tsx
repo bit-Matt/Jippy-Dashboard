@@ -129,6 +129,16 @@ const WEIGHT_SECTIONS: Array<{
     ],
   },
   {
+    title: "Pricing",
+    fields: [
+      { label: "Jeepney base fare (₱)", field: "jeepneyBaseFare" },
+      { label: "Jeepney base km", field: "jeepneyBaseKm" },
+      { label: "Jeepney fare per km (₱)", field: "jeepneyFarePerKm" },
+      { label: "Tricycle flat fare (₱)", field: "tricycleFlatFare" },
+      { label: "Fare cost weight", field: "fareCostWeight" },
+    ],
+  },
+  {
     title: "Suggestions",
     fields: [
       { label: "Max starting routes", field: "maxStartingRoutes", step: "1" },

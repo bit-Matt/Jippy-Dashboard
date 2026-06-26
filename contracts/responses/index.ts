@@ -184,6 +184,7 @@ export interface NavigateRouteLeg {
   color: string | null;
   distance: number;
   duration: number;
+  fare: number;
   instructions: NavigateInstruction[];
   bbox: [number, number, number, number];
 }
@@ -192,6 +193,7 @@ export interface NavigateRouteResponse {
   legs: NavigateRouteLeg[];
   total_distance: number;
   total_duration: number;
+  total_fare: number;
   total_transfers: number;
   global_bbox: [number, number, number, number];
 }

@@ -41,6 +41,11 @@ export type SimulationOverrides = {
   maxAccessQueries?: number;
   egressCandidatesPerDirection?: number;
   maxEgressQueries?: number;
+  jeepneyBaseFare?: number;
+  jeepneyBaseKm?: number;
+  jeepneyFarePerKm?: number;
+  tricycleFlatFare?: number;
+  fareCostWeight?: number;
 };
 
 export type AlgorithmWeights = Required<SimulationOverrides>;
@@ -85,6 +90,11 @@ export const ALGORITHM_WEIGHT_DEFAULTS: AlgorithmWeights = {
   maxAccessQueries: 128,
   egressCandidatesPerDirection: 128,
   maxEgressQueries: 128,
+  jeepneyBaseFare: 15.0,
+  jeepneyBaseKm: 4.0,
+  jeepneyFarePerKm: 1.50,
+  tricycleFlatFare: 25.0,
+  fareCostWeight: 50.0,
 };
 
 /** @deprecated Use ALGORITHM_WEIGHT_DEFAULTS */

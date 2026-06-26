@@ -49,6 +49,13 @@ internal sealed class RouteLeg
     [JsonPropertyName("duration")]
     public required double Duration { get; init; }
 
+    /// <summary>
+    /// Estimated fare in Philippine pesos for this leg. Walk legs are always 0.
+    /// Jeepney legs use the metered per-boarding formula; tricycle legs use the flat fare.
+    /// </summary>
+    [JsonPropertyName("fare")]
+    public required double Fare { get; init; }
+
     /// <summary>Ordered turn-by-turn instructions for this leg.</summary>
     [JsonPropertyName("instructions")]
     public required List<Instruction> Instructions { get; init; }

@@ -267,6 +267,43 @@ internal sealed class AlgorithmWeights
     [JsonPropertyName("maxEgressQueries")]
     public int MaxEgressQueries { get; init; } = 128;
 
+    /// <summary>
+    /// Base jeepney fare in Philippine pesos charged at the start of every boarding,
+    /// regardless of distance. Applies to the first <see cref="JeepneyBaseKm"/> kilometres.
+    /// Each transfer to a new jeepney line incurs this fare again.
+    /// </summary>
+    [JsonPropertyName("jeepneyBaseFare")]
+    public double JeepneyBaseFare { get; init; } = 15.0;
+
+    /// <summary>
+    /// Distance in kilometres covered by <see cref="JeepneyBaseFare"/> before
+    /// <see cref="JeepneyFarePerKm"/> is applied for each additional kilometre.
+    /// </summary>
+    [JsonPropertyName("jeepneyBaseKm")]
+    public double JeepneyBaseKm { get; init; } = 4.0;
+
+    /// <summary>
+    /// Additional jeepney fare in Philippine pesos charged per kilometre beyond
+    /// <see cref="JeepneyBaseKm"/> on a single boarding leg.
+    /// </summary>
+    [JsonPropertyName("jeepneyFarePerKm")]
+    public double JeepneyFarePerKm { get; init; } = 1.50;
+
+    /// <summary>
+    /// Flat tricycle fare in Philippine pesos charged once per tricycle ride,
+    /// independent of distance.
+    /// </summary>
+    [JsonPropertyName("tricycleFlatFare")]
+    public double TricycleFlatFare { get; init; } = 25.0;
+
+    /// <summary>
+    /// Conversion factor that maps Philippine-peso fare into equivalent metres of A* edge cost.
+    /// A value of 50 means ₱1 adds 50 m of routing cost, making fare a meaningful but
+    /// non-dominant factor alongside distance and time penalties.
+    /// </summary>
+    [JsonPropertyName("fareCostWeight")]
+    public double FareCostWeight { get; init; } = 50.0;
+
     /// <summary>A pre-built instance using all default field values, used as the ultimate fallback.</summary>
     public static AlgorithmWeights Defaults { get; } = new();
 }

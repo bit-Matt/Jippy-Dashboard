@@ -88,6 +88,18 @@ internal sealed class SimulationOverrides
     [JsonPropertyName("transferDiversityPenalty")]
     public double? TransferDiversityPenalty { get; init; }
 
+    // Pricing
+    [JsonPropertyName("jeepneyBaseFare")]
+    public double? JeepneyBaseFare { get; init; }
+    [JsonPropertyName("jeepneyBaseKm")]
+    public double? JeepneyBaseKm { get; init; }
+    [JsonPropertyName("jeepneyFarePerKm")]
+    public double? JeepneyFarePerKm { get; init; }
+    [JsonPropertyName("tricycleFlatFare")]
+    public double? TricycleFlatFare { get; init; }
+    [JsonPropertyName("fareCostWeight")]
+    public double? FareCostWeight { get; init; }
+
     // Graph builder
     [JsonPropertyName("accessCandidatesPerDirection")]
     public int? AccessCandidatesPerDirection { get; init; }

@@ -528,6 +528,7 @@ internal sealed class NavigatorV2 : INavigator
     {
         double totalDistance = 0;
         double totalDuration = 0;
+        double totalFare = 0;
         var totalTransfers = CountTransitTransfers(legs);
 
         var minLng = double.MaxValue;
@@ -540,6 +541,7 @@ internal sealed class NavigatorV2 : INavigator
             var leg = legs[i];
             totalDistance += leg.Distance;
             totalDuration += leg.Duration;
+            totalFare += leg.Fare;
 
             if (leg.Bbox.Length >= 4)
             {
@@ -555,6 +557,7 @@ internal sealed class NavigatorV2 : INavigator
             Legs = legs,
             TotalDistance = Math.Round(totalDistance * 100) / 100,
             TotalDuration = Math.Round(totalDuration),
+            TotalFare = Math.Round(totalFare * 100) / 100,
             TotalTransfers = totalTransfers,
             GlobalBbox =
             [

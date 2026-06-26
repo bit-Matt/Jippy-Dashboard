@@ -93,7 +93,7 @@ internal sealed class OSRMBicycleClient : IOSRMClient
         {
             Overview = "full",
             Geometries = "polyline6",
-            Steps = false,
+            Steps = "false",
         };
 
         var response = await _client.RouteAsync("driving", coordinates, query, ct);

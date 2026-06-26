@@ -2,19 +2,26 @@
 
 namespace JippyServices.Algorithm.Api.Responses;
 
+/// <summary>
+/// Nominatim reverse-geocode response.
+/// Note: <c>place_id</c>, <c>osm_id</c>, <c>place_rank</c>, and <c>importance</c> are JSON
+/// numbers in the Nominatim API. They must be typed as numeric C# types — STJ does not
+/// coerce JSON numbers into <see langword="string"/> and will throw a JsonException if they are.
+/// <c>lat</c> and <c>lon</c> are genuine JSON strings in Nominatim's response.
+/// </summary>
 internal sealed class NominatimResponse
 {
     [JsonPropertyName("place_id")]
-    public string PlaceId { get; init; } = "";
-    
+    public long PlaceId { get; init; }
+
     [JsonPropertyName("licence")]
     public string Licence { get; init; } = "";
-    
+
     [JsonPropertyName("osm_type")]
     public string OsmType { get; init; } = "";
-    
+
     [JsonPropertyName("osm_id")]
-    public string OsmId { get; init; } = "";
+    public long OsmId { get; init; }
 
     [JsonPropertyName("lat")]
     public string Lat { get; init; } = "";
@@ -23,26 +30,26 @@ internal sealed class NominatimResponse
     public string Lon { get; init; } = "";
 
     [JsonPropertyName("place_rank")]
-    public string PlaceRank { get; init; } = "";
-    
+    public int PlaceRank { get; init; }
+
     [JsonPropertyName("category")]
     public string Category { get; init; } = "";
-    
+
     [JsonPropertyName("type")]
     public string Type { get; init; } = "";
 
     [JsonPropertyName("importance")]
-    public string Importance { get; init; } = "";
-    
+    public double Importance { get; init; }
+
     [JsonPropertyName("addresstype")]
     public string AddressType { get; init; } = "";
-    
+
     [JsonPropertyName("display_name")]
     public string DisplayName { get; init; } = "";
-    
+
     [JsonPropertyName("name")]
     public string Name { get; init; } = "";
-    
+
     [JsonPropertyName("address")]
     public Address Address { get; init; } = new();
 

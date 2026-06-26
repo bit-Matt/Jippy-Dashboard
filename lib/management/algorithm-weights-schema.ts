@@ -39,6 +39,11 @@ export const AlgorithmWeightsSchema = z.object({
   maxAccessQueries: z.number().int(),
   egressCandidatesPerDirection: z.number().int(),
   maxEgressQueries: z.number().int(),
+  jeepneyBaseFare: z.number(),
+  jeepneyBaseKm: z.number(),
+  jeepneyFarePerKm: z.number(),
+  tricycleFlatFare: z.number(),
+  fareCostWeight: z.number(),
 });
 
 export type AlgorithmWeightsPayload = z.infer<typeof AlgorithmWeightsSchema>;

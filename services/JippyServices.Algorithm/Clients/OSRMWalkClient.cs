@@ -136,7 +136,7 @@ internal sealed class OSRMWalkClient : IOSRMClient
             var query = new OSRMRoutingQuery
             {
                 Overview = "false",
-                Steps = false
+                Steps = "false",
             };
             
             var response = await _client.RouteAsync("foot", coordinates, query, ct);
@@ -169,7 +169,7 @@ internal sealed class OSRMWalkClient : IOSRMClient
         {
             Overview = "full",
             Geometries = "polyline6",
-            Steps = true
+            Steps = "true",
         };
 
         var response = await _client.RouteAsync("foot", coordinates, query, ct);

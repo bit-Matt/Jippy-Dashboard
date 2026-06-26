@@ -46,6 +46,7 @@ internal sealed class LegAssembler {
                 Color = null,
                 Distance = walk.Distance,
                 Duration = walk.Duration,
+                Fare = 0,
                 Instructions = instr,
                 Bbox = bbox,
             }
@@ -181,6 +182,7 @@ internal sealed class LegAssembler {
                         Color = null,
                         Distance = walkRoute.Distance,
                         Duration = walkRoute.Duration,
+                        Fare = 0,
                         Instructions = InstructionGenerator.GenerateWalkInstructions(walkRoute.Maneuvers),
                         Bbox = GeoUtils.ComputeBbox([from, to]),
                     });
@@ -226,6 +228,7 @@ internal sealed class LegAssembler {
                                     Color = null,
                                     Distance = walkRoute.Distance,
                                     Duration = walkRoute.Duration,
+                                    Fare = 0,
                                     Instructions = InstructionGenerator.GenerateWalkInstructions(walkRoute.Maneuvers),
                                     Bbox = GeoUtils.ComputeBbox([from, stationPt]),
                                 });
@@ -242,6 +245,7 @@ internal sealed class LegAssembler {
                                     Color = null,
                                     Distance = walkToStation * 1.2,
                                     Duration = Math.Round(walkToStation * 1.2 / GeoUtils.SpeedMps(config.WalkSpeedKmh)),
+                                    Fare = 0,
                                     Instructions = [new Instruction { Text = "Walk to tricycle station", ManeuverType = ManeuverType.Depart }],
                                     Bbox = GeoUtils.ComputeBbox([from, stationPt]),
                                 });
@@ -296,6 +300,7 @@ internal sealed class LegAssembler {
                         Color = transit.RouteColor,
                         Distance = distance,
                         Duration = duration,
+                        Fare = FareUtils.ComputeJeepneyFare(distance, config),
                         Instructions = instr,
                         Bbox = bbox,
                     });
@@ -407,6 +412,7 @@ internal sealed class LegAssembler {
                     Color = null,
                     Distance = (prevLeg.Type == LegType.Walk ? prevLeg.Distance : 0) + glueDistance + leg.Distance,
                     Duration = (prevLeg.Type == LegType.Walk ? prevLeg.Duration : 0) + glueDuration + leg.Duration,
+                    Fare = 0,
                     Instructions = mergedInstructions,
                     Bbox = mergedBbox,
                 };
@@ -435,6 +441,7 @@ internal sealed class LegAssembler {
                     Color = null,
                     Distance = prevLeg.Distance + glueDistance,
                     Duration = prevLeg.Duration + glueDuration,
+                    Fare = 0,
                     Instructions = mergedInstructions,
                     Bbox = GeoUtils.MergeBbox(prevLeg.Bbox, GeoUtils.ComputeBbox(glueCoords)),
                 };
@@ -453,6 +460,7 @@ internal sealed class LegAssembler {
                     Color = null,
                     Distance = glueDistance,
                     Duration = glueDuration,
+                    Fare = 0,
                     Instructions = glueInstructions,
                     Bbox = glueBbox,
                 });
@@ -517,6 +525,7 @@ internal sealed class LegAssembler {
             Color = null,
             Distance = distance,
             Duration = duration,
+            Fare = Math.Round(config.TricycleFlatFare * 100) / 100,
             Instructions = InstructionGenerator.GenerateTricycleInstructions(stationName, isHail),
             Bbox = GeoUtils.ComputeBbox([from, to]),
         };
@@ -577,6 +586,7 @@ internal sealed class LegAssembler {
             Color = null,
             Distance = distance,
             Duration = duration,
+            Fare = Math.Round(config.TricycleFlatFare * 100) / 100,
             Instructions = InstructionGenerator.GenerateTricycleInstructions(stationName, false),
             Bbox = GeoUtils.ComputeBbox([from, to]),
         };

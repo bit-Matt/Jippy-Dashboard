@@ -1067,10 +1067,10 @@ internal sealed class GraphBuilder
     /// <see cref="GraphEdge"/> adjacency list ready for A* search. Edge costs are computed
     /// per <paramref name="profile"/> as follows:
     /// <list type="bullet">
-    ///   <item><description><see cref="EdgeType.Transit"/>: distance × <see cref="WeightProfile.TransitCostFactor"/> + boarding cost.</description></item>
-    ///   <item><description><see cref="EdgeType.Transfer"/>: walk-distance penalty + transfer flat penalty.</description></item>
+    ///   <item><description><see cref="EdgeType.Transit"/>: distance × <see cref="WeightProfile.TransitCostFactor"/> + marginal distance fare.</description></item>
+    ///   <item><description><see cref="EdgeType.Transfer"/>: walk-distance penalty + transfer flat penalty + jeepney boarding base fare.</description></item>
     ///   <item><description><see cref="EdgeType.Walk"/>: progressive walk cost (linear below comfort threshold, quadratic above).</description></item>
-    ///   <item><description><see cref="EdgeType.Tricycle"/>: ride cost + wait penalty + detour and mid-route penalties.</description></item>
+    ///   <item><description><see cref="EdgeType.Tricycle"/>: ride cost + wait penalty + flat tricycle fare.</description></item>
     /// </list>
     /// Also injects virtual access edges (start → boarding nodes) and egress edges
     /// (alighting nodes → end). Stop-restricted nodes are skipped for boarding, alighting,
@@ -1117,6 +1117,8 @@ internal sealed class GraphBuilder
                             cost *= profile.DiversityPenalty ?? 1;
                         if (baseEdge.ClosureAffected)
                             cost *= profile.ClosurePenaltyMultiplier;
+                        // Marginal distance fare beyond the included base-km threshold.
+                        cost += (baseEdge.Distance / 1000.0) * cfg.JeepneyFarePerKm * cfg.FareCostWeight;
                         break;
 
                     case EdgeType.Transfer:
@@ -1125,6 +1127,7 @@ internal sealed class GraphBuilder
                         rawBoardingCosts.TryGetValue(baseEdge.RouteId ?? "", out var rawBc);
                         var boardingCost = rawBc * profile.BoardingCostFactor;
                         cost = walkCost + profile.TransferPenaltyMeters + boardingCost;
+                        cost += FareUtils.FareToCostMeters(cfg.JeepneyBaseFare, cfg);
                         break;
                     }
 
@@ -1149,6 +1152,8 @@ internal sealed class GraphBuilder
                             rawBoardingCosts.TryGetValue(baseEdge.RouteId, out var bc);
                             cost += bc * profile.BoardingCostFactor;
                         }
+
+                        cost += FareUtils.FareToCostMeters(cfg.TricycleFlatFare, cfg);
                         break;
                     }
 
@@ -1202,7 +1207,7 @@ internal sealed class GraphBuilder
                 From = RoutingConstants.VirtualStartId,
                 To = nodeId,
                 Distance = rawDist,
-                Cost = walkCost + boardingCost,
+                Cost = walkCost + boardingCost + FareUtils.FareToCostMeters(cfg.JeepneyBaseFare, cfg),
                 Type = EdgeType.Walk,
                 RouteId = node.RouteId,
                 RouteName = node.RouteName,

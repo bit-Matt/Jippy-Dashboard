@@ -22,6 +22,13 @@ internal sealed class NavigateResponse
     public required double TotalDuration { get; init; }
 
     /// <summary>
+    /// Sum of all leg fares in Philippine pesos, rounded to two decimal places.
+    /// Each jeepney boarding and tricycle ride contributes its own fare.
+    /// </summary>
+    [JsonPropertyName("total_fare")]
+    public required double TotalFare { get; init; }
+
+    /// <summary>
     /// Number of transit vehicle changes in this route.
     /// A walk-only route has 0 transfers; a route using two different jeepney lines has 1.
     /// </summary>

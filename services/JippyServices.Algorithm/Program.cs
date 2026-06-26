@@ -46,8 +46,12 @@ builder.Services
         c.BaseAddress = new(url);
     });
 
+// Refit encodes ',' and ';' in path parameters; OSRM requires them literal.
+builder.Services.AddTransient<OsrmCoordinatePathHandler>();
+
 builder.Services
     .AddKeyedRefitClient<IOSRMApiClient>("bicycle")
+    .AddHttpMessageHandler<OsrmCoordinatePathHandler>()
     .ConfigureHttpClient(c =>
     {
         var url = builder.Configuration["Services:OSRM:Bicycle"];
@@ -62,6 +66,7 @@ builder.Services
 
 builder.Services
     .AddKeyedRefitClient<IOSRMApiClient>("foot")
+    .AddHttpMessageHandler<OsrmCoordinatePathHandler>()
     .ConfigureHttpClient(c =>
     {
         var url = builder.Configuration["Services:OSRM:Foot"];

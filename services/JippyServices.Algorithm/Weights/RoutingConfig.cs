@@ -48,6 +48,11 @@ internal sealed class RoutingConfig
     public int MaxAccessQueries { get; init; }
     public int EgressCandidatesPerDirection { get; init; }
     public int MaxEgressQueries { get; init; }
+    public double JeepneyBaseFare { get; init; }
+    public double JeepneyBaseKm { get; init; }
+    public double JeepneyFarePerKm { get; init; }
+    public double TricycleFlatFare { get; init; }
+    public double FareCostWeight { get; init; }
 
     /// <summary>
     /// Build a <see cref="RoutingConfig"/> from the current <see cref="AlgorithmWeights"/> by
@@ -93,6 +98,11 @@ internal sealed class RoutingConfig
         MaxAccessQueries = weights.MaxAccessQueries,
         EgressCandidatesPerDirection = weights.EgressCandidatesPerDirection,
         MaxEgressQueries = weights.MaxEgressQueries,
+        JeepneyBaseFare = weights.JeepneyBaseFare,
+        JeepneyBaseKm = weights.JeepneyBaseKm,
+        JeepneyFarePerKm = weights.JeepneyFarePerKm,
+        TricycleFlatFare = weights.TricycleFlatFare,
+        FareCostWeight = weights.FareCostWeight,
     };
 
     /// <summary>
@@ -146,6 +156,11 @@ internal sealed class RoutingConfig
             MaxAccessQueries = overrides.MaxAccessQueries ?? MaxAccessQueries,
             EgressCandidatesPerDirection = overrides.EgressCandidatesPerDirection ?? EgressCandidatesPerDirection,
             MaxEgressQueries = overrides.MaxEgressQueries ?? MaxEgressQueries,
+            JeepneyBaseFare = overrides.JeepneyBaseFare ?? JeepneyBaseFare,
+            JeepneyBaseKm = overrides.JeepneyBaseKm ?? JeepneyBaseKm,
+            JeepneyFarePerKm = overrides.JeepneyFarePerKm ?? JeepneyFarePerKm,
+            TricycleFlatFare = overrides.TricycleFlatFare ?? TricycleFlatFare,
+            FareCostWeight = overrides.FareCostWeight ?? FareCostWeight,
         };
     }
 
