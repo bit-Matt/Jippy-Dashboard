@@ -1,41 +1,10 @@
 import { desc, eq, sql } from "drizzle-orm";
 
 import { db } from "@/lib/db";
-import { feedback } from "@/lib/db/schema";
+import { feedback, user } from "@/lib/db/schema";
 import { ErrorCodes, Failure, Result, Success } from "@/lib/one-of/types";
 
 const FEEDBACK_STATES = ["Active", "Resolved", "Closed"] as const;
-
-export type FeedbackState = (typeof FEEDBACK_STATES)[number];
-
-export interface FeedbackObject {
-  id: string;
-  email: string;
-  type: string;
-  details: string;
-  state: FeedbackState;
-  createdAt: Date;
-  updatedAt: Date;
-}
-
-export interface GetAllFeedbackParams {
-  page: number;
-  limit: number;
-  state?: FeedbackState;
-}
-
-export interface FeedbackListObject {
-  rows: FeedbackObject[];
-  total: number;
-  page: number;
-  limit: number;
-}
-
-export interface CreateFeedbackParams {
-  email: string;
-  type: string;
-  details: string;
-}
 
 /**
  * Determines whether the provided value is a valid feedback state.
@@ -45,6 +14,26 @@ export interface CreateFeedbackParams {
  */
 function isFeedbackState(value: string): value is FeedbackState {
   return FEEDBACK_STATES.includes(value as FeedbackState);
+}
+
+/**
+ * Maps a joined feedback/user row into a public FeedbackObject.
+ *
+ * @param {FeedbackRow} row Feedback row with optional joined actor columns.
+ * @returns {FeedbackObject} Feedback object with a nested actor when present.
+ */
+function toFeedbackObject(row: FeedbackRow): FeedbackObject {
+  return {
+    id: row.id,
+    email: row.email,
+    type: row.type,
+    details: row.details,
+    state: row.state,
+    actedBy: row.actedBy,
+    actor: row.actorId ? { id: row.actorId, name: row.actorName ?? "" } : null,
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
+  };
 }
 
 /**
@@ -79,10 +68,14 @@ export async function getAllFeedbacks(params: GetAllFeedbackParams): Promise<Res
         type: feedback.type,
         details: feedback.details,
         state: feedback.state,
+        actedBy: feedback.actedBy,
+        actorId: user.id,
+        actorName: user.name,
         createdAt: feedback.createdAt,
         updatedAt: feedback.updatedAt,
       })
       .from(feedback)
+      .leftJoin(user, eq(feedback.actedBy, user.id))
       .where(whereClause)
       .orderBy(desc(feedback.createdAt))
       .limit(safeLimit)
@@ -94,7 +87,7 @@ export async function getAllFeedbacks(params: GetAllFeedbackParams): Promise<Res
       .where(whereClause);
 
     return new Success({
-      rows: rows as FeedbackObject[],
+      rows: rows.map(toFeedbackObject),
       total: count ?? 0,
       page: safePage,
       limit: safeLimit,
@@ -133,7 +126,9 @@ export async function createFeedback(params: CreateFeedbackParams): Promise<Resu
       return new Failure(ErrorCodes.Fatal, "Failed to create feedback entry.", { params });
     }
 
-    return new Success(created as FeedbackObject);
+    return new Success(
+      toFeedbackObject({ ...created, actedBy: null, actorId: null, actorName: null }),
+    );
   } catch (e) {
     return new Failure(ErrorCodes.Fatal, "Failed to create feedback entry.", { params }, e);
   }
@@ -144,11 +139,13 @@ export async function createFeedback(params: CreateFeedbackParams): Promise<Resu
  *
  * @param {string} feedbackId Feedback entry identifier.
  * @param {FeedbackState} state New state value.
+ * @param {string} actorId Identifier of the user changing the triage state.
  * @returns {Promise<Result<FeedbackObject>>} Updated feedback record.
  */
 export async function updateFeedback(
   feedbackId: string,
   state: FeedbackState,
+  actorId: string,
 ): Promise<Result<FeedbackObject>> {
   try {
     if (!isFeedbackState(state)) {
@@ -167,7 +164,7 @@ export async function updateFeedback(
 
     const [updated] = await db
       .update(feedback)
-      .set({ state })
+      .set({ state, actedBy: actorId })
       .where(eq(feedback.id, feedbackId))
       .returning({
         id: feedback.id,
@@ -175,6 +172,7 @@ export async function updateFeedback(
         type: feedback.type,
         details: feedback.details,
         state: feedback.state,
+        actedBy: feedback.actedBy,
         createdAt: feedback.createdAt,
         updatedAt: feedback.updatedAt,
       });
@@ -183,8 +181,71 @@ export async function updateFeedback(
       return new Failure(ErrorCodes.Fatal, "Failed to update feedback entry.", { feedbackId, state });
     }
 
-    return new Success(updated as FeedbackObject);
+    let actorName: string | null = null;
+    if (updated.actedBy) {
+      const [actor] = await db
+        .select({ name: user.name })
+        .from(user)
+        .where(eq(user.id, updated.actedBy))
+        .limit(1);
+      actorName = actor?.name ?? null;
+    }
+
+    return new Success(
+      toFeedbackObject({ ...updated, actorId: updated.actedBy, actorName }),
+    );
   } catch (e) {
     return new Failure(ErrorCodes.Fatal, "Failed to update feedback entry.", { feedbackId, state }, e);
   }
+}
+
+interface FeedbackRow {
+  id: string;
+  email: string;
+  type: string;
+  details: string;
+  state: FeedbackState;
+  actedBy: string | null;
+  actorId: string | null;
+  actorName: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export type FeedbackState = (typeof FEEDBACK_STATES)[number];
+
+export interface FeedbackActor {
+  id: string;
+  name: string;
+}
+
+export interface FeedbackObject {
+  id: string;
+  email: string;
+  type: string;
+  details: string;
+  state: FeedbackState;
+  actedBy: string | null;
+  actor: FeedbackActor | null;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface GetAllFeedbackParams {
+  page: number;
+  limit: number;
+  state?: FeedbackState;
+}
+
+export interface FeedbackListObject {
+  rows: FeedbackObject[];
+  total: number;
+  page: number;
+  limit: number;
+}
+
+export interface CreateFeedbackParams {
+  email: string;
+  type: string;
+  details: string;
 }

@@ -486,6 +486,9 @@ export const feedback = pgTable(
     type: text("type").notNull(),
     details: text("details").notNull(),
     state: feedbackStateEnum().default("Active").notNull(),
+
+    actedBy: text("acted_by")
+      .references(() => user.id, { onDelete: "set null" }),
     createdAt: timestamp("created_at").defaultNow().notNull(),
     updatedAt: timestamp("updated_at")
       .defaultNow()

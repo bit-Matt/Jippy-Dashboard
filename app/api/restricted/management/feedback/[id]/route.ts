@@ -54,7 +54,7 @@ export async function PATCH(
       .build();
   }
 
-  const result = await feedback.updateFeedback(id, data.state as feedback.FeedbackState);
+  const result = await feedback.updateFeedback(id, data.state as feedback.FeedbackState, currentSession.user!.id);
   return oneOf(result).match(
     (updated) => {
       void logActivity({

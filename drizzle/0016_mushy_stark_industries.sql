@@ -1,0 +1,2 @@
+ALTER TABLE "feedback" ADD COLUMN "acted_by" text;--> statement-breakpoint
+ALTER TABLE "feedback" ADD CONSTRAINT "feedback_acted_by_user_id_fk" FOREIGN KEY ("acted_by") REFERENCES "public"."user"("id") ON DELETE set null ON UPDATE no action;
