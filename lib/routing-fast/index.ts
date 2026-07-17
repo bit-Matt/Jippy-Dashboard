@@ -112,6 +112,10 @@ export async function routeV2MarkII(start: LatLng, end: LatLng): Promise<Result<
   return await route("v2.5", start, end);
 }
 
+export async function routeV3(start: LatLng, end: LatLng): Promise<Result<MultiNavigateResponse>> {
+  return await route("v3", start, end);
+}
+
 export async function simulateV2(start: LatLng, end: LatLng, overrides: SimulationOverrides): Promise<Result<MultiNavigateResponse>> {
   return await simulate("v2", start, end, overrides);
 }

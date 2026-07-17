@@ -4,6 +4,7 @@ import { db } from "@/lib/db";
 import type * as GeoJSON from "@/lib/db/postgis-extension/geojsonTypes";
 import { stops } from "@/lib/db/schema";
 import { ErrorCodes, Failure, Result, Success } from "@/lib/one-of/types";
+import { invalidate } from "../routing-fast";
 
 async function reverseGeocode(lat: number, lon: number): Promise<string> {
   const baseUrl = process.env.NOMINATIM_URL;
@@ -127,6 +128,9 @@ export async function createStop(payload: StopAddParameters, ownerId: string): P
       return new Failure(ErrorCodes.Fatal, "Failed to create stop.", { payload });
     }
 
+    // Invalidate cache
+    await invalidate();
+
     return new Success(mapStopRow(newStop));
   } catch (error) {
     return new Failure(ErrorCodes.Fatal, "Failed to create stop.", { payload }, error);
@@ -201,6 +205,9 @@ export async function updateStop(stopId: string, params: StopUpdateParameters): 
       return new Failure(ErrorCodes.ResourceNotFound, "Stop not found.", { stopId });
     }
 
+    // Trigger cache invalidation upon updating the stop
+    await invalidate();
+
     return new Success(mapStopRow(updated));
   } catch (error) {
     return new Failure(ErrorCodes.Fatal, "Failed to update stop.", { stopId, params }, error);
@@ -223,6 +230,8 @@ export async function removeStop(stopId: string): Promise<Result<null>> {
     }
 
     await db.delete(stops).where(eq(stops.id, selectedStop.id));
+    await invalidate();
+
     return new Success(null);
   } catch (error) {
     return new Failure(

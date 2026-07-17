@@ -59,7 +59,7 @@ builder.Services
         {
             throw new InvalidOperationException("Services:OSRM:Bicycle not configured.");
         }
-        
+
         c.BaseAddress = new(url);
     });
 
@@ -97,7 +97,7 @@ builder.Services.AddKeyedScoped<INavigator, NavigatorV3>("navigator_v3");
 var app = builder.Build();
 
 app.MapPost("/navigate/v2", async (
-    NavigationRequest request, 
+    NavigationRequest request,
     [FromKeyedServices("navigator_v2")] INavigator navigator,
     IWeightsManager weights) =>
 {
@@ -123,7 +123,7 @@ app.MapPost("/navigate/v2/simulate", async (
 });
 
 app.MapPost("/navigate/v2.5", async (
-    NavigationRequest request, 
+    NavigationRequest request,
     [FromKeyedServices("navigator_v2MarkII")] INavigator navigator,
     IWeightsManager weights) =>
 {
@@ -143,6 +143,19 @@ app.MapPost("/navigate/v2.5/simulate", async (
     var start = new LatLng(request.Start.Lat, request.Start.Lng);
     var end = new LatLng(request.End.Lat, request.End.Lng);
     var config = weights.GetConfig().WithOverrides(request.Overrides);
+
+    var result = await navigator.ComputeRouteAsync(start, end, config);
+    return Results.Ok(result);
+});
+
+app.MapPost("/navigate/v3", async (
+    NavigationRequest request,
+    [FromKeyedServices("navigator_v3")] INavigator navigator,
+    IWeightsManager weights) =>
+{
+    var start = new LatLng(request.Start.Lat, request.Start.Lng);
+    var end = new LatLng(request.End.Lat, request.End.Lng);
+    var config = weights.GetConfig();
 
     var result = await navigator.ComputeRouteAsync(start, end, config);
     return Results.Ok(result);

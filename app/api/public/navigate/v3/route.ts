@@ -58,7 +58,7 @@ export async function POST(req: NextRequest) {
   const start: LatLng = data.start;
   const end: LatLng = data.end;
 
-  const result = await routingFast.routeV2MarkII(
+  const result = await routingFast.routeV3(
     { lat: start[0], lng: start[1] },
     { lat: end[0], lng: end[1] },
   );

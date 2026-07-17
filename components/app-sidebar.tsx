@@ -125,7 +125,9 @@ export function AppSidebar({
                   </div>
                   <div className="grid flex-1 text-left text-sm leading-tight">
                     <span className="truncate font-medium">Jippy Dashboard</span>
-                    <span className="truncate text-xs">v0.0.1-alpha</span>
+                    <span className="truncate text-xs">
+                      v1 — <a href="https://www.youtube.com/watch?v=GoMn41bFqVA" target="_blank">Just When I Needed You Most</a>
+                    </span>
                   </div>
                 </a>
               </SidebarMenuButton>
