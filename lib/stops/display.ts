@@ -1,4 +1,9 @@
-import type { RbzDisallowedDirection, RbzRestrictionType, RestrictedBoardingZoneResponse } from "@/contracts/responses";
+import type {
+  RbzDisallowedDirection,
+  RbzRestrictionType,
+  RestrictedBoardingZoneResponse,
+  StopDirectionality,
+} from "@/contracts/responses";
 import { decodePolyline } from "@/lib/map/polyline";
 
 export function getRbzLineCoordinates(zone: Pick<RestrictedBoardingZoneResponse, "points" | "polyline">): Array<[number, number]> {
@@ -30,5 +35,16 @@ export function formatRbzDisallowedDirection(direction: RbzDisallowedDirection):
     return "Direction back";
   default:
     return "Both directions";
+  }
+}
+
+export function formatStopDirectionality(directionality: StopDirectionality): string {
+  switch (directionality) {
+  case "direction_to":
+    return "Towards city";
+  case "direction_back":
+    return "Towards origin";
+  default:
+    return "Both";
   }
 }

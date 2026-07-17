@@ -2,11 +2,13 @@
 
 import { useEffect, useState } from "react";
 
-import type { StopResponse } from "@/contracts/responses";
+import type { StopDirectionality, StopResponse } from "@/contracts/responses";
+import { formatStopDirectionality } from "@/lib/stops/display";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
 import { Separator } from "@/components/ui/separator";
 import { Switch } from "@/components/ui/switch";
 
@@ -18,9 +20,20 @@ interface TransitStopDraftSidebarProps {
   isSaving: boolean;
   isDeletingStop?: boolean;
   onCancel: () => void;
-  onSave: (payload: { point: [number, number]; number?: number; isPublic: boolean }) => Promise<void>;
+  onSave: (payload: {
+    point: [number, number];
+    number?: number;
+    directionality: StopDirectionality;
+    isPublic: boolean;
+  }) => Promise<void>;
   onDeleteStop?: () => void;
 }
+
+const directionalityOptions: Array<{ value: StopDirectionality; label: string }> = [
+  { value: "both", label: formatStopDirectionality("both") },
+  { value: "direction_to", label: formatStopDirectionality("direction_to") },
+  { value: "direction_back", label: formatStopDirectionality("direction_back") },
+];
 
 async function fetchAddressForPoint(point: [number, number]): Promise<string> {
   const [lat, lon] = point;
@@ -55,16 +68,12 @@ export default function TransitStopDraftSidebar({
   const [address, setAddress] = useState("");
   const [isGeocoding, setIsGeocoding] = useState(false);
   const [stopNumber, setStopNumber] = useState(mode === "edit" && stop ? String(stop.number) : "");
+  const [directionality, setDirectionality] = useState<StopDirectionality>(
+    mode === "edit" && stop ? stop.directionality : "both",
+  );
   const [isPublic, setIsPublic] = useState(mode === "edit" && stop ? stop.isPublic : false);
 
   const isAdministrator = userRole === "administrator_user";
-
-  useEffect(() => {
-    if (mode === "edit" && stop) {
-      setStopNumber(String(stop.number));
-      setIsPublic(stop.isPublic);
-    }
-  }, [mode, stop]);
 
   useEffect(() => {
     let cancelled = false;
@@ -95,6 +104,7 @@ export default function TransitStopDraftSidebar({
     await onSave({
       point,
       number: parsedNumber,
+      directionality,
       isPublic: isAdministrator ? isPublic : false,
     });
   };
@@ -132,6 +142,22 @@ export default function TransitStopDraftSidebar({
             onChange={(event) => setStopNumber(event.target.value)}
             placeholder={mode === "create" ? "Auto-assigned if left blank" : undefined}
           />
+        </div>
+
+        <div className="space-y-1.5 rounded-md border p-3">
+          <Label htmlFor="draft-stop-directionality">Directionality</Label>
+          <NativeSelect
+            id="draft-stop-directionality"
+            value={directionality}
+            onChange={(event) => setDirectionality(event.target.value as StopDirectionality)}
+            className="w-full"
+          >
+            {directionalityOptions.map((option) => (
+              <NativeSelectOption key={option.value} value={option.value}>
+                {option.label}
+              </NativeSelectOption>
+            ))}
+          </NativeSelect>
         </div>
 
         <div className="space-y-2 rounded-md border p-3">

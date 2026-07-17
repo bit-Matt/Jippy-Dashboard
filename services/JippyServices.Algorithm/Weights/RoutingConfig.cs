@@ -41,6 +41,7 @@ internal sealed class RoutingConfig
     public double LongWalkThresholdMeters { get; init; }
     public double StationUnavailabilityThreshold { get; init; }
     public double StopProximityMeters { get; init; }
+    public double StopSnapMeters { get; init; }
     public int MaxStartingRoutes { get; init; }
     public int MaxSuggestionsPerStartRoute { get; init; }
     public int MaxTransfersToShow { get; init; }
@@ -92,6 +93,7 @@ internal sealed class RoutingConfig
         LongWalkThresholdMeters = weights.LongWalkThresholdMeters,
         StationUnavailabilityThreshold = weights.StationUnavailabilityThreshold,
         StopProximityMeters = weights.StopProximityMeters,
+        StopSnapMeters = weights.StopSnapMeters,
         MaxStartingRoutes = weights.MaxStartingRoutes,
         MaxSuggestionsPerStartRoute = weights.MaxSuggestionsPerStartRoute,
         MaxTransfersToShow = weights.MaxTransfersToShow,
@@ -151,6 +153,7 @@ internal sealed class RoutingConfig
             LongWalkThresholdMeters = overrides.LongWalkThresholdMeters ?? LongWalkThresholdMeters,
             StationUnavailabilityThreshold = overrides.StationUnavailabilityThreshold ?? StationUnavailabilityThreshold,
             StopProximityMeters = overrides.StopProximityMeters ?? StopProximityMeters,
+            StopSnapMeters = overrides.StopSnapMeters ?? StopSnapMeters,
             MaxStartingRoutes = overrides.MaxStartingRoutes ?? MaxStartingRoutes,
             MaxSuggestionsPerStartRoute = overrides.MaxSuggestionsPerStartRoute ?? MaxSuggestionsPerStartRoute,
             MaxTransfersToShow = overrides.MaxTransfersToShow ?? MaxTransfersToShow,

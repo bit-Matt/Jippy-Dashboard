@@ -34,6 +34,7 @@ export const AlgorithmWeightsSchema = z.object({
   maxBoundaryExitWalkMeters: z.number(),
   boardingCostFactor: z.number(),
   stopProximityMeters: z.number(),
+  stopSnapMeters: z.number(),
   maxStartingRoutes: z.number().int(),
   maxSuggestionsPerStartRoute: z.number().int(),
   maxTransfersToShow: z.number().int(),

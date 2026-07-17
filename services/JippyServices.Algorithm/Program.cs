@@ -1,5 +1,3 @@
-// ReSharper disable ClassNeverInstantiated.Global
-
 using JippyServices.Algorithm.Data;
 using Microsoft.EntityFrameworkCore;
 using JippyServices.Algorithm.Api;
@@ -10,6 +8,7 @@ using JippyServices.Algorithm.Navigator.Cache;
 using JippyServices.Algorithm.Navigator.Common.Types;
 using JippyServices.Algorithm.Navigator.V2;
 using JippyServices.Algorithm.Navigator.V2MarkTwo;
+using JippyServices.Algorithm.Navigator.V3;
 using JippyServices.Algorithm.Weights;
 using Refit;
 
@@ -88,10 +87,12 @@ builder.Services.AddSingleton<IWeightsManager, WeightsManager>();
 builder.Services.AddKeyedSingleton<IOSRMClient, OSRMBicycleClient>("osrm_bicycle");
 builder.Services.AddKeyedSingleton<IOSRMClient, OSRMWalkClient>("osrm_foot");
 builder.Services.AddSingleton<ITransitDataCache, TransitDataCache>();
+builder.Services.AddSingleton<ITransitDataCacheV3, TransitDataCacheV3>();
 
 // Navigators
 builder.Services.AddKeyedScoped<INavigator, NavigatorV2>("navigator_v2");
 builder.Services.AddKeyedScoped<INavigator, NavigatorV2MarkTwo>("navigator_v2MarkII");
+builder.Services.AddKeyedScoped<INavigator, NavigatorV3>("navigator_v3");
 
 var app = builder.Build();
 
@@ -147,19 +148,40 @@ app.MapPost("/navigate/v2.5/simulate", async (
     return Results.Ok(result);
 });
 
+app.MapPost("/navigate/v3/simulate", async (
+    SimulationRequest request,
+    [FromKeyedServices("navigator_v3")] INavigator navigator,
+    IWeightsManager weights) =>
+{
+    var start = new LatLng(request.Start.Lat, request.Start.Lng);
+    var end = new LatLng(request.End.Lat, request.End.Lng);
+    var config = weights.GetConfig().WithOverrides(request.Overrides);
+
+    var result = await navigator.ComputeRouteAsync(start, end, config);
+    return Results.Ok(result);
+});
+
 app.MapGet("/weights", (IWeightsManager weights) => Results.Ok(weights.Current));
 
-app.MapPut("/weights", async (AlgorithmWeights body, IWeightsManager weights, ITransitDataCache transitCache) =>
+app.MapPut("/weights", async (
+    AlgorithmWeights body,
+    IWeightsManager weights,
+    ITransitDataCache transitCache,
+    ITransitDataCacheV3 transitCacheV3) =>
 {
     weights.Update(body);
     await transitCache.InvalidateAsync();
+    await transitCacheV3.InvalidateAsync();
     return Results.Ok(new { message = "Weights updated" });
 });
 
 // Called by the dashboard when routes/regions/closures are edited
-app.MapPost("/cache/invalidate", async (ITransitDataCache transitCache) =>
+app.MapPost("/cache/invalidate", async (
+    ITransitDataCache transitCache,
+    ITransitDataCacheV3 transitCacheV3) =>
 {
     await transitCache.InvalidateAsync();
+    await transitCacheV3.InvalidateAsync();
     return Results.Ok(new { message = "Transit cache invalidated" });
 });
 

@@ -3,6 +3,7 @@
 import { X } from "lucide-react";
 
 import type { StopResponse } from "@/contracts/responses";
+import { formatStopDirectionality } from "@/lib/stops/display";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -68,6 +69,11 @@ export default function TransitStopItemSidebar({
             </p>
           </div>
         ) : null}
+
+        <div className="space-y-1 rounded-md border p-3">
+          <p className="text-xs text-muted-foreground">Directionality</p>
+          <p className="text-sm font-medium">{formatStopDirectionality(stop.directionality)}</p>
+        </div>
 
         <div className="space-y-2 rounded-md border p-3">
           <p className="text-xs text-muted-foreground">Public Visibility</p>

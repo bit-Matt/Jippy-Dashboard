@@ -7,7 +7,7 @@ import type {
   RestrictedBoardingZoneResponseList,
   StopResponseList,
 } from "@/contracts/responses";
-import { formatRbzDisallowedDirection, formatRbzRestrictionType } from "@/lib/stops/display";
+import { formatRbzDisallowedDirection, formatRbzRestrictionType, formatStopDirectionality } from "@/lib/stops/display";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -121,6 +121,9 @@ export default function StopListCard({
                             </Badge>
                           </div>
                           <p className="text-muted-foreground line-clamp-2 text-xs">{stop.address}</p>
+                          <p className="text-muted-foreground text-xs">
+                            {formatStopDirectionality(stop.directionality)}
+                          </p>
                         </button>
                       );
                     })

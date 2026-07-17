@@ -34,6 +34,7 @@ export type SimulationOverrides = {
   longWalkThresholdMeters?: number;
   stationUnavailabilityThreshold?: number;
   stopProximityMeters?: number;
+  stopSnapMeters?: number;
   maxStartingRoutes?: number;
   maxSuggestionsPerStartRoute?: number;
   maxTransfersToShow?: number;
@@ -84,6 +85,7 @@ export const ALGORITHM_WEIGHT_DEFAULTS: AlgorithmWeights = {
   longWalkThresholdMeters: 1_000,
   stationUnavailabilityThreshold: 0.9,
   stopProximityMeters: 30,
+  stopSnapMeters: 60,
   maxStartingRoutes: 4,
   maxSuggestionsPerStartRoute: 5,
   maxTransfersToShow: 3,
@@ -116,6 +118,10 @@ export async function simulateV2(start: LatLng, end: LatLng, overrides: Simulati
 
 export async function simulateV2MarkII(start: LatLng, end: LatLng, overrides: SimulationOverrides): Promise<Result<MultiNavigateResponse>> {
   return await simulate("v2.5", start, end, overrides);
+}
+
+export async function simulateV3(start: LatLng, end: LatLng, overrides: SimulationOverrides): Promise<Result<MultiNavigateResponse>> {
+  return await simulate("v3", start, end, overrides);
 }
 
 export function mergeWeightsWithOverrides(
@@ -293,4 +299,4 @@ export async function invalidate(): Promise<Result<undefined>> {
 
 type LatLng = { lat: number, lng: number };
 
-type Version = "v2" | "v2.5";
+type Version = "v2" | "v2.5" | "v3";

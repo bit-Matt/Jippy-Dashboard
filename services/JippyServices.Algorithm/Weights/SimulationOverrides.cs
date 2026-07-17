@@ -79,6 +79,8 @@ internal sealed class SimulationOverrides
     public double? StationUnavailabilityThreshold { get; init; }
     [JsonPropertyName("stopProximityMeters")]
     public double? StopProximityMeters { get; init; }
+    [JsonPropertyName("stopSnapMeters")]
+    public double? StopSnapMeters { get; init; }
 
     // Transfer-based suggestion enumeration
     [JsonPropertyName("maxStartingRoutes")]

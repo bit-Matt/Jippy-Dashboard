@@ -7,7 +7,7 @@ export interface MultiNavigateResponse {
 
 export type SuggestionLabel = "fastest" | "least_walking" | "simplest" | "explorer";
 
-export type LegType = "WALK" | "TRICYCLE" | "JEEPNEY";
+export type LegType = "WALK" | "TRICYCLE" | "JEEPNEY" | "WALK_TRICYCLE";
 
 export type ManeuverType =
   | "depart"

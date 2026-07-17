@@ -62,6 +62,18 @@ export async function POST(req: NextRequest) {
           return { ok: true };
         },
       },
+      directionality: {
+        type: "string",
+        formatterFn: async (value) => {
+          if (value === undefined) {
+            return { ok: true };
+          }
+          if (value !== "direction_to" && value !== "direction_back" && value !== "both") {
+            return { ok: false, error: "directionality must be 'direction_to', 'direction_back', or 'both'." };
+          }
+          return { ok: true };
+        },
+      },
     },
     requiredProperties: ["point"],
     allowUnvalidatedProperties: false,
@@ -98,4 +110,5 @@ export async function POST(req: NextRequest) {
 type RequestBody = {
   number?: number;
   point: [number, number];
+  directionality?: "direction_to" | "direction_back" | "both";
 }

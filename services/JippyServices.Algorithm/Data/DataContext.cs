@@ -15,6 +15,7 @@ public class DataContext : DbContext
     public DbSet<RoadClosure> RoadClosures => Set<RoadClosure>();
     public DbSet<RestrictedBordingZone> RestrictedBordingZones => Set<RestrictedBordingZone>();
     public DbSet<RoutesRestrictedInBoardingZone> RoutesRestrictedInBoardingZones => Set<RoutesRestrictedInBoardingZone>();
+    public DbSet<Stop> Stops => Set<Stop>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

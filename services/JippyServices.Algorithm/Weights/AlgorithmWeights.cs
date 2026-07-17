@@ -222,6 +222,13 @@ internal sealed class AlgorithmWeights
     public double StopProximityMeters { get; init; } = 30;
 
     /// <summary>
+    /// Maximum distance in metres from a public stop to a route polyline for the stop
+    /// to be treated as a boarding / alighting / transfer node on that route (NavigatorV3).
+    /// </summary>
+    [JsonPropertyName("stopSnapMeters")]
+    public double StopSnapMeters { get; init; } = 60;
+
+    /// <summary>
     /// Maximum number of distinct jeepney starting routes to enumerate suggestions for.
     /// Limits the breadth of the multi-suggestion search.
     /// </summary>

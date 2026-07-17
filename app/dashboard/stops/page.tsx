@@ -8,6 +8,7 @@ import type {
   RestrictedBoardingZoneResponse,
   RestrictedBoardingZoneResponseList,
   RouteListItemResponseList,
+  StopDirectionality,
   StopResponse,
   StopResponseList,
 } from "@/contracts/responses";
@@ -236,6 +237,7 @@ function StopsDashboardContent() {
   const handleCreateTransitStop = async (payload: {
     point: [number, number];
     number?: number;
+    directionality: StopDirectionality;
     isPublic: boolean;
   }) => {
     setIsSavingTransitStop(true);
@@ -246,6 +248,7 @@ function StopsDashboardContent() {
         body: {
           point: payload.point,
           number: payload.number,
+          directionality: payload.directionality,
         },
       });
 
@@ -285,6 +288,7 @@ function StopsDashboardContent() {
   const handleUpdateTransitStop = async (payload: {
     point: [number, number];
     number?: number;
+    directionality: StopDirectionality;
     isPublic: boolean;
   }) => {
     if (!selectedTransitStop) {
@@ -301,6 +305,7 @@ function StopsDashboardContent() {
           body: {
             point: payload.point,
             number: payload.number,
+            directionality: payload.directionality,
           },
         },
       );
@@ -563,6 +568,7 @@ function StopsDashboardContent() {
           {activeTab === "stops" && pendingCreatePoint ? (
             <div className="absolute top-2 left-6 z-9998 w-1/4 transition-all duration-200 translate-x-0 opacity-100">
               <TransitStopDraftSidebar
+                key="create-stop"
                 mode="create"
                 point={pendingCreatePoint}
                 userRole={userRole}
@@ -576,6 +582,7 @@ function StopsDashboardContent() {
           {activeTab === "stops" && selectedTransitStop && transitStopEditingPoint && !pendingCreatePoint ? (
             <div className="absolute top-2 left-6 z-9998 w-1/4 transition-all duration-200 translate-x-0 opacity-100">
               <TransitStopDraftSidebar
+                key={selectedTransitStop.id}
                 mode="edit"
                 point={transitStopEditingPoint}
                 stop={selectedTransitStop}

@@ -55,6 +55,7 @@ function mapStopRow(row: {
   number: number;
   address: string;
   pointGeometry: GeoJSON.Point | null;
+  directionality: StopDirectionality | null;
   isPublic: boolean;
 }): StopObject {
   return {
@@ -62,6 +63,7 @@ function mapStopRow(row: {
     number: row.number,
     address: row.address,
     point: pointToTuple(row.pointGeometry),
+    directionality: row.directionality ?? "both",
     isPublic: row.isPublic,
   };
 }
@@ -77,6 +79,7 @@ export async function getAllStops(forPublic: boolean = true): Promise<Result<Sto
         number: stops.number,
         address: stops.address,
         pointGeometry: stops.point,
+        directionality: stops.directionality,
         isPublic: stops.isPublic,
       })
       .from(stops);
@@ -107,6 +110,7 @@ export async function createStop(payload: StopAddParameters, ownerId: string): P
         number: stopNumber,
         address,
         point: tupleToPoint(payload.point),
+        directionality: payload.directionality ?? "both",
         isPublic: false,
         ownerId,
       })
@@ -115,6 +119,7 @@ export async function createStop(payload: StopAddParameters, ownerId: string): P
         number: stops.number,
         address: stops.address,
         pointGeometry: stops.point,
+        directionality: stops.directionality,
         isPublic: stops.isPublic,
       });
 
@@ -158,10 +163,15 @@ export async function updateStop(stopId: string, params: StopUpdateParameters): 
       number?: number;
       address?: string;
       point?: GeoJSON.Point;
+      directionality?: StopDirectionality;
     } = {};
 
     if (params.number !== undefined) {
       patch.number = params.number;
+    }
+
+    if (params.directionality !== undefined) {
+      patch.directionality = params.directionality;
     }
 
     if (params.point !== undefined) {
@@ -183,6 +193,7 @@ export async function updateStop(stopId: string, params: StopUpdateParameters): 
         number: stops.number,
         address: stops.address,
         pointGeometry: stops.point,
+        directionality: stops.directionality,
         isPublic: stops.isPublic,
       });
 
@@ -268,22 +279,27 @@ export async function toggleStopPublic(stopId: string, state: boolean): Promise<
   }
 }
 
+export type StopDirectionality = "direction_to" | "direction_back" | "both";
+
 export interface StopObject {
   id: string;
   number: number;
   address: string;
   point: [number, number] | null;
+  directionality: StopDirectionality;
   isPublic: boolean;
 }
 
 export interface StopAddParameters {
   number?: number;
   point: [number, number];
+  directionality?: StopDirectionality;
 }
 
 export interface StopUpdateParameters {
   number?: number;
   point?: [number, number];
+  directionality?: StopDirectionality;
 }
 
 export interface PublicToggleResult {

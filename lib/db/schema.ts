@@ -10,7 +10,7 @@ export const snapshotState = pgEnum("snapshot_state", ["ready", "wip", "for_appr
 export const sequenceType = pgEnum("route_sequence_type", ["going_to", "going_back"]);
 export const restrictionType = pgEnum("restriction_type", ["universal", "specific"]);
 export const closureTypeEnum = pgEnum("closure_type", ["indefinite", "scheduled"]);
-export const disallowedDirectionEnum = pgEnum("disallowed_direction", ["direction_to", "direction_back", "both"]);
+export const directionalityEnum = pgEnum("disallowed_direction", ["direction_to", "direction_back", "both"]);
 export const feedbackStateEnum = pgEnum("feedback_state", ["Active", "Resolved", "Closed"]);
 
 // ============================================================================
@@ -423,7 +423,7 @@ export const restrictedBordingZone = pgTable("restricted_boarding_zone", {
 
   name: text("name").notNull(),
   restrictionType: restrictionType("restriction_type").notNull(),
-  disallowedDirection: disallowedDirectionEnum("disallowed_direction").notNull().default("both"),
+  disallowedDirection: directionalityEnum("disallowed_direction").notNull().default("both"),
 
   // Rendered polyline
   polyline: text("polyline").notNull().default(""),
@@ -465,6 +465,7 @@ export const stops = pgTable("stops", {
   number: integer("stop_number").notNull(),
   address: text("address").notNull(),
   point: point("point", { srid: 4326 }),
+  directionality: directionalityEnum("directionality").default("both"),
 
   isPublic: boolean("is_public").default(false).notNull(),
   ownerId: text("owner_id")

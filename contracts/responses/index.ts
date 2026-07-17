@@ -148,11 +148,14 @@ export interface RestrictedBoardingZoneResponse {
 
 export type RestrictedBoardingZoneResponseList = RestrictedBoardingZoneResponse[];
 
+export type StopDirectionality = "direction_to" | "direction_back" | "both";
+
 export interface StopResponse {
   id: string;
   number: number;
   address: string;
   point: [number, number] | null;
+  directionality: StopDirectionality;
   isPublic: boolean;
 }
 
@@ -168,7 +171,7 @@ export type NavigateManeuverType =
   | "transfer"
   | "arrive";
 
-export type NavigateLegType = "WALK" | "TRICYCLE" | "JEEPNEY";
+export type NavigateLegType = "WALK" | "TRICYCLE" | "JEEPNEY" | "WALK_TRICYCLE";
 
 export interface NavigateInstruction {
   text: string;

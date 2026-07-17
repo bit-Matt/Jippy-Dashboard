@@ -30,6 +30,7 @@
   "maxBoundaryExitWalkMeters": 500,
   "boardingCostFactor": 0.5,
   "stopProximityMeters": 30,
+  "stopSnapMeters": 60,
   "maxStartingRoutes": 4,
   "maxSuggestionsPerStartRoute": 5,
   "maxTransfersToShow": 3,

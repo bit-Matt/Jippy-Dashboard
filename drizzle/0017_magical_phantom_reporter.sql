@@ -1,0 +1,1 @@
+ALTER TABLE "stops" ADD COLUMN "directionality" "disallowed_direction" DEFAULT 'both';

@@ -46,14 +46,15 @@ export const SIMULATOR_API_VERSION_OPTIONS: {
   value: SimulatorApiVersion;
   label: string;
 }[] = [
-  { value: "v2", label: "/api/public/navigate/v2 - Stable" },
-  { value: "v2.5", label: "/api/public/navigate/v2.5 - Alpha" },
+  { value: "v2", label: "/api/restricted/navigate/v2/simulate - Stable" },
+  { value: "v3", label: "/api/restricted/navigate/v3/simulate - Alpha (Stop-based)" },
 ];
 
 const LEG_FALLBACK_COLOR = "#6B7280";
 
 const LEG_ICONS: Record<string, React.ReactNode> = {
   WALK: <Footprints className="h-3 w-3" />,
+  WALK_TRICYCLE: <Footprints className="h-3 w-3" />,
   JEEPNEY: <Bus className="h-3 w-3" />,
   TRICYCLE: <Bike className="h-3 w-3" />,
 };
@@ -220,6 +221,7 @@ function WeightOverridesPanel({
             <OverrideField label="Transfer penalty (m)" field="transferPenaltyMeters" value={overrides.transferPenaltyMeters} defaultValue={defaults.transferPenaltyMeters} onChange={setOverride} />
             <OverrideField label="Closure penalty multiplier" field="closurePenaltyMultiplier" value={overrides.closurePenaltyMultiplier} defaultValue={defaults.closurePenaltyMultiplier} onChange={setOverride} />
             <OverrideField label="Boarding cost factor" field="boardingCostFactor" value={overrides.boardingCostFactor} defaultValue={defaults.boardingCostFactor} onChange={setOverride} />
+            <OverrideField label="Stop snap (m)" field="stopSnapMeters" value={overrides.stopSnapMeters} defaultValue={defaults.stopSnapMeters} onChange={setOverride} />
           </div>
         </fieldset>
 
@@ -451,7 +453,7 @@ export default function Simulator({
             </p>
           )}
 
-          {apiVersion === "v2" && (
+          {(apiVersion === "v2" || apiVersion === "v3") && (
             <WeightOverridesPanel
               overrides={overrides}
               onOverridesChange={onOverridesChange}

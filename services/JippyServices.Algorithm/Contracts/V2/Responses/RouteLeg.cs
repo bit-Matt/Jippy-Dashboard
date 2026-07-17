@@ -77,4 +77,10 @@ internal enum LegType
 
     /// <summary>Jeepney (shared PUV) segment.</summary>
     [JsonStringEnumMemberName("JEEPNEY")] Jeepney,
+
+    /// <summary>
+    /// Access or egress walk where a tricycle may also be available
+    /// (origin or destination lies inside a tricycle region).
+    /// </summary>
+    [JsonStringEnumMemberName("WALK_TRICYCLE")] WalkTricycle,
 }
