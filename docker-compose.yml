@@ -26,7 +26,7 @@ services:
     ports:
       - "${DOCKER_POSTGRES_DB_PORT}:5432"
     volumes:
-      - ./.osm-data/db:/var/lib/postgresql
+      - db_data:/var/lib/postgresql
     environment:
       POSTGRES_USERNAME: ${DOCKER_POSTGRES_USERNAME}
       POSTGRES_PASSWORD: ${DOCKER_POSTGRES_PASSWORD}
@@ -36,6 +36,8 @@ services:
       timeout: 5s
       retries: 99999
       start_period: 30s
+    shm_size: 1G
+
   cache:
     image: redis:latest
     restart: unless-stopped
@@ -85,11 +87,17 @@ services:
     ports:
       - "6701:8080"
     volumes:
-      - ./.osm-data/nominatim-persist:/var/lib/postgresql/16/main
+      - nominatim_db_data:/var/lib/postgresql/16/main
       - ./.osm-data/nominatim:/nominatim/data
       - ./.osm-data/philippines-latest.osm.pbf:/nominatim/data/philippines-latest.osm.pbf
     environment:
       PBF_PATH: /nominatim/data/philippines-latest.osm.pbf
+      NOMINATIM_TOKENIZER: icu
+      NOMINATIM_DATABASE_DSN: pgsql:dbname=nominatim;host=db;user=${DOCKER_POSTGRES_USERNAME};password=${DOCKER_POSTGRES_PASSWORD}
+      PGHOST: db
+      PGDATABASE: nominatim
+      PGUSER: ${DOCKER_POSTGRES_USERNAME}
+      PGPASSWORD: ${DOCKER_POSTGRES_PASSWORD}
       REPLICATION_URL: https://download.geofabrik.de/asia/philippines-updates/
       IMPORT_WIKIPEDIA: false
     healthcheck:
@@ -100,7 +108,6 @@ services:
     depends_on:
       db:
         condition: service_healthy
-    shm_size: 1G
 
   #############################################################################
   # OSRM or Open Source Routing Machine for driving & bicycle (motorcycles)
@@ -161,7 +168,7 @@ services:
       Services__OSRM__Driving: http://driving_router:5000
       Services__OSRM__Bicycle: http://driving_bicycle:5000
       Services__OSRM__Foot: http://osrm_foot:5000
-      ConnectionStrings__DefaultConnection: ${DOCKER_DOTNET_POSTGRES}
+      ConnectionStrings__DefaultConnection: Host=db;Port=5432;Database=jippy;Username=${DOCKER_POSTGRES_USERNAME};Password=${DOCKER_POSTGRES_PASSWORD}
       ConnectionStrings__RedisCache: cache:6379
     depends_on:
       db:
@@ -176,3 +183,11 @@ services:
         condition: service_started
       cache:
         condition: service_healthy
+
+volumes:
+  db_data:
+    external: true
+    name: jippy_db_data
+  nominatim_db_data:
+    external: true
+    name: jippy_nominatim_db_data

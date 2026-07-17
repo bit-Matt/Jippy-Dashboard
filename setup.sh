@@ -314,6 +314,7 @@ ROOT_DIR="${SCRIPT_DIR}/.osm-data"
 mkdir -p "$ROOT_DIR"
 
 TILE_ROOT="${SCRIPT_DIR}/.osm-data/tileserver"
+TILE_ROOT_CONFIG_STATE="${TILE_ROOT}/.config-lock"
 mkdir -p "$TILE_ROOT"
 
 NE10M="${SCRIPT_DIR}/.osm-data/ne_10m_urban_areas.zip"
@@ -340,8 +341,7 @@ get_remote_item "$LUA_SCRIPT" "https://raw.githubusercontent.com/systemed/tilema
 echo "======================================="
 echo "Required files collected. Starting preprocessing..."
 
-TILE_OUTPUT="${SCRIPT_DIR}/.osm-data/tileserver/map.mbtiles"
-if [[ ! -f "$TILE_OUTPUT" ]]; then
+if [[ ! -f "$TILE_ROOT_CONFIG_STATE" ]]; then
   echo ""
   echo "Extracting files..."
 
@@ -368,6 +368,7 @@ if [[ ! -f "$TILE_OUTPUT" ]]; then
     --output /data/map.mbtiles \
     --process /data/process-openmaptiles.lua \
     --config /data/config-openmaptiles.json
+  echo "1" > "$TILE_ROOT_CONFIG_STATE"
 fi
 
 TILESERVER_HOSTNAME="$(python3 - <<PY
@@ -435,19 +436,17 @@ for KEY in "${!OSRM_VOLUME_PATH[@]}"; do
 
   if [[ -d "$VOLUME_PATH" ]]; then
     continue
+  else
+    mkdir -p "$VOLUME_PATH"
   fi
 
-  mkdir -p "$VOLUME_PATH"
-
-  MOUNTED_LUA_VOLUME=()
   if [[ -n "$MOUNTED_LUA_PATH" ]]; then
-    MOUNTED_LUA_VOLUME=(-v "${MOUNTED_LUA_PATH}:${LUA_PATH}")
+    cp -f "$MOUNTED_LUA_PATH" "${VOLUME_PATH}/"
   fi
 
   docker run -t --rm \
     -v "${VOLUME_PATH}:/data" \
     -v "${SCRIPT_DIR}/.osm-data/philippines-latest.osm.pbf:/data/philippines-latest.osm.pbf" \
-    "${MOUNTED_LUA_VOLUME[@]}" \
     osrm/osrm-backend \
     osrm-extract -p "${LUA_PATH}" /data/philippines-latest.osm.pbf
 
@@ -464,6 +463,16 @@ done
 
 echo "======================================="
 echo "Pre-processing complete. Will now start docker-compose..."
+
+# Create external volumes used for db and nominatim
+for vol in jippy_db_data jippy_nominatim_db_data; do
+  if [[ -z "$(docker volume ls -q -f "name=^${vol}$")" ]]; then
+    printf '\033[32m%s\033[0m\n' "Creating volume: ${vol}"
+    docker volume create "$vol" >/dev/null
+  else
+    yellow "Volume already exists: ${vol} (Skipping)"
+  fi
+done
 
 docker compose up -d --wait
 

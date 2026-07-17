@@ -290,6 +290,7 @@ if (-not (Test-Path -Path $root -PathType Container)) {
 }
 
 $tile_root = Join-Path -Path $PSScriptRoot -ChildPath ".\.osm-data\tileserver"
+$tile_root_config_state = Join-Path -Path $tile_root -ChildPath ".config-lock"
 if (-not (Test-Path -Path $tile_root -PathType Container)) {
   New-Item -ItemType Directory $tile_root
 }
@@ -319,7 +320,7 @@ Write-Host "======================================="
 Write-Host "Required files collected. Starting preprocessing..."
 
 # Tilemaker
-if (-not (Test-Path -Path $tile_root -PathType Container)) {
+if (-not (Test-Path -Path $tile_root_config_state -PathType Leaf)) {
   Write-Host ""
   Write-Host "Extracting files..."
 
@@ -333,7 +334,7 @@ if (-not (Test-Path -Path $tile_root -PathType Container)) {
   Invoke-7z -Path $ne10m_glc -Output $ne10m_Glaciated_Extract_Path
 
   $coastline_Extract_Path = Join-Path -Path $PSScriptRoot -ChildPath ".osm-data\tileserver\coastline"
-  Invoke-7z -Path $coasline -Output $coastline_Extract_Path -ExtractFilesOnly $true
+  Invoke-7z -Path $coastline -Output $coastline_Extract_Path -ExtractFilesOnly $true
 
   Write-Host "Running tilemaker..."
   $tilemaker_args = @(
@@ -349,6 +350,7 @@ if (-not (Test-Path -Path $tile_root -PathType Container)) {
     "--config", "/data/config-openmaptiles.json"
   )
   & docker $tilemaker_args
+  Set-Content -Path $tile_root_config_state -Value "1"
 }
 
 # Create configuration
@@ -398,7 +400,7 @@ $osrm_configs = @{
   }
   Foot = @{
     VolumePath = Join-Path -Path $PSScriptRoot ".osm-data\osrm-foot"
-    MountedLuaPath = "./osm-assets/osrm-profiless/foot.lua"
+    MountedLuaPath = "osm-assets\osrm-profiles\foot.lua"
     LuaPath = "/data/foot.lua"
   }
 }
@@ -407,6 +409,12 @@ foreach ($Pair in $osrm_configs.GetEnumerator()) {
   Write-Host "Preparing data for $($Pair.Key)..."
   if (Test-Path -Path $Pair.Value.VolumePath -PathType Container) {
     continue
+  } else {
+    New-Item -ItemType Directory $Pair.Value.VolumePath
+  }
+
+  if ($Pair.Value.MountedLuaPath -is [string]) {
+    Copy-Item -Path $Pair.Value.MountedLuaPath -Destination "$($Pair.Value.VolumePath)\" -Force
   }
 
   $osrm_extract_args = @(
@@ -414,7 +422,6 @@ foreach ($Pair in $osrm_configs.GetEnumerator()) {
     "-t", "--rm",
     "-v", "$($Pair.Value.VolumePath):/data",
     "-v", "./.osm-data/philippines-latest.osm.pbf:/data/philippines-latest.osm.pbf",
-    $(if ($Pair.Value.MountedLuaPath -is [string]) { "-v", "$($Pair.Value.MountedLuaPath):$($Pair.Value.LuaPath)" })
     "osrm/osrm-backend",
     "osrm-extract",
     "-p", "$($Pair.Value.LuaPath)",
@@ -445,6 +452,20 @@ foreach ($Pair in $osrm_configs.GetEnumerator()) {
 
 Write-Host "======================================="
 Write-Host "Pre-processing complete. Will now start docker-compose..."
+
+# Create external volumes used for db and nominatim
+$volumes = @("jippy_db_data", "jippy_nominatim_db_data")
+foreach ($vol in $volumes) {
+    # Check if the volume exists using an exact regex match
+    $exists = docker volume ls -q -f "name=^${vol}$"
+
+    if (-not $exists) {
+        Write-Host "Creating volume: $vol" -ForegroundColor Green
+        docker volume create $vol | Out-Null
+    } else {
+        Write-Host "Volume already exists: $vol (Skipping)" -ForegroundColor Yellow
+    }
+}
 
 $Compose_Args = @("compose", "up", "-d", "--wait")
 & docker $Compose_Args
