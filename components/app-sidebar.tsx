@@ -119,7 +119,7 @@ export function AppSidebar({
           <SidebarMenuItem>
             <div className="flex w-full items-center gap-1 group-data-[collapsible=icon]:flex-col">
               <SidebarMenuButton size="lg" asChild className="min-w-0 flex-1" tooltip="Jippy Dashboard">
-                <a href="#">
+                <div>
                   <div className="bg-sidebar-primary text-sidebar-primary-foreground flex aspect-square size-8 items-center justify-center rounded-lg">
                     <Command className="size-4" />
                   </div>
@@ -129,9 +129,9 @@ export function AppSidebar({
                       v1 — <a href="https://www.youtube.com/watch?v=GoMn41bFqVA" target="_blank">Just When I Needed You Most</a>
                     </span>
                   </div>
-                </a>
+                </div>
               </SidebarMenuButton>
-              <SidebarTrigger className="shrink-0" />
+              <SidebarTrigger className="shrink-0 cursor-pointer" />
             </div>
           </SidebarMenuItem>
         </SidebarMenu>
